@@ -27,7 +27,9 @@ export type Capability =
    * Publishes, beside a page of rows, how many records its index holds for the
    * question. A catalogue whose count echoes the page size publishes none.
    */
-  | "index_total";
+  | "index_total"
+  /** Publishes the status of an edit, which is what makes an open one countable. */
+  | "pending_edits";
 
 /**
  * How strictly an instance types its interface.
@@ -61,6 +63,7 @@ const FULL: readonly Capability[] = [
   "site_categories",
   "fingerprint_reports",
   "index_total",
+  "pending_edits",
 ];
 
 export const INSTANCES: readonly InstanceSpec[] = [

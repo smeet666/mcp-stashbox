@@ -38,6 +38,8 @@ export interface SourceReport {
   indexTotal?: number;
   /** Rows this catalogue answered that came back unreadable and were left out. */
   skipped?: number;
+  /** Rows it answered with while returning none of the fingerprints asked for. */
+  unattributed?: number;
   /** Narrowings this catalogue could not receive, each one named. */
   narrowingsNotReceived?: string[];
   /** What its index reads, since two catalogues answer a name differently. */

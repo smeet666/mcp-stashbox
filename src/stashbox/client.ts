@@ -55,6 +55,12 @@ export interface StashboxClientOptions {
 
 export interface SearchScenesInput {
   query?: string;
+  /**
+   * How a list of identifiers is read: every one of them, or any one. Sending a
+   * list without saying which makes a scene crediting one of two performers
+   * indistinguishable from one crediting both.
+   */
+  match?: "all" | "any";
   title?: string;
   code?: string;
   performerIds?: readonly string[];
@@ -182,6 +188,41 @@ function readIdentifierArgument(id: string): void {
   }
 }
 
+/** The hexadecimal length each algorithm produces. */
+const HASH_LENGTH: Record<FingerprintAlgorithm, number> = { MD5: 32, OSHASH: 16, PHASH: 16 };
+
+/**
+ * A fingerprint given as an argument, checked before anything is asked.
+ *
+ * A hash of the wrong length for its algorithm is a question no catalogue can
+ * answer, and sending it returns an emptiness that reads as an answer about the
+ * catalogues rather than about the argument. A hash of nothing but zeroes is
+ * what a hashing tool emits when it fails, and matching one would state an
+ * identity out of a failure.
+ */
+function readFingerprintArgument(hash: string, algorithm: FingerprintAlgorithm): void {
+  const value = hash.trim();
+  if (!/^[0-9a-f]+$/i.test(value)) {
+    throw invalidInput(
+      `'${hash}' is not a hexadecimal fingerprint.`,
+      "A fingerprint is the hexadecimal digest a hashing tool prints.",
+    );
+  }
+  const expected = HASH_LENGTH[algorithm];
+  if (value.length !== expected) {
+    throw invalidInput(
+      `A ${algorithm} fingerprint is ${expected} hexadecimal characters, and this one is ${value.length}.`,
+      "Check that the hash and the algorithm name each other.",
+    );
+  }
+  if (/^0+$/.test(value)) {
+    throw invalidInput(
+      "A fingerprint of nothing but zeroes is what a hashing tool prints when it fails.",
+      "Hash the file again before asking which scene it is.",
+    );
+  }
+}
+
 /** Whether a caller actually set a narrowing, so only what was given is named. */
 function hasNarrowing(input: Record<string, unknown>, name: string): boolean {
   const camel = name.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase());
@@ -277,7 +318,13 @@ export class StashboxClient {
         continue;
       }
       if (!supports(spec, capability)) {
-        absent.push(report(`this catalogue does not answer ${capability}`));
+        absent.push(
+          report(
+            capability === "search_scenes" || capability === "search_performers"
+              ? `this catalogue offers no full-text search; drop 'query' and narrow with the typed arguments to reach it`
+              : `this catalogue does not answer ${capability}`,
+          ),
+        );
         continue;
       }
       asked.push(spec);
@@ -423,6 +470,7 @@ export class StashboxClient {
       else refused.push("code");
     }
 
+    const modifier = input.match === "any" ? "INCLUDES" : "INCLUDES_ALL";
     const byIdentifier = (name: string, ids: readonly string[] | undefined, field: string) => {
       if (!ids?.length) return;
       const mine = uuidsFor(spec, ids);
@@ -432,7 +480,7 @@ export class StashboxClient {
         refused.push(name);
         return;
       }
-      filters[field] = { value: mine, modifier: "INCLUDES" };
+      filters[field] = { value: mine, modifier };
     };
     byIdentifier("performer_ids", input.performerIds, "performers");
     byIdentifier("studio_ids", input.studioIds, "studios");
@@ -540,7 +588,7 @@ export class StashboxClient {
     if (input.query && supports(spec, "search_performers")) {
       const data = await this.ask<{
         searchPerformers?: { count?: unknown; performers?: unknown[] };
-      }>(spec, documents.searchPerformersDocument(spec.dialect), { term: input.query, limit });
+      }>(spec, documents.searchPerformersDocument(spec), { term: input.query, limit });
       return {
         ...readRows(data.searchPerformers?.performers, spec, mapPerformer, now()),
         total: supports(spec, "index_total") ? readInteger(data.searchPerformers?.count) : null,
@@ -589,7 +637,7 @@ export class StashboxClient {
 
     const data = await this.ask<{ queryPerformers?: { count?: unknown; performers?: unknown[] } }>(
       spec,
-      documents.queryPerformersDocument(spec.dialect),
+      documents.queryPerformersDocument(spec),
       { input: filters },
     );
     return {
@@ -620,7 +668,7 @@ export class StashboxClient {
 
     const data = await this.ask<{ findScene?: unknown }>(
       spec,
-      documents.findSceneDocument(spec.dialect, wanted),
+      documents.findSceneDocument(spec, wanted),
       { id: uuid },
     );
     // A null payload with no error beside it is the one shape that means absence.
@@ -662,7 +710,7 @@ export class StashboxClient {
 
     const data = await this.ask<{ findPerformer?: unknown }>(
       spec,
-      documents.findPerformerDocument(spec.dialect, wanted),
+      documents.findPerformerDocument(spec, wanted),
       { id: uuid },
     );
     if (data.findPerformer === null || data.findPerformer === undefined) {
@@ -715,6 +763,10 @@ export class StashboxClient {
     const matches: FingerprintMatch[] = [];
     let unattributed = 0;
 
+    for (const entry of input.fingerprints) {
+      readFingerprintArgument(entry.hash, entry.algorithm);
+    }
+
     if (input.fingerprints.length === 0) {
       throw invalidInput(
         "At least one fingerprint is required.",
@@ -750,6 +802,7 @@ export class StashboxClient {
           ? data.findScenesBySceneFingerprints
           : [];
         let found = 0;
+        let attributed = 0;
         for (const group of groups) {
           for (const raw of Array.isArray(group) ? group : []) {
             const scene = mapScene(raw, spec, retrievedAt);
@@ -769,6 +822,7 @@ export class StashboxClient {
             );
 
             if (hits.length === 0) {
+              // Answered with, without the fingerprint that reached it.
               // The catalogue matched this scene without returning the
               // fingerprint that did it. Which hash reached it is unknown, and
               // saying so beats naming one.
@@ -776,6 +830,7 @@ export class StashboxClient {
               continue;
             }
 
+            attributed += 1;
             for (const entry of hits) {
               const held =
                 scene.fingerprints?.find(
@@ -794,7 +849,14 @@ export class StashboxClient {
         }
         // The count is scenes this catalogue answered with, so it stays a count
         // of records whatever number of hashes was asked.
-        perSource.push({ source: spec.id, name: spec.name, state: "answered", count: found });
+        perSource.push({
+          source: spec.id,
+          name: spec.name,
+          state: "answered",
+          // Matches this catalogue contributed, which is what the answer holds.
+          count: attributed,
+          ...(found - attributed > 0 ? { unattributed: found - attributed } : {}),
+        });
       }
     }
 

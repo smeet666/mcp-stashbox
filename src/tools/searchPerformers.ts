@@ -14,6 +14,7 @@ import { strictInput } from "./arguments.js";
 import { searchPerformersOutput } from "./schemas.js";
 import {
   coverageNote,
+  narrowingNote,
   dateText,
   joinLines,
   notesBlock,
@@ -48,6 +49,8 @@ export function renderPerformerRows(
       `This answer covers page ${window.page} at ${window.limit} row(s) per catalogue. An emptiness here is an emptiness inside that window.`,
     );
   }
+  const narrowings = narrowingNote(result.perSource);
+  if (narrowings) notes.push(narrowings);
   const coverage = coverageNote(result.perSource);
   if (coverage) notes.push(coverage);
 

@@ -14,6 +14,7 @@ import { strictInput } from "./arguments.js";
 import { searchScenesOutput } from "./schemas.js";
 import {
   coverageNote,
+  narrowingNote,
   dateText,
   joinLines,
   notesBlock,
@@ -33,6 +34,12 @@ export function renderSceneRows(
     `Rows are ${result.ordering}.`,
     "Counts are reported per catalogue and are never added: the catalogues index overlapping corpora, and one scene held by two of them carries two identifiers there.",
   ];
+  const listed = result.rows.length > 0;
+  if (listed) {
+    notes.push(
+      "A list of identifiers reads as 'all' unless 'any' was asked for, so a row carries every identifier given.",
+    );
+  }
   if (query) {
     notes.push(
       "A count reports how many records a catalogue's index touched for these words. Rows below the first can share a single word of what was asked.",
@@ -43,6 +50,8 @@ export function renderSceneRows(
       `This answer covers page ${window.page} at ${window.limit} row(s) per catalogue. An emptiness here is an emptiness inside that window.`,
     );
   }
+  const narrowings = narrowingNote(result.perSource);
+  if (narrowings) notes.push(narrowings);
   const coverage = coverageNote(result.perSource);
   if (coverage) notes.push(coverage);
 
@@ -102,6 +111,12 @@ export function registerSearchScenes(server: McpServer, client: StashboxClient):
         title: z.string().optional(),
         code: z.string().optional().describe("The studio's own reference for the scene."),
         performer_ids: z.array(z.string()).optional().describe("Namespaced performer identifiers."),
+        match: z
+          .enum(["all", "any"])
+          .optional()
+          .describe(
+            "How a list of identifiers reads. 'all' returns scenes carrying every one of them and is the default; 'any' returns scenes carrying at least one.",
+          ),
         studio_ids: z.array(z.string()).optional(),
         tag_ids: z.array(z.string()).optional(),
         date_from: z.string().optional().describe("Earliest release date, as YYYY-MM-DD."),
@@ -124,6 +139,7 @@ export function registerSearchScenes(server: McpServer, client: StashboxClient):
       try {
         const read = await client.searchScenes({
           ...(args.query ? { query: args.query } : {}),
+          ...(args.match ? { match: args.match } : {}),
           ...(args.title ? { title: args.title } : {}),
           ...(args.code ? { code: args.code } : {}),
           ...(args.performer_ids ? { performerIds: args.performer_ids } : {}),

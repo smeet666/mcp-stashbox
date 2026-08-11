@@ -109,6 +109,26 @@ export function perSourceText(reports: readonly SourceReport[]): string[] {
  * Without it a partial answer reads as a whole one, which is the failure this
  * whole server is built to avoid.
  */
+/**
+ * The narrowings no catalogue received, gathered for the prose.
+ *
+ * A caller who wrote one and reads only the text has to learn it was set aside,
+ * and the per-catalogue block is not where a reader looks for that.
+ */
+export function narrowingNote(reports: readonly SourceReport[]): string | null {
+  const refused = new Map<string, string[]>();
+  for (const report of reports) {
+    for (const name of report.narrowingsNotReceived ?? []) {
+      refused.set(name, [...(refused.get(name) ?? []), report.name ?? report.source]);
+    }
+  }
+  if (refused.size === 0) return null;
+  const named = [...refused]
+    .map(([name, sources]) => `'${name}' by ${sources.join(", ")}`)
+    .join("; ");
+  return `Narrowings not received: ${named}. A row from those catalogues satisfying one of them does so by chance.`;
+}
+
 export function coverageNote(reports: readonly SourceReport[]): string | null {
   const missing = reports.filter((report) => report.state !== "answered");
   if (missing.length === 0) return null;

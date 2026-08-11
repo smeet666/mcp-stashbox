@@ -17,7 +17,7 @@
  * string and each catalogue reads it in its own type.
  */
 
-import type { Dialect } from "./instances.js";
+import { supports, type Dialect, type InstanceSpec } from "./instances.js";
 
 /**
  * The reimplementation publishes no table sorting the sites a record links to,
@@ -37,7 +37,17 @@ const FINGERPRINTS = (dialect: Dialect) =>
       // it carries an unknown contest.
       "fingerprints { algorithm hash duration submissions }";
 
-const SCENE_BASIC = (dialect: Dialect) => `
+/**
+ * Edits, asked for only where a status can be read off them.
+ *
+ * An edit carries a status on the published server and nothing but an
+ * identifier on the reimplementation, so asking for one there fails the whole
+ * request. A catalogue that cannot say whether an edit is open reports no count
+ * instead.
+ */
+const EDITS = (spec: InstanceSpec) => (supports(spec, "pending_edits") ? "edits { status }" : "");
+
+const SCENE_BASIC = (dialect: Dialect, edits: string) => `
   id
   title
   details
@@ -51,7 +61,7 @@ const SCENE_BASIC = (dialect: Dialect) => `
   performers { as performer { id name disambiguation } }
   tags { id name category { id name } }
   ${URLS(dialect)}
-  edits { status }
+  ${edits}
   created
   updated
 `;
@@ -67,7 +77,7 @@ const SCENE_ROW = (dialect: Dialect) => `
   ${URLS(dialect)}
 `;
 
-const PERFORMER_BASIC = (dialect: Dialect) => `
+const PERFORMER_BASIC = (dialect: Dialect, edits: string) => `
   id
   name
   disambiguation
@@ -83,7 +93,7 @@ const PERFORMER_BASIC = (dialect: Dialect) => `
   merged_ids
   merged_into_id
   ${URLS(dialect)}
-  edits { status }
+  ${edits}
   created
   updated
 `;
@@ -114,20 +124,22 @@ export interface PerformerSections {
   studios: boolean;
 }
 
-export function findSceneDocument(dialect: Dialect, sections: SceneSections): string {
+export function findSceneDocument(spec: InstanceSpec, sections: SceneSections): string {
+  const dialect = spec.dialect;
   return `query FindScene($id: ID!) {
   findScene(id: $id) {
-    ${SCENE_BASIC(dialect)}
+    ${SCENE_BASIC(dialect, EDITS(spec))}
     ${sections.fingerprints ? FINGERPRINTS(dialect) : ""}
     ${sections.images ? IMAGES : ""}
   }
 }`;
 }
 
-export function findPerformerDocument(dialect: Dialect, sections: PerformerSections): string {
+export function findPerformerDocument(spec: InstanceSpec, sections: PerformerSections): string {
+  const dialect = spec.dialect;
   return `query FindPerformer($id: ID!) {
   findPerformer(id: $id) {
-    ${PERFORMER_BASIC(dialect)}
+    ${PERFORMER_BASIC(dialect, EDITS(spec))}
     ${sections.appearance ? PERFORMER_APPEARANCE : ""}
     ${sections.images ? IMAGES : ""}
     ${sections.studios ? "studios { studio { id name } scene_count }" : ""}
@@ -145,11 +157,12 @@ export function queryScenesDocument(dialect: Dialect): string {
 }`;
 }
 
-export function queryPerformersDocument(dialect: Dialect): string {
+export function queryPerformersDocument(spec: InstanceSpec): string {
+  const dialect = spec.dialect;
   return `query QueryPerformers($input: PerformerQueryInput!) {
   queryPerformers(input: $input) {
     count
-    performers { ${PERFORMER_BASIC(dialect)} }
+    performers { ${PERFORMER_BASIC(dialect, EDITS(spec))} }
   }
 }`;
 }
@@ -167,11 +180,12 @@ export function searchScenesDocument(dialect: Dialect): string {
 }`;
 }
 
-export function searchPerformersDocument(dialect: Dialect): string {
+export function searchPerformersDocument(spec: InstanceSpec): string {
+  const dialect = spec.dialect;
   return `query SearchPerformers($term: String!, $limit: Int) {
   searchPerformers(term: $term, limit: $limit) {
     count
-    performers { ${PERFORMER_BASIC(dialect)} }
+    performers { ${PERFORMER_BASIC(dialect, EDITS(spec))} }
   }
 }`;
 }
