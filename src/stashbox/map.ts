@@ -355,7 +355,9 @@ export function mapPerformer(
   }
   if (row.images !== undefined) performer.images = mapImages(row.images);
   if (row.studios !== undefined) {
-    performer.studios = asArray(row.studios).flatMap((entry) => {
+    const all = asArray(row.studios);
+    performer.studiosTotal = all.length;
+    performer.studios = all.flatMap((entry) => {
       const studioRow = asRecord(entry);
       const studio = asRecord(studioRow?.studio);
       const id = readText(studio?.id);

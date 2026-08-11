@@ -200,6 +200,29 @@ export function pastTheEndNote(
     .join(", ")}. Their emptiness here is the end of the rows, never an empty catalogue.`;
 }
 
+/**
+ * The window an answer actually covers, per catalogue.
+ *
+ * A catalogue that could not receive a page answered its first one, so calling
+ * the answer a page of the caller's choosing would name a page nobody read.
+ */
+export function windowNote(
+  reports: readonly SourceReport[],
+  window: { page: number; limit: number } | undefined,
+): string | null {
+  const answered = reports.filter((entry) => entry.state === "answered");
+  if (!window || answered.length === 0) return null;
+
+  const unpaged = answered.filter((entry) => entry.narrowingsNotReceived?.includes("page"));
+  if (unpaged.length === 0) {
+    return `This answer covers page ${window.page} at ${window.limit} row(s) per catalogue. An emptiness here is an emptiness inside that window.`;
+  }
+  const named = unpaged.map((entry) => entry.name ?? entry.source).join(", ");
+  return window.page === 1
+    ? `This answer covers page 1 at ${window.limit} row(s) per catalogue. An emptiness here is an emptiness inside that window.`
+    : `Page ${window.page} was asked for at ${window.limit} row(s) per catalogue, and these catalogues answered their first page instead because their search takes no page: ${named}. Their rows repeat the ones a first page carries.`;
+}
+
 export function coverageNote(reports: readonly SourceReport[]): string | null {
   const missing = reports.filter((report) => report.state !== "answered");
   if (missing.length === 0) return null;

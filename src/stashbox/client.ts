@@ -232,19 +232,24 @@ function readFingerprintArgument(hash: string, algorithm: FingerprintAlgorithm):
 }
 
 /**
- * A query carrying no words is no query.
+ * A query carrying no words is refused.
  *
- * A text search reads words, so a query of spaces reaches the index and comes
- * back empty. That emptiness describes the question rather than the corpus, and
- * a caller reads it as the corpus. The query is dropped instead, which leaves
- * the typed arguments to answer.
+ * A text search reads words, so a query of spaces asks nothing. Sending it
+ * returns an emptiness that describes the question and reads as the corpus, and
+ * dropping it silently leaves the faceted path to answer with the whole
+ * catalogue under a question nobody put. Either way the answer would carry a
+ * claim about the catalogues that the caller's own argument produced.
  */
 function withReadableQuery<T extends { query?: string }>(input: T): T {
   if (input.query === undefined) return input;
   const words = input.query.trim();
-  if (words === input.query && words !== "") return input;
-  const { query: _dropped, ...rest } = input;
-  return (words === "" ? rest : { ...rest, query: words }) as T;
+  if (words === "") {
+    throw invalidInput(
+      "A search for words carries no words.",
+      "Write what to look for, or omit 'query' and narrow with the typed arguments.",
+    );
+  }
+  return words === input.query ? input : ({ ...input, query: words } as T);
 }
 
 /** Whether a caller actually set a narrowing, so only what was given is named. */

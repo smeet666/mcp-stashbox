@@ -182,6 +182,8 @@ export interface PerformerRecord {
   /** Why the section is missing, when it was asked for and could not be read. */
   scenesUnavailable?: string;
   studios?: { id: string; name: string; sceneCount: number | null }[];
+  /** How many the record credits, where the section shows a page of them. */
+  studiosTotal?: number;
   created: string | null;
   updated: string | null;
 }

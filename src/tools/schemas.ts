@@ -250,6 +250,10 @@ export const performerSchema = z.object({
   studios: z
     .array(z.object({ id: z.string(), name: z.string(), sceneCount: z.number().nullable() }))
     .optional(),
+  studios_total: z
+    .number()
+    .optional()
+    .describe("How many the record credits, where the section shows a page of them."),
   created: z.string().nullable(),
   updated: z.string().nullable(),
   notes: z.array(z.string()),

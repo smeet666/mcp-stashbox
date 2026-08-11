@@ -14,6 +14,7 @@ import { strictInput } from "./arguments.js";
 import { searchPerformersOutput } from "./schemas.js";
 import {
   coverageNote,
+  windowNote,
   indexTotalNote,
   orderingNote,
   pastTheEndNote,
@@ -52,17 +53,34 @@ export function renderPerformerRows(
     notes.push(
       "A count reports how many records a catalogue's index touched for these words. A search for a full name reaches people sharing one word of it.",
     );
+
+    // A row reaching the index on one word is not a row carrying the name that
+    // was asked. Without this, a name nobody holds and a name somebody does
+    // produce answers of the same shape, and the question a caller actually put
+    // goes unanswered.
+    const wanted = query.trim().toLowerCase();
+    const carried = result.rows.filter((row) =>
+      [row.name, row.disambiguation, ...row.aliases]
+        .filter((value): value is string => Boolean(value))
+        .some((value) => value.toLowerCase().includes(wanted)),
+    ).length;
+    if (result.rows.length > 0 && carried === 0) {
+      notes.push(
+        `No row here carries "${query.trim()}" in a name, an alias or a disambiguation. They reached the index on part of it, so this answer establishes nothing about whether these catalogues hold that person.`,
+      );
+    } else if (carried > 0 && carried < result.rows.length) {
+      notes.push(
+        `${carried} of ${result.rows.length} row(s) carry "${query.trim()}" in a name, an alias or a disambiguation. The rest reached the index on part of it.`,
+      );
+    }
   }
   if (result.rows.some((row) => row.sceneCount === 0)) {
     notes.push(
       "A scene count of zero counts what that catalogue has indexed. A settled record naming a long career can report none.",
     );
   }
-  if (window) {
-    notes.push(
-      `This answer covers page ${window.page} at ${window.limit} row(s) per catalogue. An emptiness here is an emptiness inside that window.`,
-    );
-  }
+  const covered = windowNote(result.perSource, window);
+  if (covered) notes.push(covered);
   const narrowings = narrowingNote(result.perSource);
   if (narrowings) notes.push(narrowings);
   const reach = indexTotalNote(result.perSource);

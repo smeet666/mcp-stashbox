@@ -32,6 +32,26 @@ First release.
 - A live suite behind `STASHBOX_LIVE`, making one request per route and asserting
   the shape of an answer rather than its contents.
 
+## [0.2.1] - 2026-08-11
+
+A fourth adversarial round, and two of its findings were half-corrections from
+the third.
+
+### Fixed
+
+- A query carrying no words was dropped, which left the faceted path to answer
+  with the whole catalogue under a question nobody put. It is refused.
+- A page beyond what a full-text search reads was named as covered while the
+  catalogue answered its first page, so three pages returned the same rows each
+  stamped as its own. The answer now says which catalogues could take no page and
+  that their rows repeat a first page.
+- A name no record carries produced rows indistinguishable from a real hit, since
+  a row reaching the index on one word of a name is not a row carrying it. The
+  answer says how many rows carry the name as asked, and says plainly when none
+  does.
+- The studios section returned every studio a record credits, with no total and
+  no truncation, where the other two sections bound themselves and say so.
+
 ## [0.2.0] - 2026-08-11
 
 Three rounds of fuzz and persona testing against the live catalogues. Every

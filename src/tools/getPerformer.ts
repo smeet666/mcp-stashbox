@@ -24,6 +24,14 @@ import {
 } from "./shared.js";
 import { toolError } from "./errorShape.js";
 
+/**
+ * Studios shown for a performer.
+ *
+ * A busy record credits well over a hundred, and returning them all left this as
+ * the one section whose size a caller could not see before receiving it.
+ */
+const STUDIOS_SHOWN = 25;
+
 export const GET_PERFORMER_SECTIONS = [
   "basic",
   "appearance",
@@ -118,7 +126,18 @@ export function renderPerformer(record: PerformerRecord, sections: readonly stri
     structured.appearance = present;
   }
   if (sections.includes("images") && record.images) structured.images = record.images;
-  if (sections.includes("studios") && record.studios) structured.studios = record.studios;
+  if (sections.includes("studios") && record.studios) {
+    const shown = record.studios.slice(0, STUDIOS_SHOWN);
+    structured.studios = shown;
+    if (record.studiosTotal !== undefined) {
+      structured.studios_total = record.studiosTotal;
+      if (record.studiosTotal > shown.length) {
+        notes.push(
+          `This record credits ${record.studiosTotal} studios and ${shown.length} are shown here.`,
+        );
+      }
+    }
+  }
   if (sections.includes("scenes") && record.scenesUnavailable) {
     structured.scenes_unavailable = record.scenesUnavailable;
     notes.push(

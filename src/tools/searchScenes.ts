@@ -14,6 +14,7 @@ import { strictInput } from "./arguments.js";
 import { searchScenesOutput } from "./schemas.js";
 import {
   coverageNote,
+  windowNote,
   indexTotalNote,
   orderingNote,
   pastTheEndNote,
@@ -83,11 +84,8 @@ export function renderSceneRows(
       "Some rows carry a date recorded to the month or the year. A catalogue compares those as the first day of the period, so a bound written as a day admits records whose own date names none.",
     );
   }
-  if (window) {
-    notes.push(
-      `This answer covers page ${window.page} at ${window.limit} row(s) per catalogue. An emptiness here is an emptiness inside that window.`,
-    );
-  }
+  const covered = windowNote(result.perSource, window);
+  if (covered) notes.push(covered);
   const narrowings = narrowingNote(result.perSource);
   if (narrowings) notes.push(narrowings);
   const reach = indexTotalNote(result.perSource);
