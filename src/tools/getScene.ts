@@ -51,6 +51,7 @@ export function renderScene(record: SceneRecord, sections: readonly string[]): R
       status: record.status,
       merged_into: record.mergedInto,
       former_title: record.title,
+      notes: [] as string[],
     };
     const text = joinLines([
       record.status === "merged"

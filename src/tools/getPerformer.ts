@@ -48,6 +48,7 @@ export function renderPerformer(record: PerformerRecord, sections: readonly stri
       merged_ids: record.mergedIds,
       former_name: record.name,
       scene_count: null,
+      notes: [] as string[],
     };
     const text = joinLines([
       record.status === "merged"
@@ -61,17 +62,12 @@ export function renderPerformer(record: PerformerRecord, sections: readonly stri
       ),
       sourceLine(record.sourceUrl),
     ]);
-    return {
-      text:
-        text +
-        notesBlock([
-          "This record is a marker. Its emptiness describes the record and states nothing about the person it once named.",
-          ...(record.mergedInto
-            ? [`Read ${record.mergedInto} for the record that continues it.`]
-            : []),
-        ]),
-      structured,
-    };
+    const markerNotes = [
+      "This record is a marker. Its emptiness describes the record and states nothing about the person it once named.",
+      ...(record.mergedInto ? [`Read ${record.mergedInto} for the record that continues it.`] : []),
+    ];
+    structured.notes = markerNotes;
+    return { text: text + notesBlock(markerNotes), structured };
   }
 
   const structured: Record<string, unknown> = {

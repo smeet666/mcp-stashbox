@@ -102,27 +102,6 @@ const statusSchema = z
     "'established' is a record the catalogue holds. 'merged' and 'deleted' are markers: the identifier resolves, and what comes back describes the record rather than the thing it once named.",
   );
 
-/** The shape a record takes once it has been folded into another or withdrawn. */
-const markerShape = {
-  id: z.string(),
-  source: z.string(),
-  source_url: z.string(),
-  retrieved_at: retrievedAtSchema,
-  status: z.enum(["deleted", "merged"]),
-  merged_into: z
-    .string()
-    .nullable()
-    .describe("The identifier that continues this record, where one does."),
-};
-
-export const sceneMarkerSchema = z.object({
-  ...markerShape,
-  former_title: z
-    .string()
-    .nullable()
-    .describe("The title the record carried before it stopped describing a scene."),
-});
-
 export const sceneSchema = z.object({
   id: z.string(),
   source: z.string(),
@@ -169,18 +148,37 @@ export const sceneSchema = z.object({
   notes: z.array(z.string()).describe("What qualifies this answer. Also carried in the text."),
 });
 
-export const getSceneOutput = z.union([sceneSchema, sceneMarkerSchema]);
-
-export const performerMarkerSchema = z.object({
-  ...markerShape,
-  merged_ids: z
-    .array(z.string())
-    .describe("Identifiers folded into this record, which still resolve to it."),
-  former_name: z.string().nullable(),
-  scene_count: z
-    .null()
-    .describe("A marker states no count: the count belongs to the record that continues it."),
-});
+/**
+ * One shape covering a scene and a marker.
+ *
+ * A record answers as itself or as a marker saying the identifier now addresses
+ * something else, and `status` says which. The fields that survive on both are
+ * required; the rest are declared optional and described for the status they
+ * belong to.
+ */
+export const getSceneOutput = sceneSchema
+  .partial()
+  .extend({
+    id: z.string(),
+    source: z.string(),
+    source_url: z.string(),
+    retrieved_at: retrievedAtSchema,
+    status: statusSchema,
+    notes: z.array(z.string()),
+    merged_into: z
+      .string()
+      .nullable()
+      .optional()
+      .describe("Present on a marker: the identifier that continues this record."),
+    former_title: z
+      .string()
+      .nullable()
+      .optional()
+      .describe("Present on a marker: the title the record carried."),
+  })
+  .describe(
+    "A scene when 'status' is 'established'. When it is 'deleted' or 'merged' this is a marker: it carries the identifier, the catalogue, the successor and the former title, and no field describing a scene.",
+  );
 
 export const performerSchema = z.object({
   id: z.string(),
@@ -255,7 +253,39 @@ export const performerSchema = z.object({
   notes: z.array(z.string()),
 });
 
-export const getPerformerOutput = z.union([performerSchema, performerMarkerSchema]);
+/**
+ * One shape covering a performer and a marker, for the reason given above.
+ */
+export const getPerformerOutput = performerSchema
+  .partial()
+  .extend({
+    id: z.string(),
+    source: z.string(),
+    source_url: z.string(),
+    retrieved_at: retrievedAtSchema,
+    status: statusSchema,
+    notes: z.array(z.string()),
+    merged_into: z
+      .string()
+      .nullable()
+      .optional()
+      .describe("Present on a marker: the identifier that continues this record."),
+    former_name: z
+      .string()
+      .nullable()
+      .optional()
+      .describe("Present on a marker: the name the record carried."),
+    scene_count: z
+      .number()
+      .nullable()
+      .optional()
+      .describe(
+        "Scenes this catalogue has indexed crediting this performer. A settled record naming a career spanning decades can report zero, which measures coverage and states nothing about a person's work. Null on a marker, since the count belongs to the record that continues it.",
+      ),
+  })
+  .describe(
+    "A performer when 'status' is 'established'. When it is 'deleted' or 'merged' this is a marker: it carries the identifier, the catalogue, the successor, the identifiers folded in and the former name, and no field describing a person.",
+  );
 
 const sceneRowSchema = z.object({
   id: z.string(),
