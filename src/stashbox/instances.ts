@@ -22,7 +22,12 @@ export type Capability =
   /** Publishes the table sorting the sites its records link to. */
   | "site_categories"
   /** Publishes how many people disputed a fingerprint. */
-  | "fingerprint_reports";
+  | "fingerprint_reports"
+  /**
+   * Publishes, beside a page of rows, how many records its index holds for the
+   * question. A catalogue whose count echoes the page size publishes none.
+   */
+  | "index_total";
 
 /**
  * How strictly an instance types its interface.
@@ -55,6 +60,7 @@ const FULL: readonly Capability[] = [
   "find_by_fingerprint",
   "site_categories",
   "fingerprint_reports",
+  "index_total",
 ];
 
 export const INSTANCES: readonly InstanceSpec[] = [
@@ -73,9 +79,9 @@ export const INSTANCES: readonly InstanceSpec[] = [
     endpoint: "https://theporndb.net/graphql",
     webBase: "https://theporndb.net",
     envVar: "STASHBOX_TPDB_KEY",
-    // It answers a third of the published queries. The plural text searches are
-    // absent, it publishes no table of sites, and a fingerprint there carries no
-    // report count, so a match from it has an unknown contest.
+    // The plural text searches are absent, it publishes no table of sites, a
+    // fingerprint there carries no report count, and the count beside a page of
+    // rows echoes the page size instead of stating what its index holds.
     capabilities: ["get_scene", "get_performer", "find_by_fingerprint"],
     dialect: "loose",
   },

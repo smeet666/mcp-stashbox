@@ -400,7 +400,7 @@ export class StashboxClient {
       );
       return {
         ...readRows(data.searchScenes?.scenes, spec, mapScene, now()),
-        total: readInteger(data.searchScenes?.count),
+        total: supports(spec, "index_total") ? readInteger(data.searchScenes?.count) : null,
         refused: TEXT_SEARCH_IGNORES.filter((name) =>
           hasNarrowing(input as unknown as Record<string, unknown>, name),
         ),
@@ -459,7 +459,7 @@ export class StashboxClient {
       ...readRows(data.queryScenes?.scenes, spec, mapScene, now()),
       // What the catalogue says its index holds for this question, beyond the
       // page returned. The rows are a page; this is the reach.
-      total: readInteger(data.queryScenes?.count),
+      total: supports(spec, "index_total") ? readInteger(data.queryScenes?.count) : null,
       refused,
       // A faceted query reads no text index, so it claims none.
       fields: [],
@@ -543,7 +543,7 @@ export class StashboxClient {
       }>(spec, documents.searchPerformersDocument(spec.dialect), { term: input.query, limit });
       return {
         ...readRows(data.searchPerformers?.performers, spec, mapPerformer, now()),
-        total: readInteger(data.searchPerformers?.count),
+        total: supports(spec, "index_total") ? readInteger(data.searchPerformers?.count) : null,
         refused: PERFORMER_TEXT_SEARCH_IGNORES.filter((name) =>
           hasNarrowing(input as unknown as Record<string, unknown>, name),
         ),
@@ -594,7 +594,7 @@ export class StashboxClient {
     );
     return {
       ...readRows(data.queryPerformers?.performers, spec, mapPerformer, now()),
-      total: readInteger(data.queryPerformers?.count),
+      total: supports(spec, "index_total") ? readInteger(data.queryPerformers?.count) : null,
       refused,
       fields: [],
     };
