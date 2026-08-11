@@ -61,11 +61,20 @@ export function renderScene(record: SceneRecord, sections: readonly string[]): R
       line("Continues as", record.mergedInto),
       sourceLine(record.sourceUrl),
     ]);
-    return {
-      text:
-        text + notesBlock(["A withdrawn record states nothing about the scene it once described."]),
-      structured,
-    };
+    const unrendered = sections.filter((name) => name !== "basic");
+    const markerNotes = [
+      record.status === "merged"
+        ? "This record is a marker. Its emptiness describes the record and states nothing about the scene it once described."
+        : "A withdrawn record states nothing about the scene it once described.",
+      ...(unrendered.length
+        ? [
+            `A marker carries no body, so ${unrendered.join(", ")} could not be rendered here.${record.mergedInto ? " Ask for them on the record that continues it." : ""}`,
+          ]
+        : []),
+      ...(record.mergedInto ? [`Read ${record.mergedInto} for the record that continues it.`] : []),
+    ];
+    structured.notes = markerNotes;
+    return { text: text + notesBlock(markerNotes), structured };
   }
 
   const wantsFingerprints = sections.includes("fingerprints");
@@ -230,8 +239,9 @@ export function registerGetScene(server: McpServer, client: StashboxClient): voi
     },
     async ({ id, sections }) => {
       try {
-        const read = await client.getScene(id, sections ?? ["basic"]);
-        const rendered = renderScene(read.data, sections ?? ["basic"]);
+        const wanted = sections?.length ? sections : ["basic"];
+        const read = await client.getScene(id, wanted);
+        const rendered = renderScene(read.data, wanted);
         return {
           content: [{ type: "text" as const, text: rendered.text }],
           structuredContent: rendered.structured,

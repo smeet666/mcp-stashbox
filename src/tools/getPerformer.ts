@@ -70,8 +70,14 @@ export function renderPerformer(record: PerformerRecord, sections: readonly stri
       ),
       sourceLine(record.sourceUrl),
     ]);
+    const unrendered = sections.filter((name) => name !== "basic");
     const markerNotes = [
       "This record is a marker. Its emptiness describes the record and states nothing about the person it once named.",
+      ...(unrendered.length
+        ? [
+            `A marker carries no body, so ${unrendered.join(", ")} could not be rendered here. Ask for them on the record that continues it.`,
+          ]
+        : []),
       ...(record.mergedInto ? [`Read ${record.mergedInto} for the record that continues it.`] : []),
     ];
     structured.notes = markerNotes;
@@ -265,8 +271,9 @@ export function registerGetPerformer(server: McpServer, client: StashboxClient):
     },
     async ({ id, sections }) => {
       try {
-        const read = await client.getPerformer(id, sections ?? ["basic"]);
-        const rendered = renderPerformer(read.data, sections ?? ["basic"]);
+        const wanted = sections?.length ? sections : ["basic"];
+        const read = await client.getPerformer(id, wanted);
+        const rendered = renderPerformer(read.data, wanted);
         return {
           content: [{ type: "text" as const, text: rendered.text }],
           structuredContent: rendered.structured,

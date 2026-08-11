@@ -5,32 +5,44 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.0] - 2026-08-11
+## [0.2.2] - 2026-08-11
 
-First release.
+A fifth adversarial round, whose findings sit entirely in the notes. A sentence
+that qualifies an answer is worth nothing when it describes a case the answer is
+not in, and it costs something: a reader who trusts one of two contradictory
+notes reads the wrong half.
 
-### Added
+### Fixed
 
-- `search_scenes` and `search_performers`, asking every configured catalogue at
-  once and naming what each one answered, failed at, or was never asked. A
-  catalogue's own count of what its index holds travels beside the rows returned,
-  since the two are different numbers.
-- `get_scene` and `get_performer`, with opt-in sections so a record's heaviest
-  blocks are loaded only when they are wanted. An identifier folded into another
-  answers as a marker naming its successor.
-- `find_by_fingerprint`, which takes every hash held for one file in a single
-  request and states which kind of claim each match makes: the same file for MD5
-  and OSHASH, images that resemble each other for PHASH.
-- Five catalogues, four running the published server and one reimplementing its
-  interface. The reimplementation answers a smaller surface and types its
-  narrowings differently, and every answer holding its rows says which of them it
-  could not receive.
-- A published `./client` entry point carrying the pacing, the store and the error
-  taxonomy with no protocol attached. The floor on pacing holds through it.
-- An output schema on every tool, declared as a choice where a record can answer
-  either as itself or as a marker.
-- A live suite behind `STASHBOX_LIVE`, making one request per route and asserting
-  the shape of an answer rather than its contents.
+- A page past the end was named as such from arithmetic alone, so an answer
+  carrying rows said in one sentence that a catalogue had answered its first page
+  and in the next that the page lay past everything held. It is said only of a
+  catalogue that took the page, and came back with nothing.
+- A row was said to carry the identifiers asked for whenever they were asked for,
+  including where the catalogue reported not receiving them two lines below.
+  The sentence belongs to catalogues that received the list and answered with rows.
+- A performer's scene count was qualified only where a row happened to read zero,
+  which put the caution where a reader already hesitates and dropped it where a
+  sorted list reads as a league table. It travels with the count wherever it appears.
+- The index total was described as what lies beyond the page returned, while it
+  counts the rows on that page too. A caller reading one of one record was sent
+  to a second page holding nothing.
+- Two sentences about counting and about the rows below the first were printed on
+  answers holding no rows, and a total of zero was published as a qualification.
+- 'match' was the one typed argument the full-text path swallowed without
+  reporting it, against a tool description promising every one of them is reported.
+- An empty list of sections read as a list, and the record came back with a block
+  nobody had asked for. It asks what the absent argument asks.
+- A merged or withdrawn record dropped any section beyond the basic one in
+  silence, leaving a requested block to read as a block holding nothing. It says
+  a marker carries no body, and names the record to ask instead.
+- A merged scene was described as withdrawn, which states that a record exists
+  nowhere when it exists under another name; and the qualification a marker
+  carries reached the prose alone, leaving the structured answer bare.
+- A row could be ordered on when it was created or last touched while carrying
+  neither, so the order was unreadable on the rows that came back. An answer
+  sorted on either carries both.
+- The published shape of a performer row omitted a field every row carries.
 
 ## [0.2.1] - 2026-08-11
 
@@ -103,3 +115,30 @@ did not carry.
   actually has.
 - The registry entry declared the npm package alone, so the bundle attached to a
   release was published and never advertised.
+## [0.1.0] - 2026-08-11
+
+First release.
+
+### Added
+
+- `search_scenes` and `search_performers`, asking every configured catalogue at
+  once and naming what each one answered, failed at, or was never asked. A
+  catalogue's own count of what its index holds travels beside the rows returned,
+  since the two are different numbers.
+- `get_scene` and `get_performer`, with opt-in sections so a record's heaviest
+  blocks are loaded only when they are wanted. An identifier folded into another
+  answers as a marker naming its successor.
+- `find_by_fingerprint`, which takes every hash held for one file in a single
+  request and states which kind of claim each match makes: the same file for MD5
+  and OSHASH, images that resemble each other for PHASH.
+- Five catalogues, four running the published server and one reimplementing its
+  interface. The reimplementation answers a smaller surface and types its
+  narrowings differently, and every answer holding its rows says which of them it
+  could not receive.
+- A published `./client` entry point carrying the pacing, the store and the error
+  taxonomy with no protocol attached. The floor on pacing holds through it.
+- An output schema on every tool, declared as a choice where a record can answer
+  either as itself or as a marker.
+- A live suite behind `STASHBOX_LIVE`, making one request per route and asserting
+  the shape of an answer rather than its contents.
+

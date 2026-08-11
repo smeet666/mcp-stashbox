@@ -10,12 +10,42 @@ const ORDERING =
 
 type Unordered<T> = Omit<RowsResult<T>, "ordering">;
 
-function renderSceneRows(result: Unordered<SceneRecord>, query: string | null) {
-  return renderSceneRowsOrdered({ ...result, ordering: ORDERING }, query);
+/** The page and the page size a client honoured, as the renderer receives them. */
+interface Window {
+  page: number;
+  limit: number;
 }
 
-function renderPerformerRows(result: Unordered<PerformerRecord>, query: string | null) {
-  return renderPerformerRowsOrdered({ ...result, ordering: ORDERING }, query);
+/** What the caller typed, as the renderer receives it beside the rows. */
+interface SceneAsked {
+  identifiersGiven: boolean;
+  match: "all" | "any";
+  sorted?: boolean;
+  bounded?: boolean;
+  cached?: boolean;
+}
+
+interface PerformerAsked {
+  sorted?: boolean;
+  cached?: boolean;
+}
+
+function renderSceneRows(
+  result: Unordered<SceneRecord>,
+  query: string | null,
+  window?: Window,
+  asked?: SceneAsked,
+) {
+  return renderSceneRowsOrdered({ ...result, ordering: ORDERING }, query, window, asked);
+}
+
+function renderPerformerRows(
+  result: Unordered<PerformerRecord>,
+  query: string | null,
+  window?: Window,
+  asked?: PerformerAsked,
+) {
+  return renderPerformerRowsOrdered({ ...result, ordering: ORDERING }, query, window, asked);
 }
 
 /** Identifiers in the two shapes the catalogue mints. */
@@ -110,11 +140,13 @@ interface AnsweredExtras {
   reason?: string;
   narrowingsNotReceived?: string[];
   fieldsSearched?: string[];
+  indexTotal?: number;
 }
 
 function answered(source: InstanceId, count: number, extras: AnsweredExtras = {}): SourceReport {
   const report: SourceReport = { source, name: instanceName(source), state: "answered", count };
   if (extras.reason !== undefined) report.reason = extras.reason;
+  if (extras.indexTotal !== undefined) report.indexTotal = extras.indexTotal;
   if (extras.narrowingsNotReceived !== undefined) {
     report.narrowingsNotReceived = extras.narrowingsNotReceived;
   }
@@ -701,5 +733,226 @@ describe("renderPerformerRows", () => {
     );
     expect(text).not.toMatch(/\bnull\b/i);
     expect(text).not.toMatch(/\bundefined\b/i);
+  });
+});
+
+/* ------------------------------------------------------------------- notes */
+
+/**
+ * A note qualifies the answer that carries it. Each sentence below states
+ * something about the rows, the counts or the window, so it belongs to an
+ * answer where that thing happened and to no other. The wording is asserted on
+ * a phrase carrying the claim rather than on a whole sentence, since a claim
+ * survives a rewording and a rewording must not silently drop the claim.
+ */
+const IDENTIFIERS_CARRIED = /carries every identifier given/i;
+const WHAT_A_COUNT_MEANS = /A count reports how many records/i;
+const PAST_THE_END = /past everything these catalogues hold/i;
+const SCENE_COUNT_CAUTION = /A scene count is what the catalogue naming it has indexed/i;
+const INDEX_TOTAL = /the rows here included/i;
+
+const WINDOW: Window = { page: 1, limit: 10 };
+const FACETED: SceneAsked = { identifiersGiven: false, match: "all" };
+const NARROWED_BY_IDS: SceneAsked = { identifiersGiven: true, match: "all" };
+
+describe("renderSceneRows note about identifier narrowing", () => {
+  it("makes no claim about the rows when no catalogue received the identifiers", () => {
+    // Every answering catalogue reports the narrowing as one it could not take,
+    // so a row here satisfying it does so by chance. A sentence saying the rows
+    // carry the identifiers would state what nothing narrowed.
+    const { text } = renderSceneRows(
+      sceneResult(
+        [scene("stashdb", 0, "The Midnight Garden Sessions", "Blue Harbour Media")],
+        [
+          answered("stashdb", 1, {
+            indexTotal: 5,
+            narrowingsNotReceived: ["performer_ids"],
+          }),
+          answered("tpdb", 2, { indexTotal: 9, narrowingsNotReceived: ["performer_ids"] }),
+        ],
+      ),
+      null,
+      WINDOW,
+      NARROWED_BY_IDS,
+    );
+
+    expect(text).not.toMatch(IDENTIFIERS_CARRIED);
+  });
+
+  it("makes the claim when a catalogue received the identifiers and returned rows", () => {
+    const { text } = renderSceneRows(
+      sceneResult(
+        [scene("stashdb", 0, "The Midnight Garden Sessions", "Blue Harbour Media")],
+        [
+          answered("stashdb", 1, { indexTotal: 5 }),
+          answered("tpdb", 2, { indexTotal: 9, narrowingsNotReceived: ["performer_ids"] }),
+        ],
+      ),
+      null,
+      WINDOW,
+      NARROWED_BY_IDS,
+    );
+
+    expect(text).toMatch(IDENTIFIERS_CARRIED);
+  });
+});
+
+describe("renderSceneRows note about what a count means", () => {
+  it("says nothing about a count when no catalogue answered", () => {
+    // One catalogue fell over and the other was never asked, so this answer
+    // carries no count at all and a sentence explaining one explains nothing.
+    const { text } = renderSceneRows(
+      sceneResult(
+        [],
+        [
+          failed("stashdb", "search", "the request timed out"),
+          absent("tpdb", "no key configured in STASHBOX_TPDB_KEY"),
+        ],
+      ),
+      "midnight garden",
+      WINDOW,
+      FACETED,
+    );
+
+    expect(text).not.toMatch(WHAT_A_COUNT_MEANS);
+  });
+
+  it("says what a count means on an answer that carries one", () => {
+    const { text } = renderSceneRows(
+      sceneResult(
+        [scene("stashdb", 0, "The Midnight Garden Sessions", "Blue Harbour Media")],
+        [answered("stashdb", 12, { indexTotal: 12 })],
+      ),
+      "midnight garden",
+      WINDOW,
+      FACETED,
+    );
+
+    expect(text).toMatch(WHAT_A_COUNT_MEANS);
+  });
+});
+
+describe("renderSceneRows note about a page past the end", () => {
+  it("never says a page is past the end of a catalogue that took no page", () => {
+    // The catalogue answered its first page whatever was asked, so its rows say
+    // nothing about page 9. Reading its emptiness as the end of the rows would
+    // measure a window it never opened.
+    const { text } = renderSceneRows(
+      sceneResult([], [answered("stashdb", 0, { indexTotal: 5, narrowingsNotReceived: ["page"] })]),
+      "midnight garden",
+      { page: 9, limit: 10 },
+      FACETED,
+    );
+
+    expect(text).not.toMatch(PAST_THE_END);
+  });
+
+  it("never says a page is past the end of a catalogue that returned rows", () => {
+    const { text } = renderSceneRows(
+      sceneResult(
+        [scene("stashdb", 0, "The Midnight Garden Sessions", "Blue Harbour Media")],
+        [answered("stashdb", 1, { indexTotal: 5 })],
+      ),
+      "midnight garden",
+      { page: 9, limit: 10 },
+      FACETED,
+    );
+
+    expect(text).not.toMatch(PAST_THE_END);
+  });
+
+  it("says a page is past the end when the page was honoured and nothing came back", () => {
+    const { text } = renderSceneRows(
+      sceneResult([], [answered("stashdb", 0, { indexTotal: 5 })]),
+      "midnight garden",
+      { page: 9, limit: 10 },
+      FACETED,
+    );
+
+    expect(text).toMatch(PAST_THE_END);
+    expect(someLine(text, "stashdb", PAST_THE_END)).toBe(true);
+  });
+});
+
+describe("renderSceneRows note about what an index holds", () => {
+  it("counts the rows returned within the total rather than beyond them", () => {
+    // The number is what the index holds for the question, and the rows on this
+    // page are part of it. Calling it a remainder would subtract them twice.
+    const { text } = renderSceneRows(
+      sceneResult(
+        [
+          scene("stashdb", 0, "The Midnight Garden Sessions", "Blue Harbour Media"),
+          scene("stashdb", 2, "The Midnight Garden Sessions II", "Blue Harbour Media"),
+        ],
+        [answered("stashdb", 2, { indexTotal: 40 })],
+      ),
+      "midnight garden",
+      WINDOW,
+      FACETED,
+    );
+
+    expect(text).toMatch(INDEX_TOTAL);
+    expect(text).not.toMatch(/beyond the page returned/i);
+    expect(text).not.toMatch(/\bbeyond\b/i);
+  });
+
+  it("omits the note when every answering catalogue holds nothing for the question", () => {
+    const { text } = renderSceneRows(
+      sceneResult([], [answered("stashdb", 0, { indexTotal: 0 })]),
+      "a title nobody catalogued",
+      WINDOW,
+      FACETED,
+    );
+
+    expect(text).not.toMatch(INDEX_TOTAL);
+  });
+});
+
+describe("renderPerformerRows note about a scene count", () => {
+  it("cautions about a scene count on a row carrying one above zero", () => {
+    // The caution belongs to the number rather than to its value: a count of 34
+    // is coverage on that catalogue as surely as a count of none.
+    const { text } = renderPerformerRows(
+      performerResult(
+        [performer("stashdb", 0, "Nadia Verlaine", 34)],
+        [answered("stashdb", 158, { indexTotal: 158 })],
+      ),
+      "Nadia Verlaine",
+      WINDOW,
+      {},
+    );
+
+    expect(text).toMatch(SCENE_COUNT_CAUTION);
+  });
+
+  it("cautions about a scene count on a row carrying zero", () => {
+    const { text } = renderPerformerRows(
+      performerResult(
+        [performer("stashdb", 0, "Nadia Verlaine", 0)],
+        [answered("stashdb", 158, { indexTotal: 158 })],
+      ),
+      "Nadia Verlaine",
+      WINDOW,
+      {},
+    );
+
+    expect(text).toMatch(SCENE_COUNT_CAUTION);
+  });
+
+  it("omits the caution when no row carries a scene count", () => {
+    const { text } = renderPerformerRows(
+      performerResult(
+        [
+          performer("stashdb", 0, "Nadia Verlaine", null),
+          performer("fansdb", 1, "Nadia Corbeau", null),
+        ],
+        [answered("stashdb", 158, { indexTotal: 158 }), answered("fansdb", 21, { indexTotal: 21 })],
+      ),
+      "Nadia Verlaine",
+      WINDOW,
+      {},
+    );
+
+    expect(text).not.toMatch(SCENE_COUNT_CAUTION);
   });
 });

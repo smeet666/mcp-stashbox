@@ -569,3 +569,56 @@ describe("renderPerformer merged marker", () => {
     expect(text).not.toMatch(/\b0 cm\b/i);
   });
 });
+
+describe("renderPerformer sections asked for and not rendered", () => {
+  it("reads an empty list of sections as the default", () => {
+    // The argument is optional, and a caller passing an empty list has narrowed
+    // nothing. Rendering that as no section at all would answer with a record
+    // stripped of what identifies it.
+    const record = performer();
+
+    const empty = renderPerformer(record, []);
+    const omitted = renderPerformer(record, ["basic"]);
+
+    expect(empty.text).toBe(omitted.text);
+    expect(empty.structured).toEqual(omitted.structured);
+  });
+
+  it("says a section could not be rendered on a merged record", () => {
+    const merged = performer({
+      status: "merged",
+      mergedInto: "stashdb:7f8e9d0c-1b2a-4394-8576-6a5b4c3d2e1f",
+      sceneCount: null,
+      urls: [],
+      aliases: [],
+    });
+
+    for (const section of ["appearance", "images", "scenes", "studios"]) {
+      const { text, structured } = renderPerformer(merged, ["basic", section]);
+      const notes = (field(structured, "notes") as string[] | undefined) ?? [];
+
+      // A section asked for and silently dropped reads as a record holding
+      // nothing under it.
+      expect(notes.some((note) => note.includes(section))).toBe(true);
+      expect(text).toMatch(new RegExp(`${section}[^\\n]*could not be rendered`, "i"));
+    }
+  });
+
+  it("says a section could not be rendered on a withdrawn record", () => {
+    const withdrawn = performer({
+      status: "deleted",
+      mergedInto: null,
+      sceneCount: null,
+      urls: [],
+      aliases: [],
+    });
+
+    for (const section of ["appearance", "images", "scenes", "studios"]) {
+      const { text, structured } = renderPerformer(withdrawn, ["basic", section]);
+      const notes = (field(structured, "notes") as string[] | undefined) ?? [];
+
+      expect(notes.some((note) => note.includes(section))).toBe(true);
+      expect(text).toMatch(new RegExp(`${section}[^\\n]*could not be rendered`, "i"));
+    }
+  });
+});

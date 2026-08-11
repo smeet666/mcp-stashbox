@@ -40,12 +40,14 @@ export function renderSceneRows(
     sorted?: boolean;
     bounded?: boolean;
     cached?: boolean;
+    sortedOn?: string;
   },
 ): Rendered {
   const identifiersGiven = asked?.identifiersGiven ?? false;
   const match = asked?.match ?? "all";
   const sorted = asked?.sorted ?? false;
   const cached = asked?.cached ?? false;
+  const stamped = asked?.sortedOn === "created" || asked?.sortedOn === "updated";
   const bounded = asked?.bounded ?? false;
   // Only what qualifies this answer. The ordering and the per-catalogue counts
   // are in the payload beside the rows they describe, and repeating them on
@@ -62,14 +64,27 @@ export function renderSceneRows(
   notes.push(
     "Counts are reported per catalogue and are never added: the catalogues index overlapping corpora, and one scene held by two of them carries two identifiers there.",
   );
-  if (identifiersGiven) {
+  // Only where a catalogue received the narrowing and answered with rows: a
+  // note built from the argument would assert a filter on rows nobody filtered.
+  const filtered = result.perSource.some(
+    (entry) =>
+      entry.state === "answered" &&
+      entry.count &&
+      !(entry.narrowingsNotReceived ?? []).some((name) => name.endsWith("_ids")),
+  );
+  if (identifiersGiven && filtered) {
     notes.push(
       match === "any"
-        ? "A row carries at least one of the identifiers given."
-        : "A row carries every identifier given.",
+        ? "A row from a catalogue that received the list carries at least one of the identifiers given."
+        : "A row from a catalogue that received the list carries every identifier given.",
     );
   }
-  if (query) {
+  // A statement about counts belongs to an answer that carries one.
+  // The sentence describes the rows below the first, so it belongs to an
+  // answer that has one.
+  const counted =
+    result.rows.length > 0 && result.perSource.some((entry) => entry.state === "answered");
+  if (query && counted) {
     notes.push(
       "A count reports how many records a catalogue's index touched for these words. Rows below the first can share a single word of what was asked.",
     );
@@ -110,6 +125,7 @@ export function renderSceneRows(
       studio: row.studio?.name ?? null,
       performers: row.performers.map((entry) => entry.name),
       status: row.status,
+      ...(stamped ? { created: row.created, updated: row.updated } : {}),
       retrieved_at: row.retrievedAt,
       source_url: row.sourceUrl,
     })),

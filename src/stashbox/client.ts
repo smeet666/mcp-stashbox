@@ -118,6 +118,7 @@ const PERFORMER_FIELDS_SEARCHED = ["name", "aliases", "disambiguation"];
 const TEXT_SEARCH_IGNORES = [
   "title",
   "code",
+  "match",
   "performer_ids",
   "studio_ids",
   "tag_ids",

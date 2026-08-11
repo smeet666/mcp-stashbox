@@ -34,10 +34,11 @@ export function renderPerformerRows(
   result: RowsResult<PerformerRecord>,
   query: string | null,
   window?: { page: number; limit: number },
-  asked?: { sorted?: boolean; cached?: boolean },
+  asked?: { sorted?: boolean; cached?: boolean; sortedOn?: string },
 ): Rendered {
   const sorted = asked?.sorted ?? false;
   const cached = asked?.cached ?? false;
+  const stamped = asked?.sortedOn === "created" || asked?.sortedOn === "updated";
   const notes: string[] = [];
 
   // How the order was built is worth saying whatever answered: a reader takes
@@ -49,7 +50,11 @@ export function renderPerformerRows(
   // published.
   notes.push("Counts are reported per catalogue and are never added.");
 
-  if (query) {
+  // The sentence describes the rows below the first, so it belongs to an
+  // answer that has one.
+  const counted =
+    result.rows.length > 0 && result.perSource.some((entry) => entry.state === "answered");
+  if (query && counted) {
     notes.push(
       "A count reports how many records a catalogue's index touched for these words. A search for a full name reaches people sharing one word of it.",
     );
@@ -74,9 +79,12 @@ export function renderPerformerRows(
       );
     }
   }
-  if (result.rows.some((row) => row.sceneCount === 0)) {
+  // The count is qualified wherever it appears. Saying so only on a zero would
+  // put the caution where a reader already hesitates and drop it where they
+  // would read a career total.
+  if (result.rows.some((row) => row.sceneCount !== null)) {
     notes.push(
-      "A scene count of zero counts what that catalogue has indexed. A settled record naming a long career can report none.",
+      "A scene count is what the catalogue naming it has indexed for that performer, and never a career total. A settled record naming a long career can report none, and two catalogues count different corpora.",
     );
   }
   const covered = windowNote(result.perSource, window);
@@ -108,6 +116,7 @@ export function renderPerformerRows(
       career_end_year: row.careerEndYear,
       scene_count: row.sceneCount,
       status: row.status,
+      ...(stamped ? { created: row.created, updated: row.updated } : {}),
       retrieved_at: row.retrievedAt,
       source_url: row.sourceUrl,
     })),
@@ -196,7 +205,11 @@ export function registerSearchPerformers(server: McpServer, client: StashboxClie
           read.data,
           args.query ?? null,
           { page: args.page ?? 1, limit: args.limit ?? 10 },
-          { sorted: Boolean(args.sort), cached: read.cached },
+          {
+            sorted: Boolean(args.sort),
+            cached: read.cached,
+            ...(args.sort ? { sortedOn: args.sort } : {}),
+          },
         );
         return {
           content: [{ type: "text" as const, text: rendered.text }],

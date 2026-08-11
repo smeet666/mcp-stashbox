@@ -171,10 +171,11 @@ export function indexTotalNote(reports: readonly SourceReport[]): string | null 
     (entry) => entry.state === "answered" && entry.indexTotal !== undefined,
   );
   if (withTotal.length === 0) return null;
+  if (withTotal.every((entry) => !entry.indexTotal)) return null;
   const named = withTotal
     .map((entry) => `${entry.name ?? entry.source}: ${entry.indexTotal}`)
     .join(", ");
-  return `Records each catalogue's index holds for this question, beyond the page returned — ${named}. These count different corpora and are never added.`;
+  return `Records each catalogue's index holds for this question, the rows here included — ${named}. These count different corpora and are never added.`;
 }
 
 /**
@@ -192,6 +193,11 @@ export function pastTheEndNote(
     (entry) =>
       entry.state === "answered" &&
       entry.indexTotal !== undefined &&
+      // A catalogue that never received the page did not reach the end of
+      // anything: it answered its first page, which the window note says.
+      !entry.narrowingsNotReceived?.includes("page") &&
+      // And a catalogue that returned rows has not run out of them.
+      !entry.count &&
       (window.page - 1) * window.limit >= entry.indexTotal,
   );
   if (past.length === 0) return null;

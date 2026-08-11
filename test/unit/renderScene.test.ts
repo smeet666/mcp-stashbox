@@ -503,3 +503,70 @@ describe("renderScene notes", () => {
     expect(text).toContain("Note: an invented synopsis line published on the record.");
   });
 });
+
+describe("renderScene sections asked for and not rendered", () => {
+  it("reads an empty list of sections as the default", () => {
+    // The argument is optional, and a caller passing an empty list has narrowed
+    // nothing. Rendering that as no section at all would answer with a record
+    // stripped of what identifies it.
+    const record = scene();
+
+    const empty = renderScene(record, []);
+    const omitted = renderScene(record, ["basic"]);
+
+    expect(empty.text).toBe(omitted.text);
+    expect(empty.structured).toEqual(omitted.structured);
+  });
+
+  it("says a section could not be rendered on a merged record", () => {
+    const merged = scene({
+      status: "merged",
+      mergedInto: "stashdb:9a8b7c6d-5e4f-4302-9182-736455647382",
+      details: null,
+      code: null,
+      director: null,
+      durationSeconds: null,
+      releaseDate: null,
+      productionDate: null,
+      studio: null,
+      performers: [],
+      tags: [],
+      urls: [],
+    });
+
+    for (const section of ["fingerprints", "images"]) {
+      const { text, structured } = renderScene(merged, ["basic", section]);
+      const notes = (field(structured, "notes") as string[] | undefined) ?? [];
+
+      // A section asked for and silently dropped reads as a record holding
+      // nothing under it.
+      expect(notes.some((note) => note.includes(section))).toBe(true);
+      expect(text).toMatch(new RegExp(`${section}[^\\n]*could not be rendered`, "i"));
+    }
+  });
+
+  it("says a section could not be rendered on a withdrawn record", () => {
+    const withdrawn = scene({
+      status: "deleted",
+      mergedInto: null,
+      details: null,
+      code: null,
+      director: null,
+      durationSeconds: null,
+      releaseDate: null,
+      productionDate: null,
+      studio: null,
+      performers: [],
+      tags: [],
+      urls: [],
+    });
+
+    for (const section of ["fingerprints", "images"]) {
+      const { text, structured } = renderScene(withdrawn, ["basic", section]);
+      const notes = (field(structured, "notes") as string[] | undefined) ?? [];
+
+      expect(notes.some((note) => note.includes(section))).toBe(true);
+      expect(text).toMatch(new RegExp(`${section}[^\\n]*could not be rendered`, "i"));
+    }
+  });
+});

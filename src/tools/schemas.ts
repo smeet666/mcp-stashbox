@@ -74,7 +74,7 @@ const sourceReportSchema = z.object({
   index_total: z
     .number()
     .optional()
-    .describe("What this catalogue's index holds for the question, beyond the page returned."),
+    .describe("What this catalogue's index holds for the question, the rows returned included."),
   reason: z.string().optional(),
   moment: z.string().optional().describe("Which step failed, for a catalogue that failed."),
   error: z.string().optional(),
@@ -302,6 +302,12 @@ const sceneRowSchema = z.object({
   studio: z.string().nullable(),
   performers: z.array(z.string()),
   status: statusSchema,
+  created: z
+    .string()
+    .nullable()
+    .optional()
+    .describe("Carried when the rows were sorted on it, so the order can be read on the rows."),
+  updated: z.string().nullable().optional().describe("Carried on the same terms as 'created'."),
   retrieved_at: retrievedAtSchema,
   source_url: z.string(),
 });
@@ -351,6 +357,13 @@ export const searchPerformersOutput = z.object({
         .nullable()
         .describe("Scenes that catalogue has indexed crediting this performer."),
       status: statusSchema,
+      created: z
+        .string()
+        .nullable()
+        .optional()
+        .describe("Carried when the rows were sorted on it, so the order can be read on the rows."),
+      updated: z.string().nullable().optional().describe("Carried on the same terms as 'created'."),
+      retrieved_at: retrievedAtSchema,
       source_url: z.string(),
     }),
   ),
