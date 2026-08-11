@@ -1,0 +1,264 @@
+/**
+ * One performer, read from the catalogue its identifier names.
+ *
+ * The count of scenes is the field a reader most easily misreads, so it is
+ * labelled everywhere it appears: it counts what this catalogue has indexed, and
+ * a settled record naming a career spanning decades can report none.
+ */
+
+import { z } from "zod";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { StashboxClient } from "../stashbox/client.js";
+import type { PerformerRecord } from "../types.js";
+import { strictInput } from "./arguments.js";
+import { getPerformerOutput } from "./schemas.js";
+import {
+  dateText,
+  inline,
+  inlineAll,
+  joinLines,
+  line,
+  notesBlock,
+  sourceLine,
+  type Rendered,
+} from "./shared.js";
+import { toolError } from "./errorShape.js";
+
+export const GET_PERFORMER_SECTIONS = [
+  "basic",
+  "appearance",
+  "images",
+  "scenes",
+  "studios",
+] as const;
+
+export function renderPerformer(record: PerformerRecord, sections: readonly string[]): Rendered {
+  const notes: string[] = [];
+
+  if (record.status !== "established") {
+    // A folded record answers under its old identifier carrying the name it held
+    // then and an emptied body. It names its successor and stops there.
+    const structured = {
+      id: record.id,
+      source: record.source,
+      source_url: record.sourceUrl,
+      retrieved_at: record.retrievedAt,
+      status: record.status,
+      merged_into: record.mergedInto,
+      merged_ids: record.mergedIds,
+      former_name: record.name,
+      scene_count: null,
+    };
+    const text = joinLines([
+      record.status === "merged"
+        ? `This identifier addresses a record ${record.source} has merged into another.`
+        : `This identifier addresses a record ${record.source} has withdrawn.`,
+      line("Former name", inline(record.name)),
+      line("Continues as", record.mergedInto),
+      line(
+        "Identifiers folded in here",
+        record.mergedIds.length ? record.mergedIds.join(", ") : null,
+      ),
+      sourceLine(record.sourceUrl),
+    ]);
+    return {
+      text:
+        text +
+        notesBlock([
+          "This record is a marker. Its emptiness describes the record and states nothing about the person it once named.",
+          ...(record.mergedInto
+            ? [`Read ${record.mergedInto} for the record that continues it.`]
+            : []),
+        ]),
+      structured,
+    };
+  }
+
+  const structured: Record<string, unknown> = {
+    id: record.id,
+    source: record.source,
+    source_url: record.sourceUrl,
+    retrieved_at: record.retrievedAt,
+    status: record.status,
+    merged_into: record.mergedInto,
+    merged_ids: record.mergedIds,
+    name: record.name,
+    disambiguation: record.disambiguation,
+    aliases: record.aliases,
+    gender: record.gender,
+    country: record.country,
+    birth_date: record.birthDate,
+    death_date: record.deathDate,
+    career_start_year: record.careerStartYear,
+    career_end_year: record.careerEndYear,
+    scene_count: record.sceneCount,
+    scene_count_means: `scenes ${record.source} has indexed crediting this performer`,
+    urls: record.urls.map((link) => ({
+      url: link.url,
+      site_name: link.siteName,
+      site_category: link.siteCategory,
+    })),
+    created: record.created,
+    updated: record.updated,
+  };
+  structured.notes = notes;
+
+  if (sections.includes("appearance") && record.appearance) {
+    // Only what the record carries. Printing a placeholder for an absent
+    // measurement would state more than the catalogue holds.
+    const present = {
+      ethnicity: record.appearance.ethnicity,
+      eye_color: record.appearance.eyeColor,
+      hair_color: record.appearance.hairColor,
+      height_cm: record.appearance.heightCm,
+      breast_type: record.appearance.breastType,
+      cup_size: record.appearance.cupSize,
+      band_size: record.appearance.bandSize,
+      waist_size: record.appearance.waistSize,
+      hip_size: record.appearance.hipSize,
+      tattoos: record.appearance.tattoos.length ? record.appearance.tattoos : null,
+      piercings: record.appearance.piercings.length ? record.appearance.piercings : null,
+    };
+    structured.appearance = present;
+  }
+  if (sections.includes("images") && record.images) structured.images = record.images;
+  if (sections.includes("studios") && record.studios) structured.studios = record.studios;
+  if (sections.includes("scenes") && record.scenesUnavailable) {
+    structured.scenes_unavailable = record.scenesUnavailable;
+    notes.push(
+      `The scenes section was asked for and could not be read (${record.scenesUnavailable}). Its absence here says nothing about what ${record.source} holds.`,
+    );
+  }
+  if (sections.includes("scenes") && record.scenes) {
+    if (record.scenesTotal !== null && record.scenesTotal !== undefined) {
+      structured.scenes_total = record.scenesTotal;
+      if (record.scenesTotal > (record.scenesShown ?? 0)) {
+        notes.push(
+          `This section shows ${record.scenesShown ?? 0} of the ${record.scenesTotal} scenes ${record.source} indexes for this performer.`,
+        );
+      }
+    }
+    structured.scenes = record.scenes.map((scene) => ({
+      id: scene.id,
+      title: scene.title,
+      release_date: scene.releaseDate,
+      studio: scene.studio?.name ?? null,
+      source_url: scene.sourceUrl,
+    }));
+  }
+
+  if (record.sceneCount === 0) {
+    notes.push(
+      `${record.source} has indexed no scenes crediting this performer. That counts this catalogue's coverage and states nothing about the person's work.`,
+    );
+  }
+  if (record.birthDate && record.birthDate.precision !== "day") {
+    notes.push(
+      `The birth date is recorded to the ${record.birthDate.precision} only, so no day is stated.`,
+    );
+  }
+  if (record.mergedIds.length > 0) {
+    notes.push(
+      `This record has absorbed ${record.mergedIds.length} other identifier(s), which still resolve to it.`,
+    );
+  }
+
+  const text =
+    joinLines([
+      record.name ? `# ${inline(record.name)}` : "# (this record states no name)",
+      line("Catalogue", `${record.source} (${record.status})`),
+      line("Told apart by", inline(record.disambiguation)),
+      line("Also credited as", record.aliases.length ? inlineAll(record.aliases) : null),
+      line("Gender", record.gender),
+      line("Country", record.country),
+      line("Born", dateText(record.birthDate)),
+      line("Died", dateText(record.deathDate)),
+      line(
+        "Career",
+        record.careerStartYear || record.careerEndYear
+          ? `${record.careerStartYear ?? "?"}–${record.careerEndYear ?? "?"}`
+          : null,
+      ),
+      line(
+        "Scenes indexed here",
+        record.sceneCount === null ? null : `${record.sceneCount} on ${record.source}`,
+      ),
+      sections.includes("appearance") && record.appearance
+        ? `\nAppearance:\n${appearanceLines(record).join("\n")}`
+        : null,
+      record.urls.length
+        ? `\nLinks:\n${record.urls
+            .map(
+              (link) =>
+                `  - ${inline(link.siteName)}${link.siteCategory ? ` [${inline(link.siteCategory)}]` : ""}: ${link.url}`,
+            )
+            .join("\n")}`
+        : null,
+      sections.includes("scenes") && record.scenes?.length
+        ? `\nScenes:\n${record.scenes
+            .map((scene) => `  - ${inline(scene.title) ?? "(untitled)"}: ${scene.sourceUrl}`)
+            .join("\n")}`
+        : null,
+      sections.includes("images") && record.images?.length
+        ? `\nImages:\n${record.images.map((image) => `  - ${image.url}`).join("\n")}`
+        : null,
+      `\n${sourceLine(record.sourceUrl)}`,
+    ]) + notesBlock(notes);
+
+  return { text, structured };
+}
+
+function appearanceLines(record: PerformerRecord): string[] {
+  const appearance = record.appearance;
+  if (!appearance) return [];
+  return [
+    line("  Height", appearance.heightCm === null ? null : `${appearance.heightCm} cm`),
+    line("  Ethnicity", inline(appearance.ethnicity)),
+    line("  Eyes", appearance.eyeColor),
+    line("  Hair", appearance.hairColor),
+    line("  Breast type", appearance.breastType),
+    line("  Cup size", inline(appearance.cupSize)),
+    line("  Band size", appearance.bandSize === null ? null : String(appearance.bandSize)),
+    line("  Waist", appearance.waistSize === null ? null : String(appearance.waistSize)),
+    line("  Hips", appearance.hipSize === null ? null : String(appearance.hipSize)),
+    line("  Tattoos", appearance.tattoos.length ? inlineAll(appearance.tattoos) : null),
+    line("  Piercings", appearance.piercings.length ? inlineAll(appearance.piercings) : null),
+  ].filter((entry): entry is string => entry !== null);
+}
+
+export function registerGetPerformer(server: McpServer, client: StashboxClient): void {
+  server.registerTool(
+    "get_performer",
+    {
+      title: "Read one performer",
+      description:
+        "Read one catalogued performer by its identifier. 'scene_count' counts what that catalogue has indexed: a settled record naming a career spanning decades can report none, and that states the catalogue's coverage, never a career. An identifier folded into another answers as a marker naming its successor.",
+      inputSchema: strictInput({
+        id: z.string().describe("Identifier as returned by another tool, such as stashdb:<uuid>."),
+        sections: z
+          .array(z.enum(GET_PERFORMER_SECTIONS))
+          .optional()
+          .describe("Which blocks to load. Defaults to basic."),
+      }),
+      outputSchema: getPerformerOutput,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: true,
+      },
+    },
+    async ({ id, sections }) => {
+      try {
+        const read = await client.getPerformer(id, sections ?? ["basic"]);
+        const rendered = renderPerformer(read.data, sections ?? ["basic"]);
+        return {
+          content: [{ type: "text" as const, text: rendered.text }],
+          structuredContent: rendered.structured,
+        };
+      } catch (cause) {
+        return toolError(cause);
+      }
+    },
+  );
+}

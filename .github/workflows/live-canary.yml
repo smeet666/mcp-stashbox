@@ -1,0 +1,24 @@
+name: Live canary
+
+on:
+  schedule:
+    # An hour no neighbouring project occupies, so a catalogue never receives
+    # several projects' canaries at once.
+    - cron: "37 4 * * *"
+  workflow_dispatch:
+
+jobs:
+  live:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run test:live
+        env:
+          STASHBOX_LIVE: "1"
+          STASHBOX_STASHDB_KEY: ${{ secrets.STASHBOX_STASHDB_KEY }}

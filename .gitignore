@@ -1,0 +1,8 @@
+node_modules/
+dist/
+dist-bundle/
+bundle/
+test/fixtures/
+*.log
+*.mcpb
+.DS_Store

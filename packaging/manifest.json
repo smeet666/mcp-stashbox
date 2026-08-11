@@ -1,0 +1,96 @@
+{
+  "manifest_version": "0.3",
+  "name": "mcp-stashbox",
+  "display_name": "Stash-box catalogues",
+  "version": "0.1.0",
+  "description": "MCP server for the public stash-box metadata catalogues. Search scenes and performers, read one record, and identify a file by its fingerprint.",
+  "long_description": "Reads the public stash-box catalogues for scenes, performers, studios and tags. These catalogues hold metadata and no media: a record names where something was published and carries nothing of it.\n\nThe server asks every catalogue you have configured and keeps the seams visible. A catalogue that failed, one that was never asked and one that looked and found nothing are three different things, and every answer says which is which. Counts are never added across catalogues and rows are never ranked against each other, because they publish no score in common.\n\nThe fingerprint route is the reason to ask several at once. MD5 and OSHASH match the same file byte for byte; PHASH matches images that resemble each other, which covers a re-encode, a crop and a different scene from one shoot. Every match says which kind of claim it is, and a catalogue that counts no disputes over a fingerprint reports an unknown contest.",
+  "author": {
+    "name": "Damien Bouissou",
+    "url": "https://github.com/smeet666"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/smeet666/mcp-stashbox.git"
+  },
+  "homepage": "https://github.com/smeet666/mcp-stashbox#readme",
+  "documentation": "https://github.com/smeet666/mcp-stashbox#readme",
+  "support": "https://github.com/smeet666/mcp-stashbox/issues",
+  "icon": "assets/icon-512.png",
+  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "stash-box",
+    "stashdb",
+    "metadata",
+    "catalogue",
+    "fingerprint",
+    "phash"
+  ],
+  "server": {
+    "type": "node",
+    "entry_point": "dist-bundle/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/dist-bundle/index.js"
+      ],
+      "env": {
+        "STASHBOX_STASHDB_KEY": "${user_config.stashbox_stashdb_key}",
+        "STASHBOX_TPDB_KEY": "${user_config.stashbox_tpdb_key}",
+        "STASHBOX_FANSDB_KEY": "${user_config.stashbox_fansdb_key}",
+        "STASHBOX_PMV_KEY": "${user_config.stashbox_pmv_key}",
+        "STASHBOX_JAVSTASH_KEY": "${user_config.stashbox_javstash_key}"
+      }
+    }
+  },
+  "user_config": {
+    "stashbox_stashdb_key": {
+      "type": "string",
+      "title": "StashDB API key",
+      "description": "Key from your StashDB profile page. A catalogue with no key is named as absent from every answer.",
+      "required": false,
+      "sensitive": true
+    },
+    "stashbox_tpdb_key": {
+      "type": "string",
+      "title": "ThePornDB API key",
+      "description": "Key from your ThePornDB profile page. A catalogue with no key is named as absent from every answer.",
+      "required": false,
+      "sensitive": true
+    },
+    "stashbox_fansdb_key": {
+      "type": "string",
+      "title": "FansDB API key",
+      "description": "Key from your FansDB profile page. A catalogue with no key is named as absent from every answer.",
+      "required": false,
+      "sensitive": true
+    },
+    "stashbox_pmv_key": {
+      "type": "string",
+      "title": "PMV Stash API key",
+      "description": "Key from your PMV Stash profile page. A catalogue with no key is named as absent from every answer.",
+      "required": false,
+      "sensitive": true
+    },
+    "stashbox_javstash_key": {
+      "type": "string",
+      "title": "JAVStash API key",
+      "description": "Key from your JAVStash profile page. A catalogue with no key is named as absent from every answer.",
+      "required": false,
+      "sensitive": true
+    }
+  },
+  "compatibility": {
+    "claude_desktop": ">=0.10.0",
+    "platforms": [
+      "darwin",
+      "win32",
+      "linux"
+    ],
+    "runtimes": {
+      "node": ">=20.0.0"
+    }
+  }
+}
