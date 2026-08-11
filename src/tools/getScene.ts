@@ -57,6 +57,7 @@ export function renderScene(
       merged_into: record.mergedInto,
       former_title: record.title,
       notes: [] as string[],
+      ...(cached ? { cached: true } : {}),
     };
     const text = joinLines([
       record.status === "merged"
@@ -182,6 +183,11 @@ export function renderScene(
   if (record.releaseDate && record.releaseDate.precision !== "day") {
     notes.push(
       `The release date is recorded to the ${record.releaseDate.precision} only, so no day is stated.`,
+    );
+  }
+  if (record.productionDate && record.productionDate.precision !== "day") {
+    notes.push(
+      `The production date is recorded to the ${record.productionDate.precision} only, so no day is stated.`,
     );
   }
   if (record.productionDate !== null && record.releaseDate !== null) {

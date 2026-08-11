@@ -75,6 +75,25 @@ export function renderFingerprintMatches(result: FingerprintResult): Rendered {
   if (failures) notes.push(failures);
   const lost = skippedNote(result.perSource);
   if (lost) notes.push(lost);
+  notes.push(
+    "Counts are reported per catalogue and are never added: the catalogues index overlapping corpora, and one film held by two of them carries two identifiers there, which 'scenes_matched' counts separately.",
+  );
+  // An algorithm a catalogue's route does not search was never put to it, and
+  // its silence there is no answer about the file.
+  const unasked = new Map<string, string[]>();
+  for (const entry of result.perSource) {
+    for (const name of entry.narrowingsNotReceived ?? []) {
+      unasked.set(name, [...(unasked.get(name) ?? []), entry.name ?? entry.source]);
+    }
+  }
+  if (unasked.size) {
+    const named = [...unasked]
+      .map(([name, sources]) => `${name} by ${sources.join(", ")}`)
+      .join("; ");
+    notes.push(
+      `Fingerprints not searched for: ${named}. Those catalogues were never asked about them, so their answer here is no evidence about that hash.`,
+    );
+  }
   const nobody = nobodyAskedNote(result.perSource);
   if (nobody) notes.push(nobody);
   const coverage = coverageNote(result.perSource);
@@ -89,6 +108,7 @@ export function renderFingerprintMatches(result: FingerprintResult): Rendered {
         id: match.scene.id,
         source: match.scene.source,
         title: match.scene.title,
+        status: match.scene.status,
         release_date: match.scene.releaseDate,
         studio: match.scene.studio?.name ?? null,
         performers: match.scene.performers.map((entry) => entry.name),

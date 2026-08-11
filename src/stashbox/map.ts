@@ -143,11 +143,16 @@ function mapFingerprints(
   return { rows, skipped };
 }
 
-function mapStudio(raw: unknown, spec: InstanceSpec): StudioRef | null {
+function mapStudio(raw: unknown, spec: InstanceSpec, lost?: { skipped: number }): StudioRef | null {
   const row = asRecord(raw);
   const id = readText(row?.id);
   const name = readText(row?.name);
-  if (!row || !id || !name) return null;
+  if (!row || !id || !name) {
+    // A studio the catalogue answered with and this client could not read is a
+    // loss. Returning null silently makes it a scene with no studio.
+    if (row !== undefined && row !== null && lost) lost.skipped += 1;
+    return null;
+  }
   return {
     id: formatId(spec.id, id),
     name,
@@ -276,7 +281,9 @@ export function mapScene(
   const performers = mapAppearances(row.performers, spec);
   const tags = mapTags(row.tags, spec);
   const urls = mapLinks(row.urls);
-  const lost = performers.skipped + tags.skipped + urls.skipped;
+  const studioLoss = { skipped: 0 };
+  const studio = mapStudio(row.studio, spec, studioLoss);
+  const lost = performers.skipped + tags.skipped + urls.skipped + studioLoss.skipped;
 
   const scene: SceneRecord = {
     ...base,
@@ -289,7 +296,7 @@ export function mapScene(
     // When a scene was made is a different question from when it was released,
     // so neither ever stands in for the other.
     productionDate: readDate(readText(row.production_date)),
-    studio: mapStudio(row.studio, spec),
+    studio,
     performers: performers.rows,
     tags: tags.rows,
     urls: urls.rows,
@@ -337,10 +344,14 @@ export function mapPerformer(
 
   const mergedIntoRaw = readText(row.merged_into_id);
   const status = readStatus(row.deleted === true, mergedIntoRaw);
-  const mergedIds = asArray(row.merged_ids)
+  const rawMergedIds = asArray(row.merged_ids);
+  // An absorbed identifier is held to what the record's own is held to: a
+  // string this catalogue could have minted. Anything else is a row lost.
+  const mergedIds = rawMergedIds
     .map((entry) => readText(entry))
-    .filter((entry): entry is string => entry !== null)
+    .filter((entry): entry is string => entry !== null && isUuid(entry))
     .map((entry) => formatId(spec.id, entry));
+  const mergedIdsSkipped = rawMergedIds.length - mergedIds.length;
 
   const base = {
     id: formatId(spec.id, uuid),
@@ -398,8 +409,8 @@ export function mapPerformer(
     // would be indistinguishable from a person it holds nothing for.
     sceneCount: supports(spec, "scene_count") ? readInteger(row.scene_count) : null,
     urls: performerUrls.rows,
-    ...(performerUrls.skipped || aliasesSkipped
-      ? { rowsSkipped: performerUrls.skipped + aliasesSkipped }
+    ...(performerUrls.skipped + aliasesSkipped + mergedIdsSkipped
+      ? { rowsSkipped: performerUrls.skipped + aliasesSkipped + mergedIdsSkipped }
       : {}),
     created: readText(row.created),
     updated: readText(row.updated),

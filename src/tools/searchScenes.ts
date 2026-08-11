@@ -115,6 +115,12 @@ export function renderSceneRows(
   if (ordering) notes.push(ordering);
   const pastEnd = pastTheEndNote(result.perSource, window);
   if (pastEnd) notes.push(pastEnd);
+  const damaged = result.rows.reduce((total, row) => total + (row.rowsSkipped ?? 0), 0);
+  if (damaged) {
+    notes.push(
+      `${damaged} row(s) inside the records listed here could not be read and are left out of what each one shows of its own lists. Read a record for what it says about its own losses.`,
+    );
+  }
   const lost = skippedNote(result.perSource);
   if (lost) notes.push(lost);
   const failures = failureNote(result.perSource);

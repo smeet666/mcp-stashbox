@@ -62,6 +62,7 @@ export function renderPerformer(
       former_name: record.name,
       scene_count: null,
       notes: [] as string[],
+      ...(cached ? { cached: true } : {}),
     };
     const text = joinLines([
       record.status === "merged"
@@ -77,10 +78,12 @@ export function renderPerformer(
     ]);
     const unrendered = sections.filter((name) => name !== "basic");
     const markerNotes = [
-      "This record is a marker. Its emptiness describes the record and states nothing about the person it once named.",
+      record.status === "merged"
+        ? "This record is a marker. Its emptiness describes the record and states nothing about the person it once named."
+        : "A withdrawn record states nothing about the person it once named.",
       ...(unrendered.length
         ? [
-            `A marker carries no body, so ${unrendered.join(", ")} could not be rendered here. Ask for them on the record that continues it.`,
+            `A marker carries no body, so ${unrendered.join(", ")} could not be rendered here.${record.mergedInto ? " Ask for them on the record that continues it." : ""}`,
           ]
         : []),
       ...(record.mergedInto ? [`Read ${record.mergedInto} for the record that continues it.`] : []),
@@ -137,6 +140,11 @@ export function renderPerformer(
   if (unnamedLinks && unnamedLinks < record.urls.length) {
     notes.push(
       `${unnamedLinks} of these ${record.urls.length} links carry no site ${record.source} names, and are shown by their address alone.`,
+    );
+  }
+  if (record.deathDate && record.deathDate.precision !== "day") {
+    notes.push(
+      `The death date is recorded to the ${record.deathDate.precision} only, so no day is stated.`,
     );
   }
   if (record.rowsSkipped) {
@@ -221,6 +229,7 @@ export function renderPerformer(
     structured.scenes = record.scenes.map((scene) => ({
       id: scene.id,
       title: scene.title,
+      status: scene.status,
       release_date: scene.releaseDate,
       studio: scene.studio?.name ?? null,
       source_url: scene.sourceUrl,
@@ -290,7 +299,10 @@ export function renderPerformer(
         : null,
       sections.includes("scenes") && record.scenes
         ? `\nScenes (${record.scenesTotal === null || record.scenesTotal === undefined ? "count not published" : `${record.scenesTotal} indexed`}, ${record.scenes.length} shown):\n${record.scenes
-            .map((scene) => `  - ${inline(scene.title) ?? "(untitled)"}: ${scene.sourceUrl}`)
+            .map(
+              (scene) =>
+                `  - ${inline(scene.title) ?? "(untitled)"}${scene.status === "established" ? "" : scene.status === "merged" ? " (merged into another record)" : " (withdrawn)"}: ${scene.sourceUrl}`,
+            )
             .join("\n")}`
         : null,
       sections.includes("images") && record.images

@@ -157,6 +157,26 @@ notes reads the wrong half.
   record, which is what a merged one does.
 - What a fingerprint carries of a dispute reached one of the two tools that print
   fingerprints.
+- A record folded into another, or withdrawn, was rendered as a scene by the
+  fingerprint route and inside a performer's scenes section: the title it carried
+  then stood over a body the catalogue had emptied, with nothing saying so.
+- A marker with no successor invited the caller to ask for its sections on the
+  record that continues it, where none does; and a withdrawal was described in
+  the words a merge deserves.
+- A studio a catalogue answered with and this client could not read left a scene
+  reading as a scene with no studio.
+- Identifiers folded into a record were dropped when unreadable while the
+  sentence counting them counted what survived, and they were never held to
+  being identifiers this catalogue could have minted.
+- Rows lost inside a record were spoken when the record was read and never when
+  the same record came back from a search.
+- The rule that counts from different catalogues are never added reached the two
+  searches and not the tool most likely to hold one film under two identifiers.
+- An algorithm a catalogue's fingerprint route does not search was named in its
+  own block alone, leaving the answer to read as a catalogue that looked.
+- The precision of a death date and of a production date went unsaid where the
+  precision of their siblings was stated.
+- A marker replayed from the store said so in its prose and not in its payload.
 
 ## [0.2.1] - 2026-08-11
 
