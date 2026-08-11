@@ -152,7 +152,7 @@ export function renderPerformer(
       `The studios section was asked for and could not be read (${record.studiosUnavailable}). Its absence here says nothing about what ${record.source} holds.`,
     );
   }
-  if (record.studiosSkipped) {
+  if (sections.includes("studios") && record.studiosSkipped) {
     structured.studios_skipped = record.studiosSkipped;
     notes.push(
       `${record.studiosSkipped} studio row(s) this catalogue answered with could not be read and are left out of this section, while the number credited counts them.`,
@@ -167,7 +167,7 @@ export function renderPerformer(
     }));
     if (record.studiosTotal !== undefined) {
       structured.studios_total = record.studiosTotal;
-      if (record.studiosTotal > shown.length) {
+      if (record.studiosTotal - (record.studiosSkipped ?? 0) > shown.length) {
         notes.push(
           `This record credits ${record.studiosTotal} studios and ${shown.length} are shown here, in the order the catalogue returned them. They are the first it named and not the ones it credits most.`,
         );
@@ -180,7 +180,7 @@ export function renderPerformer(
       `The scenes section was asked for and could not be read (${record.scenesUnavailable}). Its absence here says nothing about what ${record.source} holds.`,
     );
   }
-  if (record.scenesSkipped) {
+  if (sections.includes("scenes") && record.scenesSkipped) {
     structured.scenes_skipped = record.scenesSkipped;
     notes.push(
       `${record.scenesSkipped} scene(s) this catalogue answered with could not be read and are left out of this section and of the number shown.`,
@@ -204,6 +204,11 @@ export function renderPerformer(
     }));
   }
 
+  if (record.sceneCount === null && record.status === "established") {
+    notes.push(
+      `${record.source} publishes no count of the scenes it indexes for a performer, so this record carries none. That is this catalogue's silence and states nothing about the person's work.`,
+    );
+  }
   if (record.sceneCount === 0) {
     notes.push(
       `${record.source} has indexed no scenes crediting this performer. That counts this catalogue's coverage and states nothing about the person's work.`,
@@ -240,7 +245,7 @@ export function renderPerformer(
         "Scenes indexed here",
         record.sceneCount === null ? null : `${record.sceneCount} on ${record.source}`,
       ),
-      sections.includes("appearance") && record.appearance
+      sections.includes("appearance") && record.appearance && appearanceLines(record).length
         ? `\nAppearance:\n${appearanceLines(record).join("\n")}`
         : null,
       record.urls.length
@@ -251,7 +256,7 @@ export function renderPerformer(
             )
             .join("\n")}`
         : null,
-      sections.includes("studios") && record.studios?.length
+      sections.includes("studios") && record.studios
         ? `\nStudios (${record.studiosTotal ?? record.studios.length} credited, ${Math.min(record.studios.length, STUDIOS_SHOWN)} shown):\n${record.studios
             .slice(0, STUDIOS_SHOWN)
             .map(
@@ -260,13 +265,13 @@ export function renderPerformer(
             )
             .join("\n")}`
         : null,
-      sections.includes("scenes") && record.scenes?.length
-        ? `\nScenes:\n${record.scenes
+      sections.includes("scenes") && record.scenes
+        ? `\nScenes (${record.scenesTotal ?? record.scenes.length} indexed, ${record.scenes.length} shown):\n${record.scenes
             .map((scene) => `  - ${inline(scene.title) ?? "(untitled)"}: ${scene.sourceUrl}`)
             .join("\n")}`
         : null,
-      sections.includes("images") && record.images?.length
-        ? `\nImages:\n${record.images.map((image) => `  - ${image.url}`).join("\n")}`
+      sections.includes("images") && record.images
+        ? `\nImages (${record.images.length}):\n${record.images.map((image) => `  - ${image.url}`).join("\n")}`
         : null,
       `\n${sourceLine(record.sourceUrl)}`,
     ]) + notesBlock(notes);

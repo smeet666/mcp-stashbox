@@ -99,13 +99,18 @@ function mapImages(raw: unknown): ImageRow[] {
   });
 }
 
-function mapFingerprints(raw: unknown, spec: InstanceSpec): FingerprintRow[] {
+function mapFingerprints(
+  raw: unknown,
+  spec: InstanceSpec,
+): { rows: FingerprintRow[]; skipped: number } {
   const publishesReports = spec.capabilities.includes("fingerprint_reports");
-  return asArray(raw).flatMap((entry) => {
+  let skipped = 0;
+  const rows = asArray(raw).flatMap((entry) => {
     const row = asRecord(entry);
     const hash = readText(row?.hash);
     const algorithm = readText(row?.algorithm)?.toUpperCase();
     if (!row || !hash || !algorithm || !ALGORITHMS.includes(algorithm as FingerprintAlgorithm)) {
+      skipped += 1;
       return [];
     }
     const submissions = readInteger(row.submissions);
@@ -123,6 +128,7 @@ function mapFingerprints(raw: unknown, spec: InstanceSpec): FingerprintRow[] {
       },
     ];
   });
+  return { rows, skipped };
 }
 
 function mapStudio(raw: unknown, spec: InstanceSpec): StudioRef | null {
@@ -262,8 +268,12 @@ export function mapScene(
   };
 
   if (row.fingerprints !== undefined) {
-    const fingerprints = mapFingerprints(row.fingerprints, spec);
+    const { rows: fingerprints, skipped: fingerprintsSkipped } = mapFingerprints(
+      row.fingerprints,
+      spec,
+    );
     scene.fingerprints = fingerprints;
+    if (fingerprintsSkipped) scene.fingerprintsSkipped = fingerprintsSkipped;
     scene.fingerprintCount = fingerprints.reduce<Partial<Record<FingerprintAlgorithm, number>>>(
       (counts, entry) => ({ ...counts, [entry.algorithm]: (counts[entry.algorithm] ?? 0) + 1 }),
       {},

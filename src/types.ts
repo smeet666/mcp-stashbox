@@ -129,6 +129,8 @@ export interface SceneRecord {
   urls: SiteLink[];
   images?: ImageRow[];
   fingerprints?: FingerprintRow[];
+  /** Fingerprint rows the catalogue answered with that came back unreadable. */
+  fingerprintsSkipped?: number;
   fingerprintCount?: Partial<Record<FingerprintAlgorithm, number>>;
   created: string | null;
   updated: string | null;

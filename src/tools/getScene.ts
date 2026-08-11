@@ -123,6 +123,12 @@ export function renderScene(
 
   // A section nobody asked for is absent from the payload rather than present
   // and empty: an empty list reads as a catalogue holding none.
+  if (wantsFingerprints && record.fingerprintsSkipped) {
+    structured.fingerprints_skipped = record.fingerprintsSkipped;
+    notes.push(
+      `${record.fingerprintsSkipped} fingerprint row(s) this catalogue answered with could not be read and are left out of the list and of every count here.`,
+    );
+  }
   if (wantsFingerprints && record.fingerprints) {
     const shown = record.fingerprints.slice(0, FINGERPRINTS_SHOWN);
     if (record.fingerprints.length > shown.length) {
@@ -204,7 +210,7 @@ export function renderScene(
             .slice(0, FINGERPRINTS_SHOWN)
             .map(
               (row) =>
-                `  - ${row.algorithm} ${row.hash}, ${row.submissions ?? 0} submission(s), ${
+                `  - ${row.algorithm} ${row.hash}, ${row.submissions === null ? "submissions not counted" : `${row.submissions} submission(s)`}, ${
                   row.reports === null ? "reports not counted here" : `${row.reports} report(s)`
                 }`,
             )

@@ -145,6 +145,10 @@ export const sceneSchema = z.object({
     .optional()
     .describe("How many the record holds, where the section shows a page of them."),
   fingerprint_count: z.record(z.string(), z.number()).optional(),
+  fingerprints_skipped: z
+    .number()
+    .optional()
+    .describe("Fingerprint rows the catalogue answered with that came back unreadable."),
   created: z.string().nullable(),
   updated: z.string().nullable(),
   cached: z.boolean().optional().describe("Present when the answer came from the in-memory store."),

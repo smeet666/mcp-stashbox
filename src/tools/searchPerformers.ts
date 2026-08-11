@@ -86,6 +86,14 @@ export function renderPerformerRows(
   // The count is qualified wherever it appears. Saying so only on a zero would
   // put the caution where a reader already hesitates and drop it where they
   // would read a career total.
+  const silent = [
+    ...new Set(result.rows.filter((row) => row.sceneCount === null).map((row) => row.source)),
+  ];
+  if (silent.length && result.rows.length) {
+    notes.push(
+      `No scene count is carried for rows from ${silent.join(", ")}, which publish none. That silence states nothing about those performers' work.`,
+    );
+  }
   if (result.rows.some((row) => row.sceneCount !== null)) {
     notes.push(
       "A scene count is what the catalogue naming it has indexed for that performer, and never a career total. A settled record naming a long career can report none, and two catalogues count different corpora.",

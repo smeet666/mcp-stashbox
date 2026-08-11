@@ -111,6 +111,20 @@ notes reads the wrong half.
   the rest.
 - A window described the page an answer covers where no catalogue was asked and
   the answer covers nothing.
+- A section asked for, read, and answered empty was silent in the prose, which
+  made it indistinguishable from a section nobody asked for. Each one states its
+  own emptiness, the way a catalogue that looked and found nothing does.
+- A note saying a list was cut to a page fired where the shortfall was rows too
+  damaged to read, giving two contradictory accounts of the same missing rows.
+- Fingerprint rows carrying an algorithm this client does not know were dropped
+  while the number said to be held counted what remained, so a catalogue adding
+  one would erase rows from every count without a word.
+- A submission count a catalogue does not publish was printed as none submitted.
+- A performer's scene count is either a number or a silence that says whose it
+  is: reading a record from a catalogue that publishes no such count said nothing
+  at all, leaving the empty field to be read as a person with no work.
+- An intertitle for an appearance a record states nothing about stood over an
+  empty block.
 
 ## [0.2.1] - 2026-08-11
 
