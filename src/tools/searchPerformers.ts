@@ -14,6 +14,7 @@ import { strictInput } from "./arguments.js";
 import { searchPerformersOutput } from "./schemas.js";
 import {
   coverageNote,
+  failureNote,
   narrowingNote,
   dateText,
   joinLines,
@@ -30,10 +31,17 @@ export function renderPerformerRows(
   query: string | null,
   window?: { page: number; limit: number },
 ): Rendered {
-  const notes: string[] = [
-    `Rows are ${result.ordering}.`,
-    "Counts are reported per catalogue and are never added.",
-  ];
+  const notes: string[] = [];
+
+  // How the order was built is worth saying whatever answered: a reader takes
+  // the first row for the best one, and no row here was ranked against another.
+  notes.push(`Rows are ${result.ordering}.`);
+
+  // A count belongs to the catalogue that answered it, and the answer names
+  // catalogues that did not: a reader summing them would count a total nobody
+  // published.
+  notes.push("Counts are reported per catalogue and are never added.");
+
   if (query) {
     notes.push(
       "A count reports how many records a catalogue's index touched for these words. A search for a full name reaches people sharing one word of it.",
@@ -51,6 +59,8 @@ export function renderPerformerRows(
   }
   const narrowings = narrowingNote(result.perSource);
   if (narrowings) notes.push(narrowings);
+  const failures = failureNote(result.perSource);
+  if (failures) notes.push(failures);
   const coverage = coverageNote(result.perSource);
   if (coverage) notes.push(coverage);
 

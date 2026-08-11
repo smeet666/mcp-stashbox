@@ -345,7 +345,7 @@ export class StashboxClient {
         absent.push(
           report(
             capability === "search_scenes" || capability === "search_performers"
-              ? `this catalogue offers no full-text search; drop 'query' and narrow with the typed arguments to reach it`
+              ? `this catalogue's search returns the same rows whatever is asked, so it answers no search at all`
               : `this catalogue does not answer ${capability}`,
           ),
         );
@@ -396,8 +396,8 @@ export class StashboxClient {
       for (const id of ids ?? []) readIdentifierArgument(id);
     }
 
-    const wantsText = Boolean(input.query);
-    const capability: Capability = wantsText ? "search_scenes" : "get_scene";
+    // Both paths ask the same question, so both are gated on the same capability.
+    const capability: Capability = "search_scenes";
     const { asked, absent } = this.plan(capability, input.sources);
     const limit = clamp(input.limit ?? 10, 1, 100);
     // Bringing an out-of-range page back to the last one would answer a page
@@ -501,7 +501,12 @@ export class StashboxClient {
     }
 
     const modifier = input.match === "any" ? "INCLUDES" : "INCLUDES_ALL";
-    const byIdentifier = (name: string, ids: readonly string[] | undefined, field: string) => {
+    const byIdentifier = (
+      name: string,
+      ids: readonly string[] | undefined,
+      field: string,
+      how: string,
+    ) => {
       if (!ids?.length) return;
       const mine = uuidsFor(spec, ids);
       // A filter that reaches none of this catalogue's records narrows nothing.
@@ -510,11 +515,13 @@ export class StashboxClient {
         refused.push(name);
         return;
       }
-      filters[field] = { value: mine, modifier };
+      filters[field] = { value: mine, modifier: how };
     };
-    byIdentifier("performer_ids", input.performerIds, "performers");
-    byIdentifier("studio_ids", input.studioIds, "studios");
-    byIdentifier("tag_ids", input.tagIds, "tags");
+    byIdentifier("performer_ids", input.performerIds, "performers", modifier);
+    // A scene carries one studio, so asking for every one of several can never
+    // be satisfied, and the catalogue refuses the comparison outright.
+    byIdentifier("studio_ids", input.studioIds, "studios", "INCLUDES");
+    byIdentifier("tag_ids", input.tagIds, "tags", modifier);
     // A bound the caller wrote is the bound they get: an exclusive comparison
     // would drop a scene released on the day they named.
     // A date takes one comparison, and the comparisons a catalogue offers are
@@ -550,8 +557,7 @@ export class StashboxClient {
     rawInput: SearchPerformersInput,
   ): Promise<Read<RowsResult<PerformerRecord>>> {
     const input = withReadableQuery(rawInput);
-    const wantsText = Boolean(input.query);
-    const capability: Capability = wantsText ? "search_performers" : "get_performer";
+    const capability: Capability = "search_performers";
     const { asked, absent } = this.plan(capability, input.sources);
     const limit = clamp(input.limit ?? 10, 1, 100);
     // Bringing an out-of-range page back to the last one would answer a page
@@ -819,12 +825,17 @@ export class StashboxClient {
           .map((entry) => entry.algorithm);
 
         if (answerable.length === 0) {
-          return { spec, empty: true as const, refused };
+          return { spec, empty: true as const, refused, asked: answerable };
         }
         try {
-          return { spec, data: await this.askFingerprints(spec, answerable), refused };
+          return {
+            spec,
+            data: await this.askFingerprints(spec, answerable),
+            refused,
+            asked: answerable,
+          };
         } catch (cause) {
-          return { spec, cause };
+          return { spec, cause, asked: answerable };
         }
       }),
     );
@@ -864,7 +875,7 @@ export class StashboxClient {
             // says which scenes answered and never which hash reached them, so
             // pairing every scene with every hash asked would report a
             // resemblance as an identity for the hashes that never hit.
-            const hits = wanted.filter((entry) =>
+            const hits = outcome.asked.filter((entry) =>
               scene.fingerprints?.some(
                 (row) =>
                   row.algorithm === entry.algorithm &&

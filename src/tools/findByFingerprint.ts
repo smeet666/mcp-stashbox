@@ -16,6 +16,7 @@ import { strictInput } from "./arguments.js";
 import { findByFingerprintOutput } from "./schemas.js";
 import {
   coverageNote,
+  failureNote,
   dateText,
   joinLines,
   notesBlock,
@@ -71,6 +72,8 @@ export function renderFingerprintMatches(
     );
   }
 
+  const failures = failureNote(result.perSource);
+  if (failures) notes.push(failures);
   const coverage = coverageNote(result.perSource);
   if (coverage) notes.push(coverage);
 

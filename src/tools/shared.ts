@@ -129,6 +129,22 @@ export function narrowingNote(reports: readonly SourceReport[]): string | null {
   return `Narrowings not received: ${named}. A row from those catalogues satisfying one of them does so by chance.`;
 }
 
+/**
+ * The catalogues that could not answer, said in the prose.
+ *
+ * A reader who never opens the structured payload has to be able to tell a
+ * catalogue that looked and found nothing from one that broke, and the
+ * per-catalogue block is not where they look.
+ */
+export function failureNote(reports: readonly SourceReport[]): string | null {
+  const failed = reports.filter((report) => report.state === "failed");
+  if (failed.length === 0) return null;
+  const named = failed
+    .map((report) => `${report.name ?? report.source} (${report.error ?? "error"})`)
+    .join(", ");
+  return `These catalogues could not answer, so this holds no rows of theirs and states nothing about what they hold: ${named}.`;
+}
+
 export function coverageNote(reports: readonly SourceReport[]): string | null {
   const missing = reports.filter((report) => report.state !== "answered");
   if (missing.length === 0) return null;

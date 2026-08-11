@@ -14,6 +14,7 @@ import { strictInput } from "./arguments.js";
 import { searchScenesOutput } from "./schemas.js";
 import {
   coverageNote,
+  failureNote,
   narrowingNote,
   dateText,
   joinLines,
@@ -29,15 +30,30 @@ export function renderSceneRows(
   result: RowsResult<SceneRecord>,
   query: string | null,
   window?: { page: number; limit: number },
+  asked?: { identifiersGiven: boolean; match: "all" | "any" },
 ): Rendered {
-  const notes: string[] = [
-    `Rows are ${result.ordering}.`,
+  const identifiersGiven = asked?.identifiersGiven ?? false;
+  const match = asked?.match ?? "all";
+  // Only what qualifies this answer. The ordering and the per-catalogue counts
+  // are in the payload beside the rows they describe, and repeating them on
+  // every call is what stops a reader reading the notes that matter.
+  const notes: string[] = [];
+
+  // How the order was built is worth saying whatever answered: a reader takes
+  // the first row for the best one, and no row here was ranked against another.
+  notes.push(`Rows are ${result.ordering}.`);
+
+  // A count belongs to the catalogue that answered it, and the answer names
+  // catalogues that did not: a reader summing them would count a total nobody
+  // published.
+  notes.push(
     "Counts are reported per catalogue and are never added: the catalogues index overlapping corpora, and one scene held by two of them carries two identifiers there.",
-  ];
-  const listed = result.rows.length > 0;
-  if (listed) {
+  );
+  if (identifiersGiven) {
     notes.push(
-      "A list of identifiers reads as 'all' unless 'any' was asked for, so a row carries every identifier given.",
+      match === "any"
+        ? "A row carries at least one of the identifiers given."
+        : "A row carries every identifier given.",
     );
   }
   if (query) {
@@ -52,6 +68,8 @@ export function renderSceneRows(
   }
   const narrowings = narrowingNote(result.perSource);
   if (narrowings) notes.push(narrowings);
+  const failures = failureNote(result.perSource);
+  if (failures) notes.push(failures);
   const coverage = coverageNote(result.perSource);
   if (coverage) notes.push(coverage);
 
@@ -161,10 +179,17 @@ export function registerSearchScenes(server: McpServer, client: StashboxClient):
           ...(args.page ? { page: args.page } : {}),
           ...(args.sources ? { sources: args.sources as never } : {}),
         });
-        const rendered = renderSceneRows(read.data, args.query ?? null, {
-          page: args.page ?? 1,
-          limit: args.limit ?? 10,
-        });
+        const rendered = renderSceneRows(
+          read.data,
+          args.query ?? null,
+          { page: args.page ?? 1, limit: args.limit ?? 10 },
+          {
+            identifiersGiven: Boolean(
+              args.performer_ids?.length || args.studio_ids?.length || args.tag_ids?.length,
+            ),
+            match: args.match ?? "all",
+          },
+        );
         return {
           content: [{ type: "text" as const, text: rendered.text }],
           structuredContent: rendered.structured,
