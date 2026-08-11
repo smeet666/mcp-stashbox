@@ -219,6 +219,22 @@ function readFingerprintArgument(hash: string, algorithm: FingerprintAlgorithm):
   }
 }
 
+/**
+ * A query carrying no words is no query.
+ *
+ * A text search reads words, so a query of spaces reaches the index and comes
+ * back empty. That emptiness describes the question rather than the corpus, and
+ * a caller reads it as the corpus. The query is dropped instead, which leaves
+ * the typed arguments to answer.
+ */
+function withReadableQuery<T extends { query?: string }>(input: T): T {
+  if (input.query === undefined) return input;
+  const words = input.query.trim();
+  if (words === input.query && words !== "") return input;
+  const { query: _dropped, ...rest } = input;
+  return (words === "" ? rest : { ...rest, query: words }) as T;
+}
+
 /** Whether a caller actually set a narrowing, so only what was given is named. */
 function hasNarrowing(input: Record<string, unknown>, name: string): boolean {
   const camel = name.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase());
@@ -356,7 +372,8 @@ export class StashboxClient {
     return `${kind}:${asked.map((spec) => spec.id).join(",")}:${JSON.stringify(input)}`;
   }
 
-  async searchScenes(input: SearchScenesInput): Promise<Read<RowsResult<SceneRecord>>> {
+  async searchScenes(rawInput: SearchScenesInput): Promise<Read<RowsResult<SceneRecord>>> {
+    const input = withReadableQuery(rawInput);
     // An identifier no catalogue could have minted is a question that cannot be
     // asked, so it is refused for the call. Letting it fail per catalogue would
     // report a caller's mistake as five catalogues going wrong.
@@ -512,7 +529,10 @@ export class StashboxClient {
     };
   }
 
-  async searchPerformers(input: SearchPerformersInput): Promise<Read<RowsResult<PerformerRecord>>> {
+  async searchPerformers(
+    rawInput: SearchPerformersInput,
+  ): Promise<Read<RowsResult<PerformerRecord>>> {
+    const input = withReadableQuery(rawInput);
     const wantsText = Boolean(input.query);
     const capability: Capability = wantsText ? "search_performers" : "get_performer";
     const { asked, absent } = this.plan(capability, input.sources);

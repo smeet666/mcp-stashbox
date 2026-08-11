@@ -125,7 +125,7 @@ export function registerSearchPerformers(server: McpServer, client: StashboxClie
         sort: z.enum(["name", "birthdate", "scene_count", "created", "updated"]).optional(),
         direction: z.enum(["asc", "desc"]).optional(),
         limit: z.number().int().min(1).max(100).optional(),
-        page: z.number().int().min(1).optional(),
+        page: z.number().int().min(1).max(10_000).optional(),
         sources: z.array(z.string()).optional(),
       }),
       outputSchema: searchPerformersOutput,

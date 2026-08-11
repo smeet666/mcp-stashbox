@@ -132,7 +132,7 @@ export function registerSearchScenes(server: McpServer, client: StashboxClient):
         sort: z.enum(["title", "date", "duration", "created", "updated"]).optional(),
         direction: z.enum(["asc", "desc"]).optional(),
         limit: z.number().int().min(1).max(100).optional(),
-        page: z.number().int().min(1).optional(),
+        page: z.number().int().min(1).max(10_000).optional(),
         sources: z.array(z.string()).optional(),
       }),
       outputSchema: searchScenesOutput,
