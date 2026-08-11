@@ -143,7 +143,7 @@ export function renderSceneRows(
     })),
     result_count: result.rows.length,
     ordering: result.ordering,
-    ...(window
+    ...(window && !nobody
       ? {
           window: {
             ...window,

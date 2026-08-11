@@ -152,14 +152,24 @@ export function renderPerformer(
       `The studios section was asked for and could not be read (${record.studiosUnavailable}). Its absence here says nothing about what ${record.source} holds.`,
     );
   }
+  if (record.studiosSkipped) {
+    structured.studios_skipped = record.studiosSkipped;
+    notes.push(
+      `${record.studiosSkipped} studio row(s) this catalogue answered with could not be read and are left out of this section, while the number credited counts them.`,
+    );
+  }
   if (sections.includes("studios") && record.studios) {
     const shown = record.studios.slice(0, STUDIOS_SHOWN);
-    structured.studios = shown;
+    structured.studios = shown.map((studio) => ({
+      id: studio.id,
+      name: studio.name,
+      scene_count: studio.sceneCount,
+    }));
     if (record.studiosTotal !== undefined) {
       structured.studios_total = record.studiosTotal;
       if (record.studiosTotal > shown.length) {
         notes.push(
-          `This record credits ${record.studiosTotal} studios and ${shown.length} are shown here.`,
+          `This record credits ${record.studiosTotal} studios and ${shown.length} are shown here, in the order the catalogue returned them. They are the first it named and not the ones it credits most.`,
         );
       }
     }
@@ -238,6 +248,15 @@ export function renderPerformer(
             .map(
               (link) =>
                 `  - ${inline(link.siteName)}${link.siteCategory ? ` [${inline(link.siteCategory)}]` : ""}: ${link.url}`,
+            )
+            .join("\n")}`
+        : null,
+      sections.includes("studios") && record.studios?.length
+        ? `\nStudios (${record.studiosTotal ?? record.studios.length} credited, ${Math.min(record.studios.length, STUDIOS_SHOWN)} shown):\n${record.studios
+            .slice(0, STUDIOS_SHOWN)
+            .map(
+              (studio) =>
+                `  - ${inline(studio.name)}: ${studio.sceneCount === null ? "scenes not counted here" : `${studio.sceneCount} scene(s) indexed`}`,
             )
             .join("\n")}`
         : null,

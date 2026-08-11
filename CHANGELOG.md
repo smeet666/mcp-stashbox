@@ -96,6 +96,21 @@ notes reads the wrong half.
   no key for, so following it exactly earned a second refusal.
 - A gloss saying what a scene count counts travelled beside a count no catalogue
   published.
+- The studios a performer is credited on reached the payload and never the prose,
+  where a note announced twenty-five of them beside none.
+- A section a catalogue does not offer shared a stored entry with a reading that
+  never asked for it, so the sentence saying it could not be read survived one
+  call and vanished on the next. A record is stored under the sections asked for.
+- The argument governing how a list of identifiers is read was described as
+  shaping an answer rather than selecting its rows, at the moment it was the
+  reason rows existed at all.
+- A fingerprint answer no catalogue was asked for read as a file none of them
+  holds.
+- Studio rows too damaged to read were dropped while the number credited counted
+  them, and the only field in the payload written in another style now matches
+  the rest.
+- A window described the page an answer covers where no catalogue was asked and
+  the answer covers nothing.
 
 ## [0.2.1] - 2026-08-11
 

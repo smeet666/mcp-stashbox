@@ -125,15 +125,21 @@ export function narrowingNote(reports: readonly SourceReport[]): string | null {
   if (refused.size === 0) return null;
   // Paging and order shape the answer; the rest select rows. Only the second
   // kind is something a row can be said to satisfy.
-  const shapes = new Set(["page", "sort", "direction", "match"]);
+  const shapes = new Set(["page", "sort", "direction"]);
   const say = (names: [string, string[]][]) =>
     names.map(([name, sources]) => `'${name}' by ${sources.join(", ")}`).join("; ");
-  const selecting = [...refused].filter(([name]) => !shapes.has(name));
+  const selecting = [...refused].filter(([name]) => !shapes.has(name) && name !== "match");
+  const reading = [...refused].filter(([name]) => name === "match");
   const shaping = [...refused].filter(([name]) => shapes.has(name));
   const lines: string[] = [];
   if (selecting.length) {
     lines.push(
       `Narrowings not received: ${say(selecting)}. A row from those catalogues satisfying one of them does so by chance.`,
+    );
+  }
+  if (reading.length) {
+    lines.push(
+      `Asked for and not received: ${say(reading)}. A list of identifiers was read as any one of them, so a row carries one of those asked for and not all.`,
     );
   }
   if (shaping.length) {

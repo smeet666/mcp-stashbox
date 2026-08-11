@@ -191,6 +191,8 @@ export interface PerformerRecord {
   studios?: { id: string; name: string; sceneCount: number | null }[];
   /** Why the studios section is missing, where it was asked for and not read. */
   studiosUnavailable?: string;
+  /** Studio rows the catalogue answered with that came back unreadable. */
+  studiosSkipped?: number;
   /** How many the record credits, where the section shows a page of them. */
   studiosTotal?: number;
   created: string | null;

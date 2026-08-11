@@ -249,12 +249,16 @@ export const performerSchema = z.object({
       "Why the section is missing, when it was asked for and could not be read. Its absence then says nothing about what the catalogue holds.",
     ),
   studios: z
-    .array(z.object({ id: z.string(), name: z.string(), sceneCount: z.number().nullable() }))
+    .array(z.object({ id: z.string(), name: z.string(), scene_count: z.number().nullable() }))
     .optional(),
   studios_total: z
     .number()
     .optional()
     .describe("How many the record credits, where the section shows a page of them."),
+  studios_skipped: z
+    .number()
+    .optional()
+    .describe("Studio rows the catalogue answered with that came back unreadable."),
   scenes_skipped: z
     .number()
     .optional()

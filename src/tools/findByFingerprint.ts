@@ -16,6 +16,7 @@ import { strictInput } from "./arguments.js";
 import { findByFingerprintOutput } from "./schemas.js";
 import {
   coverageNote,
+  nobodyAskedNote,
   skippedNote,
   failureNote,
   dateText,
@@ -74,8 +75,10 @@ export function renderFingerprintMatches(result: FingerprintResult): Rendered {
   if (failures) notes.push(failures);
   const lost = skippedNote(result.perSource);
   if (lost) notes.push(lost);
+  const nobody = nobodyAskedNote(result.perSource);
+  if (nobody) notes.push(nobody);
   const coverage = coverageNote(result.perSource);
-  if (coverage) notes.push(coverage);
+  if (!nobody && coverage) notes.push(coverage);
 
   const structured = {
     asked: result.asked.map((entry) => ({ hash: entry.hash, algorithm: entry.algorithm })),

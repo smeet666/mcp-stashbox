@@ -359,14 +359,19 @@ export function mapPerformer(
   if (row.studios !== undefined) {
     const all = asArray(row.studios);
     performer.studiosTotal = all.length;
+    let unreadable = 0;
     performer.studios = all.flatMap((entry) => {
       const studioRow = asRecord(entry);
       const studio = asRecord(studioRow?.studio);
       const id = readText(studio?.id);
       const name = readText(studio?.name);
-      if (!id || !name) return [];
+      if (!id || !name) {
+        unreadable += 1;
+        return [];
+      }
       return [{ id: formatId(spec.id, id), name, sceneCount: readInteger(studioRow?.scene_count) }];
     });
+    if (unreadable) performer.studiosSkipped = unreadable;
   }
 
   return performer;

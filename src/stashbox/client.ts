@@ -809,7 +809,10 @@ export class StashboxClient {
       scenes: sections.includes("scenes"),
       studios: sections.includes("studios") && studiosOffered,
     };
-    const key = `performer:${instance}:${uuid}:${JSON.stringify(wanted)}`;
+    // Keyed on what was asked for. Keying on what could be answered would let a
+    // section a catalogue does not offer share an entry with one that never
+    // asked for it, and the reason it went unread would be dropped on the second.
+    const key = `performer:${instance}:${uuid}:${[...sections].sort().join(",")}`;
     const hit = this.cached<PerformerRecord>(key);
     if (hit) return { data: hit, cached: true };
 
