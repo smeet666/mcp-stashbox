@@ -174,12 +174,14 @@ const SCENES_SECTION_LIMIT = 20;
  * bare one names none, and sending it to every catalogue would answer about a
  * different record on each.
  */
-function readIdentifierArgument(id: string): void {
+function readIdentifierArgument(id: string, configured: readonly InstanceId[]): void {
   const separator = id.indexOf(":");
   if (separator === -1) {
+    // Naming a catalogue this server holds no key for would send the caller to
+    // a second refusal for writing exactly what was suggested.
     throw invalidInput(
       `'${id}' names no catalogue, so no catalogue can be asked about it.`,
-      `Write it as <catalogue>:<uuid>, using one of: ${INSTANCES.map((entry) => entry.id).join(", ")}.`,
+      `Write it as <catalogue>:<uuid>, using one of: ${configured.join(", ")}.`,
     );
   }
   const prefix = id.slice(0, separator);
@@ -411,7 +413,7 @@ export class StashboxClient {
     // asked, so it is refused for the call. Letting it fail per catalogue would
     // report a caller's mistake as five catalogues going wrong.
     for (const ids of [input.performerIds, input.studioIds, input.tagIds]) {
-      for (const id of ids ?? []) readIdentifierArgument(id);
+      for (const id of ids ?? []) readIdentifierArgument(id, this.configured);
     }
 
     // Both paths ask the same question, so both are gated on the same capability.
@@ -600,7 +602,7 @@ export class StashboxClient {
     // An identifier no catalogue could have minted is a question that cannot be
     // asked, so it is refused for the call rather than per catalogue.
     for (const id of [input.performedWith, input.studioId]) {
-      if (id !== undefined) readIdentifierArgument(id);
+      if (id !== undefined) readIdentifierArgument(id, this.configured);
     }
     const capability: Capability = "search_performers";
     const { asked, absent } = this.plan(capability, input.sources);
@@ -797,11 +799,15 @@ export class StashboxClient {
       );
     }
 
+    // A section is asked of a catalogue that offers it. Sending one catalogue's
+    // shape to another brings back an error about a field, which reads as a
+    // catalogue that changed rather than a section it never had.
+    const studiosOffered = supports(spec, "performer_studios");
     const wanted = {
       appearance: sections.includes("appearance"),
       images: sections.includes("images"),
       scenes: sections.includes("scenes"),
-      studios: sections.includes("studios"),
+      studios: sections.includes("studios") && studiosOffered,
     };
     const key = `performer:${instance}:${uuid}:${JSON.stringify(wanted)}`;
     const hit = this.cached<PerformerRecord>(key);
@@ -824,6 +830,10 @@ export class StashboxClient {
       });
     }
 
+    if (sections.includes("studios") && !studiosOffered) {
+      record.studiosUnavailable = `${spec.name} publishes no table of the studios a performer is credited on`;
+    }
+
     let sceneSectionFailed = false;
     if (wanted.scenes && record.status === "established") {
       try {
@@ -841,6 +851,7 @@ export class StashboxClient {
           record.scenesUnavailable =
             "this catalogue's scene search cannot be narrowed to a performer, so it was not asked";
         } else {
+          if (answer.skipped) record.scenesSkipped = answer.skipped;
           record.scenes = answer.rows;
           // The section shows one page. Saying how many the catalogue holds keeps
           // a truncated list apart from a complete one.
@@ -944,10 +955,14 @@ export class StashboxClient {
         let found = 0;
         let attributed = 0;
         let contributed = 0;
+        let unreadable = 0;
         for (const group of groups) {
           for (const raw of Array.isArray(group) ? group : []) {
             const scene = mapScene(raw, spec, retrievedAt);
-            if (!scene) continue;
+            if (!scene) {
+              unreadable += 1;
+              continue;
+            }
             found += 1;
 
             // Only a hash this scene carries produces a match. The catalogue
@@ -999,6 +1014,7 @@ export class StashboxClient {
           // A scene reached by two of the hashes asked carries two of them.
           count: contributed,
           ...(attributed !== contributed ? { records: attributed } : {}),
+          ...(unreadable ? { skipped: unreadable } : {}),
           ...(found - attributed > 0 ? { unattributed: found - attributed } : {}),
           ...(refusedHere.length ? { narrowingsNotReceived: refusedHere } : {}),
         });

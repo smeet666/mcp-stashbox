@@ -109,7 +109,11 @@ export function renderPerformer(
     career_start_year: record.careerStartYear,
     career_end_year: record.careerEndYear,
     scene_count: record.sceneCount,
-    scene_count_means: `scenes ${record.source} has indexed crediting this performer`,
+    ...(record.sceneCount === null
+      ? {}
+      : {
+          scene_count_means: `scenes ${record.source} has indexed crediting this performer`,
+        }),
     urls: record.urls.map((link) => ({
       url: link.url,
       site_name: link.siteName,
@@ -142,6 +146,12 @@ export function renderPerformer(
     structured.appearance = present;
   }
   if (sections.includes("images") && record.images) structured.images = record.images;
+  if (sections.includes("studios") && record.studiosUnavailable) {
+    structured.studios_unavailable = record.studiosUnavailable;
+    notes.push(
+      `The studios section was asked for and could not be read (${record.studiosUnavailable}). Its absence here says nothing about what ${record.source} holds.`,
+    );
+  }
   if (sections.includes("studios") && record.studios) {
     const shown = record.studios.slice(0, STUDIOS_SHOWN);
     structured.studios = shown;
@@ -158,6 +168,12 @@ export function renderPerformer(
     structured.scenes_unavailable = record.scenesUnavailable;
     notes.push(
       `The scenes section was asked for and could not be read (${record.scenesUnavailable}). Its absence here says nothing about what ${record.source} holds.`,
+    );
+  }
+  if (record.scenesSkipped) {
+    structured.scenes_skipped = record.scenesSkipped;
+    notes.push(
+      `${record.scenesSkipped} scene(s) this catalogue answered with could not be read and are left out of this section and of the number shown.`,
     );
   }
   if (sections.includes("scenes") && record.scenes) {

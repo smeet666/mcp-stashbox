@@ -36,7 +36,8 @@ export type Capability =
    * question from the one asked.
    */
   | "perceptual_lookup"
-  | "scene_count";
+  | "scene_count"
+  | "performer_studios";
 
 /**
  * How strictly an instance types its interface.
@@ -73,6 +74,7 @@ const FULL: readonly Capability[] = [
   "pending_edits",
   "perceptual_lookup",
   "scene_count",
+  "performer_studios",
 ];
 
 export const INSTANCES: readonly InstanceSpec[] = [

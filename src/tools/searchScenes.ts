@@ -14,7 +14,9 @@ import { strictInput } from "./arguments.js";
 import { searchScenesOutput } from "./schemas.js";
 import {
   coverageNote,
+  nobodyAskedNote,
   windowNote,
+  pageWasHonoured,
   indexTotalNote,
   orderingNote,
   pastTheEndNote,
@@ -72,7 +74,9 @@ export function renderSceneRows(
     (entry) =>
       entry.state === "answered" &&
       entry.count &&
-      !(entry.narrowingsNotReceived ?? []).some((name) => name.endsWith("_ids")),
+      !(entry.narrowingsNotReceived ?? []).some(
+        (name) => name.endsWith("_ids") || name === "match",
+      ),
   );
   if (identifiersGiven && filtered) {
     notes.push(
@@ -115,8 +119,10 @@ export function renderSceneRows(
   if (lost) notes.push(lost);
   const failures = failureNote(result.perSource);
   if (failures) notes.push(failures);
+  const nobody = nobodyAskedNote(result.perSource);
+  if (nobody) notes.push(nobody);
   const coverage = coverageNote(result.perSource);
-  if (coverage) notes.push(coverage);
+  if (!nobody && coverage) notes.push(coverage);
   const stored = storedNote(cached);
   if (stored) notes.push(stored);
 
@@ -137,7 +143,14 @@ export function renderSceneRows(
     })),
     result_count: result.rows.length,
     ordering: result.ordering,
-    ...(window ? { window } : {}),
+    ...(window
+      ? {
+          window: {
+            ...window,
+            ...(pageWasHonoured(result.perSource) ? {} : { page_received_by_all: false }),
+          },
+        }
+      : {}),
     per_source: result.perSource,
     ...(cached ? { cached: true } : {}),
     notes,
@@ -153,6 +166,9 @@ export function renderSceneRows(
           row.studio ? `    studio: ${inline(row.studio.name)}` : null,
           row.performers.length
             ? `    performers: ${inlineAll(row.performers.map((entry) => entry.name))}`
+            : null,
+          stamped && (row.created || row.updated)
+            ? `    catalogued: ${row.created ?? "?"}, last touched: ${row.updated ?? "?"}`
             : null,
           `    id: ${row.id}`,
           `    Source: ${row.sourceUrl}`,
@@ -200,7 +216,7 @@ export function registerSearchScenes(server: McpServer, client: StashboxClient):
         direction: z.enum(["asc", "desc"]).optional(),
         limit: z.number().int().min(1).max(100).optional(),
         page: z.number().int().min(1).max(10_000).optional(),
-        sources: z.array(z.string()).optional(),
+        sources: z.array(z.string()).min(1).optional(),
       }),
       outputSchema: searchScenesOutput,
       annotations: {

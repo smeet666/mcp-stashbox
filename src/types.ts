@@ -186,7 +186,11 @@ export interface PerformerRecord {
   scenesShown?: number;
   /** Why the section is missing, when it was asked for and could not be read. */
   scenesUnavailable?: string;
+  /** Scenes the catalogue answered with that came back unreadable and were left out. */
+  scenesSkipped?: number;
   studios?: { id: string; name: string; sceneCount: number | null }[];
+  /** Why the studios section is missing, where it was asked for and not read. */
+  studiosUnavailable?: string;
   /** How many the record credits, where the section shows a page of them. */
   studiosTotal?: number;
   created: string | null;

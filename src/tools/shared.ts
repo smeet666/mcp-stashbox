@@ -123,10 +123,43 @@ export function narrowingNote(reports: readonly SourceReport[]): string | null {
     }
   }
   if (refused.size === 0) return null;
-  const named = [...refused]
-    .map(([name, sources]) => `'${name}' by ${sources.join(", ")}`)
-    .join("; ");
-  return `Narrowings not received: ${named}. A row from those catalogues satisfying one of them does so by chance.`;
+  // Paging and order shape the answer; the rest select rows. Only the second
+  // kind is something a row can be said to satisfy.
+  const shapes = new Set(["page", "sort", "direction", "match"]);
+  const say = (names: [string, string[]][]) =>
+    names.map(([name, sources]) => `'${name}' by ${sources.join(", ")}`).join("; ");
+  const selecting = [...refused].filter(([name]) => !shapes.has(name));
+  const shaping = [...refused].filter(([name]) => shapes.has(name));
+  const lines: string[] = [];
+  if (selecting.length) {
+    lines.push(
+      `Narrowings not received: ${say(selecting)}. A row from those catalogues satisfying one of them does so by chance.`,
+    );
+  }
+  if (shaping.length) {
+    lines.push(
+      `Asked for and not received: ${say(shaping)}. These shape an answer rather than select its rows, so the rows are what those catalogues return without them.`,
+    );
+  }
+  return lines.join(" ");
+}
+
+/**
+ * An answer no catalogue was asked for.
+ *
+ * A count of zero beside catalogues that all declined reads as five catalogues
+ * that looked, and the emptiness belongs to the question rather than to them.
+ */
+export function pageWasHonoured(reports: readonly SourceReport[]): boolean {
+  return !reports.some(
+    (entry) => entry.state === "answered" && entry.narrowingsNotReceived?.includes("page"),
+  );
+}
+
+export function nobodyAskedNote(reports: readonly SourceReport[]): string | null {
+  if (reports.length === 0) return null;
+  if (reports.some((entry) => entry.state !== "absent")) return null;
+  return "No catalogue was asked for this answer, so its emptiness is this question reaching none of them and is no evidence that what you asked about does not exist. Each catalogue above says why it was not asked.";
 }
 
 /**

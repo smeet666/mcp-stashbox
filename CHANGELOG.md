@@ -72,7 +72,30 @@ notes reads the wrong half.
   so a catalogue returning ten rows of which four were unreadable read as a
   catalogue holding six.
 - An order asked on when a record was created or last touched is carried on the
-  rows, which could be sorted on neither field while showing neither.
+  rows, which could be sorted on neither field while showing neither. The scene
+  search asked its catalogue for neither field, so an order built on one of them
+  published it empty on every row; both are asked for, and both reach the prose.
+- A sentence saying every row carries all the identifiers given survived the one
+  narrowing that governs how the list is read, because the guard recognised a
+  list by the shape of its name.
+- The studios of a performer were asked in one catalogue's shape and sent to all,
+  so a catalogue that never offered that table answered an error about a field,
+  which came back as a catalogue that had changed how it answers. It is asked of
+  catalogues that publish it, and named as unread elsewhere.
+- Asking no catalogue at all was accepted, and answered with an emptiness. It is
+  refused, as a search carrying no words already is.
+- An answer no catalogue was asked for read exactly like an answer they had all
+  searched. It says that none was asked, and that its emptiness is no evidence.
+- Paging and order were listed beside the narrowings under one sentence saying a
+  row satisfying them does so by chance. A row satisfies no page and no order.
+- A window naming the page asked for carried no sign that a catalogue had
+  answered its first instead, which the prose beside it said.
+- Unreadable rows were spoken by the two searches alone, leaving a fingerprint
+  answer and a performer's scenes section to lose them in silence.
+- The refusal of a bare identifier advised naming a catalogue this server holds
+  no key for, so following it exactly earned a second refusal.
+- A gloss saying what a scene count counts travelled beside a count no catalogue
+  published.
 
 ## [0.2.1] - 2026-08-11
 

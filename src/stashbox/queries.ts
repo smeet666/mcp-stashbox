@@ -75,6 +75,8 @@ const SCENE_ROW = (dialect: Dialect) => `
   studio { id name parent { id name } }
   performers { as performer { id name disambiguation } }
   ${URLS(dialect)}
+  created
+  updated
 `;
 
 const PERFORMER_BASIC = (dialect: Dialect, edits: string) => `

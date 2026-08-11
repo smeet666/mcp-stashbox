@@ -255,6 +255,16 @@ export const performerSchema = z.object({
     .number()
     .optional()
     .describe("How many the record credits, where the section shows a page of them."),
+  scenes_skipped: z
+    .number()
+    .optional()
+    .describe("Scenes the catalogue answered with that came back unreadable and were left out."),
+  studios_unavailable: z
+    .string()
+    .optional()
+    .describe(
+      "Why the studios section is missing, where it was asked for and could not be read. Its absence then says nothing about what the catalogue holds.",
+    ),
   created: z.string().nullable(),
   updated: z.string().nullable(),
   cached: z.boolean().optional().describe("Present when the answer came from the in-memory store."),
@@ -322,6 +332,12 @@ const windowSchema = z
         "The page asked for. A catalogue whose search takes no page is named in 'per_source' as not having received it, and its rows are a first page.",
       ),
     limit: z.number(),
+    page_received_by_all: z
+      .literal(false)
+      .optional()
+      .describe(
+        "Present when a catalogue named in 'per_source' could take no page and answered its first, so its rows repeat a first page rather than covering the one asked for.",
+      ),
   })
   .optional()
   .describe(

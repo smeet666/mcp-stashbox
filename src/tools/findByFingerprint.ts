@@ -16,6 +16,7 @@ import { strictInput } from "./arguments.js";
 import { findByFingerprintOutput } from "./schemas.js";
 import {
   coverageNote,
+  skippedNote,
   failureNote,
   dateText,
   joinLines,
@@ -71,6 +72,8 @@ export function renderFingerprintMatches(result: FingerprintResult): Rendered {
 
   const failures = failureNote(result.perSource);
   if (failures) notes.push(failures);
+  const lost = skippedNote(result.perSource);
+  if (lost) notes.push(lost);
   const coverage = coverageNote(result.perSource);
   if (coverage) notes.push(coverage);
 
@@ -168,6 +171,7 @@ export function registerFindByFingerprint(server: McpServer, client: StashboxCli
           ),
         sources: z
           .array(z.string())
+          .min(1)
           .optional()
           .describe("Narrow to named catalogues. Every configured catalogue is asked by default."),
       }),

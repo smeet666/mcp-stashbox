@@ -14,7 +14,9 @@ import { strictInput } from "./arguments.js";
 import { searchPerformersOutput } from "./schemas.js";
 import {
   coverageNote,
+  nobodyAskedNote,
   windowNote,
+  pageWasHonoured,
   indexTotalNote,
   orderingNote,
   pastTheEndNote,
@@ -103,8 +105,10 @@ export function renderPerformerRows(
   if (lost) notes.push(lost);
   const failures = failureNote(result.perSource);
   if (failures) notes.push(failures);
+  const nobody = nobodyAskedNote(result.perSource);
+  if (nobody) notes.push(nobody);
   const coverage = coverageNote(result.perSource);
-  if (coverage) notes.push(coverage);
+  if (!nobody && coverage) notes.push(coverage);
   const stored = storedNote(cached);
   if (stored) notes.push(stored);
 
@@ -128,7 +132,14 @@ export function renderPerformerRows(
     })),
     result_count: result.rows.length,
     ordering: result.ordering,
-    ...(window ? { window } : {}),
+    ...(window
+      ? {
+          window: {
+            ...window,
+            ...(pageWasHonoured(result.perSource) ? {} : { page_received_by_all: false }),
+          },
+        }
+      : {}),
     per_source: result.perSource,
     ...(cached ? { cached: true } : {}),
     notes,
@@ -146,6 +157,9 @@ export function renderPerformerRows(
             ? `    career: ${row.careerStartYear ?? "?"}–${row.careerEndYear ?? "?"}`
             : null,
           row.sceneCount === null ? null : `    scenes indexed on ${row.source}: ${row.sceneCount}`,
+          stamped && (row.created || row.updated)
+            ? `    catalogued: ${row.created ?? "?"}, last touched: ${row.updated ?? "?"}`
+            : null,
           `    id: ${row.id}`,
           `    Source: ${row.sourceUrl}`,
         ]),
@@ -182,7 +196,7 @@ export function registerSearchPerformers(server: McpServer, client: StashboxClie
         direction: z.enum(["asc", "desc"]).optional(),
         limit: z.number().int().min(1).max(100).optional(),
         page: z.number().int().min(1).max(10_000).optional(),
-        sources: z.array(z.string()).optional(),
+        sources: z.array(z.string()).min(1).optional(),
       }),
       outputSchema: searchPerformersOutput,
       annotations: {
