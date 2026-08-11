@@ -130,7 +130,19 @@ export function renderPerformer(
   }
   if (record.urls.length && record.urls.every((link) => link.siteName === null)) {
     notes.push(
-      `${record.source} attaches no site to a link, so none of these addresses is named here. Each one is what the catalogue published, and what it points at is not stated.`,
+      `No link on this record carries a site ${record.source} names, so none of these addresses is named here. Each one is what the catalogue published, and what it points at is not stated.`,
+    );
+  }
+  const unnamedLinks = record.urls.filter((link) => link.siteName === null).length;
+  if (unnamedLinks && unnamedLinks < record.urls.length) {
+    notes.push(
+      `${unnamedLinks} of these ${record.urls.length} links carry no site ${record.source} names, and are shown by their address alone.`,
+    );
+  }
+  if (record.rowsSkipped) {
+    structured.rows_skipped = record.rowsSkipped;
+    notes.push(
+      `${record.rowsSkipped} row(s) of this record's own lists could not be read and are left out: the links and the names it is also known by. What is shown of those lists is therefore short of what the catalogue answered with.`,
     );
   }
   const storedHere = storedNote(cached);

@@ -150,6 +150,12 @@ export const sceneSchema = z.object({
     .optional()
     .describe("How many the record holds, where the section shows a page of them."),
   fingerprint_count: z.record(z.string(), z.number()).optional(),
+  rows_skipped: z
+    .number()
+    .optional()
+    .describe(
+      "Rows of this record's own lists that came back unreadable and were left out of them.",
+    ),
   images_skipped: z
     .number()
     .optional()
@@ -268,6 +274,12 @@ export const performerSchema = z.object({
     .number()
     .optional()
     .describe("How many the record credits, where the section shows a page of them."),
+  rows_skipped: z
+    .number()
+    .optional()
+    .describe(
+      "Rows of this record's own lists that came back unreadable and were left out of them.",
+    ),
   studios_skipped: z
     .number()
     .optional()

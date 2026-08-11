@@ -140,6 +140,23 @@ notes reads the wrong half.
   and the sentence saying a catalogue counts none reads every fingerprint held
   rather than the page shown.
 - Image rows too damaged to read were dropped from a block that now states a count.
+- A record's own lists — its links, its tags, the performers a scene credits, the
+  names a performer is also known by — dropped rows too damaged to read without
+  counting them, beside lists that count theirs. A scene whose three credits
+  arrived damaged read as a scene crediting one.
+- Reading a scene from a catalogue that names no site said nothing about whose
+  silence that was, where reading a performer from the same catalogue did.
+- A sentence saying a record carries both a production and a release date was
+  printed on a record carrying one of them.
+- A sentence saying a catalogue counts no reports against a fingerprint read the
+  page of fingerprints shown rather than every one the record holds.
+- A claim that a catalogue names no site was made from one record's links. It
+  describes those links, and a record mixing named and unnamed ones says how many
+  of each.
+- A withdrawn identifier was described in a list of results as addressing another
+  record, which is what a merged one does.
+- What a fingerprint carries of a dispute reached one of the two tools that print
+  fingerprints.
 
 ## [0.2.1] - 2026-08-11
 

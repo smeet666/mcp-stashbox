@@ -162,7 +162,7 @@ export function renderPerformerRows(
       `# ${result.rows.length} performer(s)${query ? ` for "${query}"` : ""}`,
       ...result.rows.map((row) =>
         joinLines([
-          `\n- ${inline(row.name) ?? "(unnamed)"}${row.disambiguation ? ` (${inline(row.disambiguation)})` : ""} [${row.source}]${row.status === "established" ? "" : ` — ${row.status}, so this identifier now addresses something else`}`,
+          `\n- ${inline(row.name) ?? "(unnamed)"}${row.disambiguation ? ` (${inline(row.disambiguation)})` : ""} [${row.source}]${row.status === "established" ? "" : `${row.status === "merged" ? " — merged, so this identifier now addresses the record it was folded into" : " — withdrawn, so this identifier states nothing about what it once named"}`}`,
           row.aliases.length ? `    also credited as: ${inlineAll(row.aliases)}` : null,
           row.birthDate ? `    born: ${dateText(row.birthDate)}` : null,
           row.careerStartYear || row.careerEndYear

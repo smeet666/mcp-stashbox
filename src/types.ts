@@ -128,6 +128,11 @@ export interface SceneRecord {
   performers: PerformerAppearance[];
   tags: TagRow[];
   urls: SiteLink[];
+  /**
+   * Rows of this record's own lists that came back unreadable and were left out:
+   * its links, its tags, the performers it credits, the names it is also known by.
+   */
+  rowsSkipped?: number;
   images?: ImageRow[];
   /** Image rows the catalogue answered with that came back unreadable. */
   imagesSkipped?: number;
@@ -183,6 +188,11 @@ export interface PerformerRecord {
   careerEndYear: number | null;
   sceneCount: number | null;
   urls: SiteLink[];
+  /**
+   * Rows of this record's own lists that came back unreadable and were left out:
+   * its links, its tags, the performers it credits, the names it is also known by.
+   */
+  rowsSkipped?: number;
   appearance?: PerformerAppearanceDetails;
   images?: ImageRow[];
   /** Image rows the catalogue answered with that came back unreadable. */

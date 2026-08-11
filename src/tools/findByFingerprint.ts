@@ -139,7 +139,13 @@ export function renderFingerprintMatches(result: FingerprintResult): Rendered {
                 match.fingerprint.reports === null
                   ? "reports not counted on this catalogue"
                   : `${match.fingerprint.reports} report(s)`
-              }${match.fingerprint.contested === true ? ", contested: reported by as many as entered it" : ""}`
+              }${
+                match.fingerprint.contested === null
+                  ? ""
+                  : match.fingerprint.contested
+                    ? ", contested"
+                    : ", uncontested"
+              }`
             : null,
           `    Source: ${match.scene.sourceUrl}`,
         ]),

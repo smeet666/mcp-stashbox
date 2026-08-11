@@ -71,11 +71,15 @@ function recordUrl(spec: InstanceSpec, kind: "scenes" | "performers", uuid: stri
   return isUuid(uuid) ? `${spec.webBase}/${kind}/${encodeURIComponent(uuid)}` : null;
 }
 
-function mapLinks(raw: unknown): SiteLink[] {
-  return asArray(raw).flatMap((entry) => {
+function mapLinks(raw: unknown): { rows: SiteLink[]; skipped: number } {
+  let skipped = 0;
+  const rows = asArray(raw).flatMap((entry) => {
     const row = asRecord(entry);
     const url = readText(row?.url);
-    if (!row || !url) return [];
+    if (!row || !url) {
+      skipped += 1;
+      return [];
+    }
     const site = asRecord(row.site);
     return [
       {
@@ -90,6 +94,7 @@ function mapLinks(raw: unknown): SiteLink[] {
       },
     ];
   });
+  return { rows, skipped };
 }
 
 function mapImages(raw: unknown): { rows: ImageRow[]; skipped: number } {
@@ -150,13 +155,20 @@ function mapStudio(raw: unknown, spec: InstanceSpec): StudioRef | null {
   };
 }
 
-function mapAppearances(raw: unknown, spec: InstanceSpec): PerformerAppearance[] {
-  return asArray(raw).flatMap((entry) => {
+function mapAppearances(
+  raw: unknown,
+  spec: InstanceSpec,
+): { rows: PerformerAppearance[]; skipped: number } {
+  let skipped = 0;
+  const rows = asArray(raw).flatMap((entry) => {
     const row = asRecord(entry);
     const performer = asRecord(row?.performer);
     const id = readText(performer?.id);
     const name = readText(performer?.name);
-    if (!performer || !id || !name) return [];
+    if (!performer || !id || !name) {
+      skipped += 1;
+      return [];
+    }
     const creditedAs = readText(row?.as);
     return [
       {
@@ -169,16 +181,22 @@ function mapAppearances(raw: unknown, spec: InstanceSpec): PerformerAppearance[]
       },
     ];
   });
+  return { rows, skipped };
 }
 
-function mapTags(raw: unknown, spec: InstanceSpec): TagRow[] {
-  return asArray(raw).flatMap((entry) => {
+function mapTags(raw: unknown, spec: InstanceSpec): { rows: TagRow[]; skipped: number } {
+  let skipped = 0;
+  const rows = asArray(raw).flatMap((entry) => {
     const row = asRecord(entry);
     const id = readText(row?.id);
     const name = readText(row?.name);
-    if (!row || !id || !name) return [];
+    if (!row || !id || !name) {
+      skipped += 1;
+      return [];
+    }
     return [{ id: formatId(spec.id, id), name, category: readText(asRecord(row.category)?.name) }];
   });
+  return { rows, skipped };
 }
 
 function mapBodyModifications(raw: unknown): string[] {
@@ -255,6 +273,11 @@ export function mapScene(
     };
   }
 
+  const performers = mapAppearances(row.performers, spec);
+  const tags = mapTags(row.tags, spec);
+  const urls = mapLinks(row.urls);
+  const lost = performers.skipped + tags.skipped + urls.skipped;
+
   const scene: SceneRecord = {
     ...base,
     title: readText(row.title),
@@ -267,9 +290,10 @@ export function mapScene(
     // so neither ever stands in for the other.
     productionDate: readDate(readText(row.production_date)),
     studio: mapStudio(row.studio, spec),
-    performers: mapAppearances(row.performers, spec),
-    tags: mapTags(row.tags, spec),
-    urls: mapLinks(row.urls),
+    performers: performers.rows,
+    tags: tags.rows,
+    urls: urls.rows,
+    ...(lost ? { rowsSkipped: lost } : {}),
     created: readText(row.created),
     updated: readText(row.updated),
   };
@@ -349,14 +373,19 @@ export function mapPerformer(
     };
   }
 
+  const performerUrls = mapLinks(row.urls);
+  const rawAliases = asArray(row.aliases);
+  const aliases = rawAliases
+    .map((entry) => readText(entry))
+    .filter((entry): entry is string => entry !== null);
+  const aliasesSkipped = rawAliases.length - aliases.length;
+
   const performer: PerformerRecord = {
     ...base,
     mergedIds,
     name: readText(row.name),
     disambiguation: readText(row.disambiguation),
-    aliases: asArray(row.aliases)
-      .map((entry) => readText(entry))
-      .filter((entry): entry is string => entry !== null),
+    aliases,
     gender: readText(row.gender),
     country: readText(row.country),
     birthDate: readDate(readText(row.birth_date)),
@@ -368,7 +397,10 @@ export function mapPerformer(
     // carries the field without filling it publishes no count, and a zero there
     // would be indistinguishable from a person it holds nothing for.
     sceneCount: supports(spec, "scene_count") ? readInteger(row.scene_count) : null,
-    urls: mapLinks(row.urls),
+    urls: performerUrls.rows,
+    ...(performerUrls.skipped || aliasesSkipped
+      ? { rowsSkipped: performerUrls.skipped + aliasesSkipped }
+      : {}),
     created: readText(row.created),
     updated: readText(row.updated),
   };

@@ -122,6 +122,23 @@ export function renderScene(
       `${record.imagesSkipped} image row(s) this catalogue answered with could not be read and are left out of this section and of the number shown.`,
     );
   }
+  if (record.urls.length && record.urls.every((link) => link.siteName === null)) {
+    notes.push(
+      `No link on this record carries a site ${record.source} names, so none of these addresses is named here. Each one is what the catalogue published, and what it points at is not stated.`,
+    );
+  }
+  const unnamedLinks = record.urls.filter((link) => link.siteName === null).length;
+  if (unnamedLinks && unnamedLinks < record.urls.length) {
+    notes.push(
+      `${unnamedLinks} of these ${record.urls.length} links carry no site ${record.source} names, and are shown by their address alone.`,
+    );
+  }
+  if (record.rowsSkipped) {
+    structured.rows_skipped = record.rowsSkipped;
+    notes.push(
+      `${record.rowsSkipped} row(s) of this record's own lists could not be read and are left out: the links, the tags and the performers it credits. What is shown of those lists is therefore short of what the catalogue answered with.`,
+    );
+  }
   const storedHere = storedNote(cached);
   if (storedHere) notes.push(storedHere);
   if (cached) structured.cached = true;
@@ -152,7 +169,7 @@ export function renderScene(
       contested: row.contested,
     }));
     structured.fingerprint_count = record.fingerprintCount ?? {};
-    if (shown.some((row) => row.reports === null)) {
+    if (record.fingerprints.some((row) => row.reports === null)) {
       notes.push(
         `${record.source} publishes no count of reports against a fingerprint, so 'contested' is unknown there.`,
       );
@@ -167,7 +184,7 @@ export function renderScene(
       `The release date is recorded to the ${record.releaseDate.precision} only, so no day is stated.`,
     );
   }
-  if (record.productionDate !== null) {
+  if (record.productionDate !== null && record.releaseDate !== null) {
     // Worth a note only when both dates exist, which is where a reader could
     // take one for the other.
     notes.push(
