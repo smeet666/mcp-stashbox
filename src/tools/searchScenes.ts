@@ -14,6 +14,9 @@ import { strictInput } from "./arguments.js";
 import { searchScenesOutput } from "./schemas.js";
 import {
   coverageNote,
+  indexTotalNote,
+  orderingNote,
+  pastTheEndNote,
   failureNote,
   narrowingNote,
   dateText,
@@ -30,10 +33,19 @@ export function renderSceneRows(
   result: RowsResult<SceneRecord>,
   query: string | null,
   window?: { page: number; limit: number },
-  asked?: { identifiersGiven: boolean; match: "all" | "any" },
+  asked?: {
+    identifiersGiven: boolean;
+    match: "all" | "any";
+    sorted?: boolean;
+    bounded?: boolean;
+    cached?: boolean;
+  },
 ): Rendered {
   const identifiersGiven = asked?.identifiersGiven ?? false;
   const match = asked?.match ?? "all";
+  const sorted = asked?.sorted ?? false;
+  const cached = asked?.cached ?? false;
+  const bounded = asked?.bounded ?? false;
   // Only what qualifies this answer. The ordering and the per-catalogue counts
   // are in the payload beside the rows they describe, and repeating them on
   // every call is what stops a reader reading the notes that matter.
@@ -61,6 +73,16 @@ export function renderSceneRows(
       "A count reports how many records a catalogue's index touched for these words. Rows below the first can share a single word of what was asked.",
     );
   }
+  // A record dated to the year is compared as though it were the first day of
+  // that year, so a bound written as a day admits records whose date names none.
+  if (
+    bounded &&
+    result.rows.some((row) => row.releaseDate && row.releaseDate.precision !== "day")
+  ) {
+    notes.push(
+      "Some rows carry a date recorded to the month or the year. A catalogue compares those as the first day of the period, so a bound written as a day admits records whose own date names none.",
+    );
+  }
   if (window) {
     notes.push(
       `This answer covers page ${window.page} at ${window.limit} row(s) per catalogue. An emptiness here is an emptiness inside that window.`,
@@ -68,13 +90,19 @@ export function renderSceneRows(
   }
   const narrowings = narrowingNote(result.perSource);
   if (narrowings) notes.push(narrowings);
+  const reach = indexTotalNote(result.perSource);
+  if (reach) notes.push(reach);
+  const ordering = orderingNote(result.perSource, sorted);
+  if (ordering) notes.push(ordering);
+  const pastEnd = pastTheEndNote(result.perSource, window);
+  if (pastEnd) notes.push(pastEnd);
   const failures = failureNote(result.perSource);
   if (failures) notes.push(failures);
   const coverage = coverageNote(result.perSource);
   if (coverage) notes.push(coverage);
 
   const structured: Record<string, unknown> = {
-    query,
+    ...(query === null ? {} : { query }),
     results: result.rows.map((row) => ({
       id: row.id,
       source: row.source,
@@ -91,6 +119,7 @@ export function renderSceneRows(
     ordering: result.ordering,
     ...(window ? { window } : {}),
     per_source: result.perSource,
+    ...(cached ? { cached: true } : {}),
     notes,
   };
 
@@ -123,7 +152,7 @@ export function registerSearchScenes(server: McpServer, client: StashboxClient):
     {
       title: "Search scenes",
       description:
-        "Ask every configured catalogue for scenes. The two paths are exclusive: giving 'query' runs the full-text search and every typed argument is reported as not received, while omitting it runs the faceted query on the typed arguments. A catalogue offering no full-text search is named as absent from a 'query' search, and dropping 'query' for 'title' reaches it. Counts are per catalogue and are never added, and a catalogue that failed, one never asked and one that found nothing are three different states an answer names.",
+        "Ask every configured catalogue for scenes. The two paths are exclusive: giving 'query' runs the full-text search and every typed argument is reported as not received, while omitting it runs the faceted query on the typed arguments. A catalogue whose search narrows nothing is named as absent from this tool altogether. Counts are per catalogue and are never added, and a catalogue that failed, one never asked and one that found nothing are three different states an answer names.",
       inputSchema: strictInput({
         query: z.string().optional().describe("Free text matched against a scene's own fields."),
         title: z.string().optional(),
@@ -188,6 +217,9 @@ export function registerSearchScenes(server: McpServer, client: StashboxClient):
               args.performer_ids?.length || args.studio_ids?.length || args.tag_ids?.length,
             ),
             match: args.match ?? "all",
+            sorted: Boolean(args.sort),
+            bounded: Boolean(args.date_from || args.date_to),
+            cached: read.cached,
           },
         );
         return {

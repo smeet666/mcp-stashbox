@@ -145,6 +145,61 @@ export function failureNote(reports: readonly SourceReport[]): string | null {
   return `These catalogues could not answer, so this holds no rows of theirs and states nothing about what they hold: ${named}.`;
 }
 
+/**
+ * What a requested order is worth once several catalogues have answered.
+ *
+ * Each catalogue orders its own rows as asked, and the rows are then taken one
+ * from each in turn. The order therefore holds inside a catalogue and not across
+ * them, and a reader scanning the list top to bottom would otherwise read a
+ * sequence nobody produced.
+ */
+export function orderingNote(reports: readonly SourceReport[], sorted: boolean): string | null {
+  if (!sorted) return null;
+  const contributing = reports.filter((entry) => entry.state === "answered" && entry.count).length;
+  if (contributing < 2) return null;
+  return "The order asked for holds inside each catalogue. Rows are then taken one from each in turn, so reading the whole list in order reads a sequence no catalogue produced.";
+}
+
+/**
+ * What a count beside a page is worth on the faceted path.
+ *
+ * It is the one figure in an answer a reader can cite, and it means something
+ * different from the number of rows returned.
+ */
+export function indexTotalNote(reports: readonly SourceReport[]): string | null {
+  const withTotal = reports.filter(
+    (entry) => entry.state === "answered" && entry.indexTotal !== undefined,
+  );
+  if (withTotal.length === 0) return null;
+  const named = withTotal
+    .map((entry) => `${entry.name ?? entry.source}: ${entry.indexTotal}`)
+    .join(", ");
+  return `Records each catalogue's index holds for this question, beyond the page returned — ${named}. These count different corpora and are never added.`;
+}
+
+/**
+ * A page past what a catalogue holds, said rather than left as an emptiness.
+ *
+ * The number that settles it is already in the answer, so leaving a reader to
+ * work it out turns a page they overshot into a corpus that holds nothing.
+ */
+export function pastTheEndNote(
+  reports: readonly SourceReport[],
+  window: { page: number; limit: number } | undefined,
+): string | null {
+  if (!window || window.page <= 1) return null;
+  const past = reports.filter(
+    (entry) =>
+      entry.state === "answered" &&
+      entry.indexTotal !== undefined &&
+      (window.page - 1) * window.limit >= entry.indexTotal,
+  );
+  if (past.length === 0) return null;
+  return `Page ${window.page} is past everything these catalogues hold for this question: ${past
+    .map((entry) => entry.name ?? entry.source)
+    .join(", ")}. Their emptiness here is the end of the rows, never an empty catalogue.`;
+}
+
 export function coverageNote(reports: readonly SourceReport[]): string | null {
   const missing = reports.filter((report) => report.state !== "answered");
   if (missing.length === 0) return null;

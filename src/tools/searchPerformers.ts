@@ -14,6 +14,9 @@ import { strictInput } from "./arguments.js";
 import { searchPerformersOutput } from "./schemas.js";
 import {
   coverageNote,
+  indexTotalNote,
+  orderingNote,
+  pastTheEndNote,
   failureNote,
   narrowingNote,
   dateText,
@@ -30,7 +33,10 @@ export function renderPerformerRows(
   result: RowsResult<PerformerRecord>,
   query: string | null,
   window?: { page: number; limit: number },
+  asked?: { sorted?: boolean; cached?: boolean },
 ): Rendered {
+  const sorted = asked?.sorted ?? false;
+  const cached = asked?.cached ?? false;
   const notes: string[] = [];
 
   // How the order was built is worth saying whatever answered: a reader takes
@@ -59,13 +65,19 @@ export function renderPerformerRows(
   }
   const narrowings = narrowingNote(result.perSource);
   if (narrowings) notes.push(narrowings);
+  const reach = indexTotalNote(result.perSource);
+  if (reach) notes.push(reach);
+  const ordering = orderingNote(result.perSource, sorted);
+  if (ordering) notes.push(ordering);
+  const pastEnd = pastTheEndNote(result.perSource, window);
+  if (pastEnd) notes.push(pastEnd);
   const failures = failureNote(result.perSource);
   if (failures) notes.push(failures);
   const coverage = coverageNote(result.perSource);
   if (coverage) notes.push(coverage);
 
   const structured: Record<string, unknown> = {
-    query,
+    ...(query === null ? {} : { query }),
     results: result.rows.map((row) => ({
       id: row.id,
       source: row.source,
@@ -85,6 +97,7 @@ export function renderPerformerRows(
     ordering: result.ordering,
     ...(window ? { window } : {}),
     per_source: result.perSource,
+    ...(cached ? { cached: true } : {}),
     notes,
   };
 
@@ -118,7 +131,7 @@ export function registerSearchPerformers(server: McpServer, client: StashboxClie
     {
       title: "Search performers",
       description:
-        "Ask every configured catalogue for performers. The two paths are exclusive: 'query' runs the full-text search over names and aliases, and every typed argument is then reported as not received. A catalogue offering no full-text search is named as absent from a 'query' search, and dropping 'query' for 'name' reaches it. 'scene_count' counts what each catalogue has indexed and never a person's work.",
+        "Ask every configured catalogue for performers. The two paths are exclusive: 'query' runs the full-text search over names and aliases, and every typed argument is then reported as not received. A catalogue whose search narrows nothing is named as absent from this tool altogether, since its unnarrowed first page is no answer to a name. 'scene_count' counts what each catalogue has indexed and never a person's work.",
       inputSchema: strictInput({
         query: z.string().optional().describe("Free text matched against names and aliases."),
         name: z.string().optional(),
@@ -161,10 +174,12 @@ export function registerSearchPerformers(server: McpServer, client: StashboxClie
           ...(args.page ? { page: args.page } : {}),
           ...(args.sources ? { sources: args.sources as never } : {}),
         });
-        const rendered = renderPerformerRows(read.data, args.query ?? null, {
-          page: args.page ?? 1,
-          limit: args.limit ?? 10,
-        });
+        const rendered = renderPerformerRows(
+          read.data,
+          args.query ?? null,
+          { page: args.page ?? 1, limit: args.limit ?? 10 },
+          { sorted: Boolean(args.sort), cached: read.cached },
+        );
         return {
           content: [{ type: "text" as const, text: rendered.text }],
           structuredContent: rendered.structured,

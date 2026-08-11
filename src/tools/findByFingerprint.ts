@@ -107,6 +107,7 @@ export function renderFingerprintMatches(
         : null,
     })),
     match_count: result.matches.length,
+    scenes_matched: new Set(result.matches.map((match) => match.scene.id)).size,
     unattributed: result.unattributed,
     per_source: result.perSource,
     notes,

@@ -69,6 +69,8 @@ const sourceReportSchema = z.object({
       "'answered' is a catalogue that looked, and a count of zero there means it found nothing. 'failed' could not answer. 'absent' was never asked. An answer holding rows from some catalogues is no evidence about the others.",
     ),
   count: z.number().optional().describe("Rows this catalogue contributed to this page."),
+  unattributed: z.number().optional(),
+  skipped: z.number().optional(),
   index_total: z
     .number()
     .optional()
@@ -314,7 +316,8 @@ const orderingSchema = z
   );
 
 export const searchScenesOutput = z.object({
-  query: z.string().nullable(),
+  query: z.string().optional(),
+  cached: z.boolean().optional().describe("Present when the answer came from the in-memory store."),
   results: z.array(sceneRowSchema),
   result_count: z
     .number()
@@ -326,7 +329,8 @@ export const searchScenesOutput = z.object({
 });
 
 export const searchPerformersOutput = z.object({
-  query: z.string().nullable(),
+  query: z.string().optional(),
+  cached: z.boolean().optional().describe("Present when the answer came from the in-memory store."),
   results: z.array(
     z.object({
       id: z.string(),
@@ -375,7 +379,8 @@ export const findByFingerprintOutput = z.object({
       fingerprint: fingerprintSchema.nullable(),
     }),
   ),
-  match_count: z.number(),
+  match_count: z.number().describe("Matches returned: one per scene per fingerprint it carries."),
+  scenes_matched: z.number().describe("Distinct scenes behind those matches."),
   unattributed: z
     .number()
     .describe(
