@@ -129,6 +129,18 @@ const TEXT_SEARCH_IGNORES = [
   "page",
 ];
 
+/** The narrowings each faceted search can be given, paging and order apart. */
+const SCENE_NARROWINGS = [
+  "title",
+  "code",
+  "performer_ids",
+  "studio_ids",
+  "tag_ids",
+  "date_from",
+  "date_to",
+];
+const PERFORMER_NARROWINGS = ["name", "disambiguation", "country", "performed_with", "studio_id"];
+
 const PERFORMER_TEXT_SEARCH_IGNORES = [
   "name",
   "disambiguation",
@@ -434,6 +446,15 @@ export class StashboxClient {
         const answer = outcome.answer;
         collected.push(answer.rows);
         skipped += answer.skipped;
+        if (answer.unnarrowed) {
+          perSource.push({
+            source: spec.id,
+            name: spec.name,
+            state: "absent",
+            reason: `this catalogue could receive none of the narrowings asked for (${answer.refused.join(", ")}), so its rows would answer no question`,
+          });
+          continue;
+        }
         perSource.push({
           source: spec.id,
           name: spec.name,
@@ -474,6 +495,7 @@ export class StashboxClient {
     total: number | null;
     refused: string[];
     fields: string[];
+    unnarrowed?: boolean;
   }> {
     if (input.query && supports(spec, "search_scenes")) {
       const data = await this.ask<{ searchScenes?: { count?: unknown; scenes?: unknown[] } }>(
@@ -525,7 +547,11 @@ export class StashboxClient {
     };
     byIdentifier("performer_ids", input.performerIds, "performers", modifier);
     // A scene carries one studio, so asking for every one of several can never
-    // be satisfied, and the catalogue refuses the comparison outright.
+    // be satisfied, and the catalogue refuses the comparison outright. The list
+    // is asked as a union, and a caller who wrote 'all' is told it was not taken.
+    if (input.match !== "any" && uuidsFor(spec, input.studioIds ?? []).length > 1) {
+      refused.push("match");
+    }
     byIdentifier("studio_ids", input.studioIds, "studios", "INCLUDES");
     byIdentifier("tag_ids", input.tagIds, "tags", modifier);
     // A bound the caller wrote is the bound they get: an exclusive comparison
@@ -541,6 +567,14 @@ export class StashboxClient {
       if (input.dateTo) refused.push("date_to");
     } else if (input.dateTo) {
       filters.date = { value: input.dateTo, modifier: "LESS_THAN" };
+    }
+
+    // Asking at all would spend a request on a question this catalogue cannot
+    // be given, and bring back a first page that answers anything.
+    if (
+      !narrowingsSurvive(input as unknown as Record<string, unknown>, SCENE_NARROWINGS, refused)
+    ) {
+      return { rows: [], skipped: 0, total: null, refused, fields: [], unnarrowed: true };
     }
 
     const data = await this.ask<{ queryScenes?: { count?: unknown; scenes?: unknown[] } }>(
@@ -563,6 +597,11 @@ export class StashboxClient {
     rawInput: SearchPerformersInput,
   ): Promise<Read<RowsResult<PerformerRecord>>> {
     const input = withReadableQuery(rawInput);
+    // An identifier no catalogue could have minted is a question that cannot be
+    // asked, so it is refused for the call rather than per catalogue.
+    for (const id of [input.performedWith, input.studioId]) {
+      if (id !== undefined) readIdentifierArgument(id);
+    }
     const capability: Capability = "search_performers";
     const { asked, absent } = this.plan(capability, input.sources);
     const limit = clamp(input.limit ?? 10, 1, 100);
@@ -594,6 +633,15 @@ export class StashboxClient {
         const answer = outcome.answer;
         collected.push(answer.rows);
         skipped += answer.skipped;
+        if (answer.unnarrowed) {
+          perSource.push({
+            source: spec.id,
+            name: spec.name,
+            state: "absent",
+            reason: `this catalogue could receive none of the narrowings asked for (${answer.refused.join(", ")}), so its rows would answer no question`,
+          });
+          continue;
+        }
         perSource.push({
           source: spec.id,
           name: spec.name,
@@ -633,6 +681,7 @@ export class StashboxClient {
     total: number | null;
     refused: string[];
     fields: string[];
+    unnarrowed?: boolean;
   }> {
     if (input.query && supports(spec, "search_performers")) {
       const data = await this.ask<{
@@ -667,9 +716,23 @@ export class StashboxClient {
       else refused.push("country");
     }
     if (input.performedWith) {
-      filters.performed_with = parseId(input.performedWith, this.configured).uuid;
+      const [mine] = uuidsFor(spec, [input.performedWith]);
+      if (mine === undefined) refused.push("performed_with");
+      else filters.performed_with = mine;
     }
-    if (input.studioId) filters.studio_id = parseId(input.studioId, this.configured).uuid;
+    if (input.studioId) {
+      const [mine] = uuidsFor(spec, [input.studioId]);
+      if (mine === undefined) refused.push("studio_id");
+      else filters.studio_id = mine;
+    }
+
+    // Asking at all would spend a request on a question this catalogue cannot
+    // be given, and bring back a first page that answers anything.
+    if (
+      !narrowingsSurvive(input as unknown as Record<string, unknown>, PERFORMER_NARROWINGS, refused)
+    ) {
+      return { rows: [], skipped: 0, total: null, refused, fields: [], unnarrowed: true };
+    }
 
     const data = await this.ask<{ queryPerformers?: { count?: unknown; performers?: unknown[] } }>(
       spec,
@@ -770,11 +833,20 @@ export class StashboxClient {
           SCENES_SECTION_LIMIT,
           1,
         );
-        record.scenes = answer.rows;
-        // The section shows one page. Saying how many the catalogue holds keeps
-        // a truncated list apart from a complete one.
-        record.scenesTotal = answer.total;
-        record.scenesShown = answer.rows.length;
+        if (answer.unnarrowed) {
+          // The catalogue could not be given the performer, so its rows would be
+          // whatever it holds. An empty section here would read as a catalogue
+          // that indexes nothing for this person.
+          sceneSectionFailed = true;
+          record.scenesUnavailable =
+            "this catalogue's scene search cannot be narrowed to a performer, so it was not asked";
+        } else {
+          record.scenes = answer.rows;
+          // The section shows one page. Saying how many the catalogue holds keeps
+          // a truncated list apart from a complete one.
+          record.scenesTotal = answer.total;
+          record.scenesShown = answer.rows.length;
+        }
       } catch (cause) {
         // The record was read, so the answer stands. The section that could not
         // be filled is named, since an unexplained gap reads as a catalogue
@@ -871,6 +943,7 @@ export class StashboxClient {
           : [];
         let found = 0;
         let attributed = 0;
+        let contributed = 0;
         for (const group of groups) {
           for (const raw of Array.isArray(group) ? group : []) {
             const scene = mapScene(raw, spec, retrievedAt);
@@ -906,6 +979,7 @@ export class StashboxClient {
                     row.algorithm === entry.algorithm &&
                     row.hash.toLowerCase() === entry.hash.toLowerCase(),
                 ) ?? null;
+              contributed += 1;
               matches.push({
                 scene,
                 algorithm: entry.algorithm,
@@ -922,14 +996,16 @@ export class StashboxClient {
           name: spec.name,
           state: "answered",
           // Matches this catalogue contributed, which is what the answer holds.
-          count: attributed,
+          // A scene reached by two of the hashes asked carries two of them.
+          count: contributed,
+          ...(attributed !== contributed ? { records: attributed } : {}),
           ...(found - attributed > 0 ? { unattributed: found - attributed } : {}),
           ...(refusedHere.length ? { narrowingsNotReceived: refusedHere } : {}),
         });
       }
     }
 
-    return { data: { matches, perSource, unattributed }, cached: false };
+    return { data: { matches, perSource, unattributed, asked: wanted }, cached: false };
   }
 }
 
@@ -1012,6 +1088,21 @@ function failureReport(spec: InstanceSpec, cause: unknown, moment: string): Sour
  * rather than sent to all of them, which is the rule every other identifier
  * follows.
  */
+/**
+ * Whether a catalogue was left with any of the narrowings the caller wrote.
+ *
+ * A catalogue that could take none of them holds no question, and its first page
+ * answers whatever was asked, which is what makes it look like an answer.
+ */
+function narrowingsSurvive(
+  input: Record<string, unknown>,
+  names: readonly string[],
+  refused: readonly string[],
+): boolean {
+  const given = names.filter((name) => hasNarrowing(input, name));
+  return given.length === 0 || given.some((name) => !refused.includes(name));
+}
+
 function uuidsFor(spec: InstanceSpec, ids: readonly string[]): string[] {
   return ids.flatMap((id) => {
     const separator = id.indexOf(":");

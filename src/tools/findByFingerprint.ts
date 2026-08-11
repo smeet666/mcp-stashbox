@@ -36,10 +36,7 @@ const WHAT_A_MATCH_MEANS: Record<(typeof ALGORITHMS)[number], string> = {
     "A PHASH match means the images resemble each other. It is no evidence that the files are the same: a re-encode, a crop and a different scene from one shoot all resemble each other.",
 };
 
-export function renderFingerprintMatches(
-  result: FingerprintResult,
-  asked: readonly { hash: string; algorithm: string }[],
-): Rendered {
+export function renderFingerprintMatches(result: FingerprintResult): Rendered {
   const notes: string[] = [];
 
   // What an algorithm claims is worth stating about the matches an answer holds.
@@ -78,7 +75,7 @@ export function renderFingerprintMatches(
   if (coverage) notes.push(coverage);
 
   const structured = {
-    asked: asked.map((entry) => ({ hash: entry.hash, algorithm: entry.algorithm })),
+    asked: result.asked.map((entry) => ({ hash: entry.hash, algorithm: entry.algorithm })),
     matches: result.matches.map((match) => ({
       algorithm: match.algorithm,
       match_kind: match.matchKind,
@@ -115,8 +112,8 @@ export function renderFingerprintMatches(
 
   const text =
     joinLines([
-      `# ${result.matches.length} match(es) for ${asked.length} fingerprint(s)`,
-      `Asked: ${asked.map((entry) => `${entry.algorithm} ${entry.hash}`).join(", ")}`,
+      `# ${result.matches.length} match(es) for ${result.asked.length} fingerprint(s)`,
+      `Asked: ${result.asked.map((entry) => `${entry.algorithm} ${entry.hash}`).join(", ")}`,
       ...result.matches.map((match) =>
         joinLines([
           `\n- ${inline(match.scene.title) ?? "(untitled)"}, ${match.algorithm} (${match.matchKind})`,
@@ -188,7 +185,7 @@ export function registerFindByFingerprint(server: McpServer, client: StashboxCli
           fingerprints,
           ...(sources ? { sources: sources as never } : {}),
         });
-        const rendered = renderFingerprintMatches(read.data, fingerprints);
+        const rendered = renderFingerprintMatches(read.data);
         return {
           content: [{ type: "text" as const, text: rendered.text }],
           structuredContent: rendered.structured,

@@ -19,6 +19,8 @@ import {
   orderingNote,
   pastTheEndNote,
   failureNote,
+  skippedNote,
+  storedNote,
   narrowingNote,
   dateText,
   joinLines,
@@ -97,10 +99,14 @@ export function renderPerformerRows(
   if (ordering) notes.push(ordering);
   const pastEnd = pastTheEndNote(result.perSource, window);
   if (pastEnd) notes.push(pastEnd);
+  const lost = skippedNote(result.perSource);
+  if (lost) notes.push(lost);
   const failures = failureNote(result.perSource);
   if (failures) notes.push(failures);
   const coverage = coverageNote(result.perSource);
   if (coverage) notes.push(coverage);
+  const stored = storedNote(cached);
+  if (stored) notes.push(stored);
 
   const structured: Record<string, unknown> = {
     ...(query === null ? {} : { query }),

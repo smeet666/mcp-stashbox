@@ -15,6 +15,7 @@ import {
   dateText,
   durationText,
   joinLines,
+  storedNote,
   line,
   notesBlock,
   quoted,
@@ -37,7 +38,11 @@ export const GET_SCENE_SECTIONS = ["basic", "fingerprints", "images"] as const;
  */
 const FINGERPRINTS_SHOWN = 25;
 
-export function renderScene(record: SceneRecord, sections: readonly string[]): Rendered {
+export function renderScene(
+  record: SceneRecord,
+  sections: readonly string[],
+  cached = false,
+): Rendered {
   const notes: string[] = [];
 
   if (record.status !== "established") {
@@ -73,6 +78,8 @@ export function renderScene(record: SceneRecord, sections: readonly string[]): R
         : []),
       ...(record.mergedInto ? [`Read ${record.mergedInto} for the record that continues it.`] : []),
     ];
+    const stored = storedNote(cached);
+    if (stored) markerNotes.push(stored);
     structured.notes = markerNotes;
     return { text: text + notesBlock(markerNotes), structured };
   }
@@ -109,6 +116,9 @@ export function renderScene(record: SceneRecord, sections: readonly string[]): R
     created: record.created,
     updated: record.updated,
   };
+  const storedHere = storedNote(cached);
+  if (storedHere) notes.push(storedHere);
+  if (cached) structured.cached = true;
   structured.notes = notes;
 
   // A section nobody asked for is absent from the payload rather than present
@@ -241,7 +251,7 @@ export function registerGetScene(server: McpServer, client: StashboxClient): voi
       try {
         const wanted = sections?.length ? sections : ["basic"];
         const read = await client.getScene(id, wanted);
-        const rendered = renderScene(read.data, wanted);
+        const rendered = renderScene(read.data, wanted, read.cached);
         return {
           content: [{ type: "text" as const, text: rendered.text }],
           structuredContent: rendered.structured,

@@ -43,6 +43,36 @@ notes reads the wrong half.
   neither, so the order was unreadable on the rows that came back. An answer
   sorted on either carries both.
 - The published shape of a performer row omitted a field every row carries.
+- Asking for several studios at once was sent as a union while the answer said
+  every row carried all of them, which a scene crediting one studio can never do.
+  The list is asked as a union, and a caller who wrote 'all' is told it was not taken.
+- A performer identifier minted by one catalogue was stripped of the catalogue
+  that minted it and handed to another as a filter, which then reported its index
+  holding none for a question it was never asked.
+- A catalogue that could receive none of the narrowings asked for answered with
+  its first page, which answers anything. It is named as not asked, and no
+  request is spent on it.
+- The scenes section of a performer read as a catalogue indexing nothing for that
+  person, where the catalogue's search cannot be narrowed to a performer at all
+  and was therefore never given one. The section says it could not be read.
+- A catalogue publishing a scene count it does not fill reported every performer
+  at zero, which is indistinguishable from a person it holds nothing for. It
+  publishes no count, and the field is empty rather than nil.
+- A key the catalogue refuses answers 401 with no body, and reading the body first
+  turned the one mistake a new caller makes into a catalogue that had changed how
+  it answers, with an invitation to open a bug. The refusal is named for what it is.
+- The per-catalogue block of a fingerprint answer counted scenes while the answer
+  holds matches, so a scene reached by two hashes was one row in one place and two
+  in another.
+- A hash given twice is one question, and the answer reported it as two.
+- An answer replayed from the store said so in the payload alone, leaving the
+  prose to read as a set of catalogues that had just been asked. Reading one
+  record said so in neither.
+- Rows a catalogue answered that could not be read were counted and never spoken,
+  so a catalogue returning ten rows of which four were unreadable read as a
+  catalogue holding six.
+- An order asked on when a record was created or last touched is carried on the
+  rows, which could be sorted on neither field while showing neither.
 
 ## [0.2.1] - 2026-08-11
 

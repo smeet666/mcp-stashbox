@@ -35,7 +35,8 @@ export type Capability =
    * perceptual fingerprints and matches none of them answers a different
    * question from the one asked.
    */
-  | "perceptual_lookup";
+  | "perceptual_lookup"
+  | "scene_count";
 
 /**
  * How strictly an instance types its interface.
@@ -71,6 +72,7 @@ const FULL: readonly Capability[] = [
   "index_total",
   "pending_edits",
   "perceptual_lookup",
+  "scene_count",
 ];
 
 export const INSTANCES: readonly InstanceSpec[] = [

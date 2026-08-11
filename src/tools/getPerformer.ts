@@ -17,6 +17,7 @@ import {
   inline,
   inlineAll,
   joinLines,
+  storedNote,
   line,
   notesBlock,
   sourceLine,
@@ -40,7 +41,11 @@ export const GET_PERFORMER_SECTIONS = [
   "studios",
 ] as const;
 
-export function renderPerformer(record: PerformerRecord, sections: readonly string[]): Rendered {
+export function renderPerformer(
+  record: PerformerRecord,
+  sections: readonly string[],
+  cached = false,
+): Rendered {
   const notes: string[] = [];
 
   if (record.status !== "established") {
@@ -80,6 +85,8 @@ export function renderPerformer(record: PerformerRecord, sections: readonly stri
         : []),
       ...(record.mergedInto ? [`Read ${record.mergedInto} for the record that continues it.`] : []),
     ];
+    const stored = storedNote(cached);
+    if (stored) markerNotes.push(stored);
     structured.notes = markerNotes;
     return { text: text + notesBlock(markerNotes), structured };
   }
@@ -111,6 +118,9 @@ export function renderPerformer(record: PerformerRecord, sections: readonly stri
     created: record.created,
     updated: record.updated,
   };
+  const storedHere = storedNote(cached);
+  if (storedHere) notes.push(storedHere);
+  if (cached) structured.cached = true;
   structured.notes = notes;
 
   if (sections.includes("appearance") && record.appearance) {
@@ -273,7 +283,7 @@ export function registerGetPerformer(server: McpServer, client: StashboxClient):
       try {
         const wanted = sections?.length ? sections : ["basic"];
         const read = await client.getPerformer(id, wanted);
-        const rendered = renderPerformer(read.data, wanted);
+        const rendered = renderPerformer(read.data, wanted, read.cached);
         return {
           content: [{ type: "text" as const, text: rendered.text }],
           structuredContent: rendered.structured,

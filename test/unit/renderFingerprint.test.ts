@@ -15,10 +15,10 @@ import type {
  * hashes asked for.
  */
 function renderFingerprintMatches(
-  result: Omit<FingerprintResult, "unattributed">,
+  result: Omit<FingerprintResult, "unattributed" | "asked">,
   asked: readonly { hash: string; algorithm: string }[],
 ) {
-  return renderAttributedMatches({ ...result, unattributed: 0 }, asked);
+  return renderAttributedMatches({ ...result, unattributed: 0, asked });
 }
 
 /**

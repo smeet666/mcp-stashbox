@@ -20,7 +20,7 @@ import type {
   TagRow,
 } from "../types.js";
 import { formatId, isUuid } from "./identifiers.js";
-import type { InstanceSpec } from "./instances.js";
+import { supports, type InstanceSpec } from "./instances.js";
 import {
   positiveOrNull,
   readContested,
@@ -343,8 +343,10 @@ export function mapPerformer(
     careerStartYear: readInteger(row.career_start_year),
     careerEndYear: readInteger(row.career_end_year),
     // What this catalogue has indexed. A settled record naming a career spanning
-    // decades can report zero, so the number reports coverage.
-    sceneCount: readInteger(row.scene_count),
+    // decades can report zero, so the number reports coverage. A catalogue that
+    // carries the field without filling it publishes no count, and a zero there
+    // would be indistinguishable from a person it holds nothing for.
+    sceneCount: supports(spec, "scene_count") ? readInteger(row.scene_count) : null,
     urls: mapLinks(row.urls),
     created: readText(row.created),
     updated: readText(row.updated),

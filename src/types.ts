@@ -40,6 +40,11 @@ export interface SourceReport {
   skipped?: number;
   /** Rows it answered with while returning none of the fingerprints asked for. */
   unattributed?: number;
+  /**
+   * Distinct scenes behind this catalogue's matches, where one scene answered
+   * more than one of the hashes asked and so contributed more than one match.
+   */
+  records?: number;
   /** Narrowings this catalogue could not receive, each one named. */
   narrowingsNotReceived?: string[];
   /** What its index reads, since two catalogues answer a name differently. */
@@ -214,4 +219,6 @@ export interface FingerprintResult {
    * apart from a catalogue that found nothing.
    */
   unattributed: number;
+  /** The distinct questions actually put, a hash given twice being one. */
+  asked: readonly { hash: string; algorithm: string }[];
 }

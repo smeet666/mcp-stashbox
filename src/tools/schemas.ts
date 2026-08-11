@@ -147,6 +147,7 @@ export const sceneSchema = z.object({
   fingerprint_count: z.record(z.string(), z.number()).optional(),
   created: z.string().nullable(),
   updated: z.string().nullable(),
+  cached: z.boolean().optional().describe("Present when the answer came from the in-memory store."),
   notes: z.array(z.string()).describe("What qualifies this answer. Also carried in the text."),
 });
 
@@ -256,6 +257,7 @@ export const performerSchema = z.object({
     .describe("How many the record credits, where the section shows a page of them."),
   created: z.string().nullable(),
   updated: z.string().nullable(),
+  cached: z.boolean().optional().describe("Present when the answer came from the in-memory store."),
   notes: z.array(z.string()),
 });
 
@@ -313,7 +315,14 @@ const sceneRowSchema = z.object({
 });
 
 const windowSchema = z
-  .object({ page: z.number(), limit: z.number() })
+  .object({
+    page: z
+      .number()
+      .describe(
+        "The page asked for. A catalogue whose search takes no page is named in 'per_source' as not having received it, and its rows are a first page.",
+      ),
+    limit: z.number(),
+  })
   .optional()
   .describe(
     "The window this answer covers, per catalogue. An emptiness here is an emptiness inside that window.",

@@ -166,6 +166,30 @@ export function orderingNote(reports: readonly SourceReport[], sorted: boolean):
  * It is the one figure in an answer a reader can cite, and it means something
  * different from the number of rows returned.
  */
+/**
+ * Rows a catalogue answered that came back unreadable.
+ *
+ * Counting them without saying so leaves a catalogue that returned ten rows of
+ * which four were unreadable to read as a catalogue holding six.
+ */
+export function skippedNote(reports: readonly SourceReport[]): string | null {
+  const lost = reports.filter((entry) => entry.skipped);
+  if (lost.length === 0) return null;
+  const named = lost.map((entry) => `${entry.name ?? entry.source}: ${entry.skipped}`).join(", ");
+  return `Rows left out because this client could not read them — ${named}. They are missing from the rows and from the counts here, and their absence says nothing about what those catalogues hold.`;
+}
+
+/**
+ * An answer replayed from the store.
+ *
+ * Every qualification here reaches the prose, and an answer that named no
+ * catalogue this time would otherwise read as one that had just asked them.
+ */
+export function storedNote(cached: boolean): string | null {
+  if (!cached) return null;
+  return "This answer was replayed from this client's store, so no catalogue was asked for it. What each one is reported as saying is what it said when the answer was first read.";
+}
+
 export function indexTotalNote(reports: readonly SourceReport[]): string | null {
   const withTotal = reports.filter(
     (entry) => entry.state === "answered" && entry.indexTotal !== undefined,

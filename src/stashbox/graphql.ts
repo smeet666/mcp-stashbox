@@ -165,15 +165,33 @@ export function createHttpTransport(options: HttpTransportOptions): Transport {
             clearTimeout(timer);
           }
 
+          // The statuses that carry their whole meaning in the status line. A
+          // refusal answers with an empty body, so reading one first turns the
+          // one mistake a new caller makes into an unreadable catalogue.
+          if (response.status === 401 || response.status === 403) {
+            throw invalidInput(
+              `${spec.name} refused this client's key.`,
+              `Set ${spec.envVar} to a key for ${spec.name}, which is issued from a profile on that catalogue. This says nothing about whether the record exists.`,
+            );
+          }
+          if (response.status === 429) {
+            limiter.pushBack();
+            throw rateLimited(`${spec.name} asked this client to slow down.`, {
+              url: spec.endpoint,
+              instance: spec.id,
+            });
+          }
+
           let parsed: GraphQLBody;
           try {
             parsed = JSON.parse(text) as GraphQLBody;
           } catch {
-            throw parseFailure(`${spec.name} answered something this client cannot read.`, {
-              url: spec.endpoint,
-              status: response.status,
-              instance: spec.id,
-            });
+            throw parseFailure(
+              text.trim() === ""
+                ? `${spec.name} answered ${response.status} with an empty body.`
+                : `${spec.name} answered something this client cannot read.`,
+              { url: spec.endpoint, status: response.status, instance: spec.id },
+            );
           }
 
           // Errors first. A payload beside them describes nothing that was asked.
