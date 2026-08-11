@@ -31,3 +31,13 @@ First release.
   either as itself or as a marker.
 - A live suite behind `STASHBOX_LIVE`, making one request per route and asserting
   the shape of an answer rather than its contents.
+
+## [0.1.1] - 2026-08-11
+
+### Fixed
+
+- The bundle's manifest named a path the packed bundle does not carry, so a
+  desktop install found no server to start. It now names the layout the package
+  actually has.
+- The registry entry declared the npm package alone, so the bundle attached to a
+  release was published and never advertised.

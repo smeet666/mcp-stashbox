@@ -7,28 +7,24 @@
     {
       "src": "https://raw.githubusercontent.com/smeet666/mcp-stashbox/main/assets/icon-128.png",
       "mimeType": "image/png",
-      "sizes": [
-        "128x128"
-      ]
+      "sizes": ["128x128"]
     },
     {
       "src": "https://raw.githubusercontent.com/smeet666/mcp-stashbox/main/assets/icon-512.png",
       "mimeType": "image/png",
-      "sizes": [
-        "512x512"
-      ]
+      "sizes": ["512x512"]
     }
   ],
   "repository": {
     "url": "https://github.com/smeet666/mcp-stashbox",
     "source": "github"
   },
-  "version": "0.1.0",
+  "version": "0.1.1",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "mcp-stashbox",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "transport": {
         "type": "stdio"
       },
@@ -94,6 +90,15 @@
           "isRequired": false
         }
       ]
+    },
+    {
+      "registryType": "mcpb",
+      "identifier": "https://github.com/smeet666/mcp-stashbox/releases/download/v0.1.1/mcp-stashbox-0.1.1.mcpb",
+      "version": "0.1.1",
+      "fileSha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "transport": {
+        "type": "stdio"
+      }
     }
   ]
 }
