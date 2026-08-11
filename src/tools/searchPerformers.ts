@@ -117,8 +117,6 @@ export function registerSearchPerformers(server: McpServer, client: StashboxClie
           .optional()
           .describe("Free text a catalogue uses to tell two people of one name apart."),
         country: z.string().optional().describe("Two-letter country code."),
-        career_start_year: z.number().int().optional(),
-        career_end_year: z.number().int().optional(),
         performed_with: z
           .string()
           .optional()
@@ -145,8 +143,6 @@ export function registerSearchPerformers(server: McpServer, client: StashboxClie
           ...(args.name ? { name: args.name } : {}),
           ...(args.disambiguation ? { disambiguation: args.disambiguation } : {}),
           ...(args.country ? { country: args.country } : {}),
-          ...(args.career_start_year ? { careerStartYear: args.career_start_year } : {}),
-          ...(args.career_end_year ? { careerEndYear: args.career_end_year } : {}),
           ...(args.performed_with ? { performedWith: args.performed_with } : {}),
           ...(args.studio_id ? { studioId: args.studio_id } : {}),
           ...(args.sort ? { sort: args.sort } : {}),

@@ -80,8 +80,6 @@ export interface SearchPerformersInput {
   name?: string;
   disambiguation?: string;
   country?: string;
-  careerStartYear?: number;
-  careerEndYear?: number;
   performedWith?: string;
   studioId?: string;
   sort?: "name" | "birthdate" | "scene_count" | "created" | "updated";
@@ -134,8 +132,6 @@ const PERFORMER_TEXT_SEARCH_IGNORES = [
   "name",
   "disambiguation",
   "country",
-  "career_start_year",
-  "career_end_year",
   "performed_with",
   "studio_id",
   "sort",
@@ -487,15 +483,17 @@ export class StashboxClient {
     byIdentifier("tag_ids", input.tagIds, "tags");
     // A bound the caller wrote is the bound they get: an exclusive comparison
     // would drop a scene released on the day they named.
+    // A date takes one comparison, and the comparisons a catalogue offers are
+    // strict. Two bounds therefore cannot travel together: the earlier one is
+    // sent and the other is named as not received.
     if (!criteria) {
       if (input.dateFrom) refused.push("date_from");
       if (input.dateTo) refused.push("date_to");
-    } else if (input.dateFrom && input.dateTo) {
-      filters.date = { value: input.dateFrom, value2: input.dateTo, modifier: "BETWEEN" };
     } else if (input.dateFrom) {
-      filters.date = { value: input.dateFrom, modifier: "GREATER_THAN_OR_EQUAL" };
+      filters.date = { value: input.dateFrom, modifier: "GREATER_THAN" };
+      if (input.dateTo) refused.push("date_to");
     } else if (input.dateTo) {
-      filters.date = { value: input.dateTo, modifier: "LESS_THAN_OR_EQUAL" };
+      filters.date = { value: input.dateTo, modifier: "LESS_THAN" };
     }
 
     const data = await this.ask<{ queryScenes?: { count?: unknown; scenes?: unknown[] } }>(
@@ -621,19 +619,6 @@ export class StashboxClient {
       filters.performed_with = parseId(input.performedWith, this.configured).uuid;
     }
     if (input.studioId) filters.studio_id = parseId(input.studioId, this.configured).uuid;
-    if (input.careerStartYear !== undefined) {
-      if (criteria) {
-        filters.career_start_year = {
-          value: input.careerStartYear,
-          modifier: "GREATER_THAN_OR_EQUAL",
-        };
-      } else refused.push("career_start_year");
-    }
-    if (input.careerEndYear !== undefined) {
-      if (criteria) {
-        filters.career_end_year = { value: input.careerEndYear, modifier: "LESS_THAN_OR_EQUAL" };
-      } else refused.push("career_end_year");
-    }
 
     const data = await this.ask<{ queryPerformers?: { count?: unknown; performers?: unknown[] } }>(
       spec,

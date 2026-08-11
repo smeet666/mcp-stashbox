@@ -119,8 +119,16 @@ export function registerSearchScenes(server: McpServer, client: StashboxClient):
           ),
         studio_ids: z.array(z.string()).optional(),
         tag_ids: z.array(z.string()).optional(),
-        date_from: z.string().optional().describe("Earliest release date, as YYYY-MM-DD."),
-        date_to: z.string().optional().describe("Latest release date, as YYYY-MM-DD."),
+        date_from: z
+          .string()
+          .optional()
+          .describe(
+            "Released strictly after this date, as YYYY-MM-DD. A catalogue takes one date comparison at a time, so giving both bounds sends this one and reports the other as not received.",
+          ),
+        date_to: z
+          .string()
+          .optional()
+          .describe("Released strictly before this date, as YYYY-MM-DD."),
         sort: z.enum(["title", "date", "duration", "created", "updated"]).optional(),
         direction: z.enum(["asc", "desc"]).optional(),
         limit: z.number().int().min(1).max(100).optional(),
