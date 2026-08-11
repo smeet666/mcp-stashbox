@@ -87,7 +87,11 @@ export function renderPerformerRows(
   // put the caution where a reader already hesitates and drop it where they
   // would read a career total.
   const silent = [
-    ...new Set(result.rows.filter((row) => row.sceneCount === null).map((row) => row.source)),
+    ...new Set(
+      result.rows
+        .filter((row) => row.sceneCount === null && row.status === "established")
+        .map((row) => row.source),
+    ),
   ];
   if (silent.length && result.rows.length) {
     notes.push(
@@ -158,7 +162,7 @@ export function renderPerformerRows(
       `# ${result.rows.length} performer(s)${query ? ` for "${query}"` : ""}`,
       ...result.rows.map((row) =>
         joinLines([
-          `\n- ${inline(row.name) ?? "(unnamed)"}${row.disambiguation ? ` (${inline(row.disambiguation)})` : ""} [${row.source}]`,
+          `\n- ${inline(row.name) ?? "(unnamed)"}${row.disambiguation ? ` (${inline(row.disambiguation)})` : ""} [${row.source}]${row.status === "established" ? "" : ` — ${row.status}, so this identifier now addresses something else`}`,
           row.aliases.length ? `    also credited as: ${inlineAll(row.aliases)}` : null,
           row.birthDate ? `    born: ${dateText(row.birthDate)}` : null,
           row.careerStartYear || row.careerEndYear

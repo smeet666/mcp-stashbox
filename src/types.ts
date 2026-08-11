@@ -53,7 +53,8 @@ export interface SourceReport {
 
 export interface SiteLink {
   url: string;
-  siteName: string;
+  /** Null where the catalogue attaches no site to the link. */
+  siteName: string | null;
   /** The catalogue's own category for that site, null where it publishes none. */
   siteCategory: string | null;
 }
@@ -128,6 +129,8 @@ export interface SceneRecord {
   tags: TagRow[];
   urls: SiteLink[];
   images?: ImageRow[];
+  /** Image rows the catalogue answered with that came back unreadable. */
+  imagesSkipped?: number;
   fingerprints?: FingerprintRow[];
   /** Fingerprint rows the catalogue answered with that came back unreadable. */
   fingerprintsSkipped?: number;
@@ -182,6 +185,8 @@ export interface PerformerRecord {
   urls: SiteLink[];
   appearance?: PerformerAppearanceDetails;
   images?: ImageRow[];
+  /** Image rows the catalogue answered with that came back unreadable. */
+  imagesSkipped?: number;
   scenes?: SceneRecord[];
   /** What the catalogue holds behind the one page the section shows. */
   scenesTotal?: number | null;

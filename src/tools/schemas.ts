@@ -23,7 +23,12 @@ const dateSchema = z
 
 const siteLinkSchema = z.object({
   url: z.string(),
-  site_name: z.string(),
+  site_name: z
+    .string()
+    .nullable()
+    .describe(
+      "The catalogue's own name for that site. Null where it attaches no site to the link, since naming one would assert a site the catalogue declined to identify.",
+    ),
   site_category: z
     .string()
     .nullable()
@@ -145,6 +150,10 @@ export const sceneSchema = z.object({
     .optional()
     .describe("How many the record holds, where the section shows a page of them."),
   fingerprint_count: z.record(z.string(), z.number()).optional(),
+  images_skipped: z
+    .number()
+    .optional()
+    .describe("Image rows the catalogue answered with that came back unreadable."),
   fingerprints_skipped: z
     .number()
     .optional()

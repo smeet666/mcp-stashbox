@@ -161,7 +161,7 @@ export function renderSceneRows(
       `# ${result.rows.length} scene(s)${query ? ` for "${query}"` : ""}`,
       ...result.rows.map((row) =>
         joinLines([
-          `\n- ${inline(row.title) ?? "(untitled)"} [${row.source}]`,
+          `\n- ${inline(row.title) ?? "(untitled)"} [${row.source}]${row.status === "established" ? "" : ` — ${row.status}, so this identifier now addresses something else`}`,
           row.releaseDate ? `    released: ${dateText(row.releaseDate)}` : null,
           row.studio ? `    studio: ${inline(row.studio.name)}` : null,
           row.performers.length

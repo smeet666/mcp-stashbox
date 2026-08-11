@@ -122,6 +122,17 @@ export function renderPerformer(
     created: record.created,
     updated: record.updated,
   };
+  if (record.imagesSkipped) {
+    structured.images_skipped = record.imagesSkipped;
+    notes.push(
+      `${record.imagesSkipped} image row(s) this catalogue answered with could not be read and are left out of this section and of the number shown.`,
+    );
+  }
+  if (record.urls.length && record.urls.every((link) => link.siteName === null)) {
+    notes.push(
+      `${record.source} attaches no site to a link, so none of these addresses is named here. Each one is what the catalogue published, and what it points at is not stated.`,
+    );
+  }
   const storedHere = storedNote(cached);
   if (storedHere) notes.push(storedHere);
   if (cached) structured.cached = true;
@@ -252,12 +263,12 @@ export function renderPerformer(
         ? `\nLinks:\n${record.urls
             .map(
               (link) =>
-                `  - ${inline(link.siteName)}${link.siteCategory ? ` [${inline(link.siteCategory)}]` : ""}: ${link.url}`,
+                `  - ${link.siteName === null ? "(this catalogue names no site)" : inline(link.siteName)}${link.siteCategory ? ` [${inline(link.siteCategory)}]` : ""}: ${link.url}`,
             )
             .join("\n")}`
         : null,
       sections.includes("studios") && record.studios
-        ? `\nStudios (${record.studiosTotal ?? record.studios.length} credited, ${Math.min(record.studios.length, STUDIOS_SHOWN)} shown):\n${record.studios
+        ? `\nStudios (${record.studiosTotal === undefined ? "count not published" : `${record.studiosTotal} credited`}, ${Math.min(record.studios.length, STUDIOS_SHOWN)} shown):\n${record.studios
             .slice(0, STUDIOS_SHOWN)
             .map(
               (studio) =>
@@ -266,7 +277,7 @@ export function renderPerformer(
             .join("\n")}`
         : null,
       sections.includes("scenes") && record.scenes
-        ? `\nScenes (${record.scenesTotal ?? record.scenes.length} indexed, ${record.scenes.length} shown):\n${record.scenes
+        ? `\nScenes (${record.scenesTotal === null || record.scenesTotal === undefined ? "count not published" : `${record.scenesTotal} indexed`}, ${record.scenes.length} shown):\n${record.scenes
             .map((scene) => `  - ${inline(scene.title) ?? "(untitled)"}: ${scene.sourceUrl}`)
             .join("\n")}`
         : null,

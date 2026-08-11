@@ -80,7 +80,9 @@ function mapLinks(raw: unknown): SiteLink[] {
     return [
       {
         url,
-        siteName: readText(site?.name) ?? "unnamed site",
+        // A catalogue attaching no site to a link names none, and inventing a
+        // name here would assert a site the catalogue declined to identify.
+        siteName: readText(site?.name),
         // A catalogue that publishes no table of sites yields no category, and
         // borrowing a neighbour's would sort a link by a taxonomy its own
         // catalogue never applied.
@@ -90,13 +92,18 @@ function mapLinks(raw: unknown): SiteLink[] {
   });
 }
 
-function mapImages(raw: unknown): ImageRow[] {
-  return asArray(raw).flatMap((entry) => {
+function mapImages(raw: unknown): { rows: ImageRow[]; skipped: number } {
+  let skipped = 0;
+  const rows = asArray(raw).flatMap((entry) => {
     const row = asRecord(entry);
     const url = readText(row?.url);
-    if (!url) return [];
+    if (!url) {
+      skipped += 1;
+      return [];
+    }
     return [{ url, width: readInteger(row?.width), height: readInteger(row?.height) }];
   });
+  return { rows, skipped };
 }
 
 function mapFingerprints(
@@ -279,7 +286,11 @@ export function mapScene(
       {},
     );
   }
-  if (row.images !== undefined) scene.images = mapImages(row.images);
+  if (row.images !== undefined) {
+    const { rows: images, skipped: imagesSkipped } = mapImages(row.images);
+    scene.images = images;
+    if (imagesSkipped) scene.imagesSkipped = imagesSkipped;
+  }
 
   return scene;
 }
@@ -365,7 +376,11 @@ export function mapPerformer(
   if (row.ethnicity !== undefined || row.height !== undefined) {
     performer.appearance = mapAppearanceDetails(row);
   }
-  if (row.images !== undefined) performer.images = mapImages(row.images);
+  if (row.images !== undefined) {
+    const { rows: images, skipped: imagesSkipped } = mapImages(row.images);
+    performer.images = images;
+    if (imagesSkipped) performer.imagesSkipped = imagesSkipped;
+  }
   if (row.studios !== undefined) {
     const all = asArray(row.studios);
     performer.studiosTotal = all.length;

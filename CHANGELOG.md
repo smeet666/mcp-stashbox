@@ -125,6 +125,21 @@ notes reads the wrong half.
   at all, leaving the empty field to be read as a person with no work.
 - An intertitle for an appearance a record states nothing about stood over an
   empty block.
+- A link whose catalogue attaches no site to it was published under a site named
+  'unnamed site', which asserts a site where the catalogue identified none. The
+  name is empty, and an answer whose every link is unnamed says whose silence it is.
+- The images of a record were the one block whose heading carried no count, so a
+  catalogue holding none read the same as a block that failed to render.
+- A note naming the catalogue that publishes no scene count was built from rows
+  whose emptiness belongs to the record rather than the catalogue.
+- A total a catalogue does not publish was replaced by the size of the page
+  shown, which counts something else.
+- A record folded into another was listed among search results with nothing to
+  distinguish it from a record that stands.
+- What a fingerprint carries of a dispute is read on a record as it is on a match,
+  and the sentence saying a catalogue counts none reads every fingerprint held
+  rather than the page shown.
+- Image rows too damaged to read were dropped from a block that now states a count.
 
 ## [0.2.1] - 2026-08-11
 

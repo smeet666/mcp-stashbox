@@ -116,6 +116,12 @@ export function renderScene(
     created: record.created,
     updated: record.updated,
   };
+  if (record.imagesSkipped) {
+    structured.images_skipped = record.imagesSkipped;
+    notes.push(
+      `${record.imagesSkipped} image row(s) this catalogue answered with could not be read and are left out of this section and of the number shown.`,
+    );
+  }
   const storedHere = storedNote(cached);
   if (storedHere) notes.push(storedHere);
   if (cached) structured.cached = true;
@@ -201,7 +207,7 @@ export function renderScene(
         ? `\nLinks:\n${record.urls
             .map(
               (link) =>
-                `  - ${inline(link.siteName)}${link.siteCategory ? ` [${inline(link.siteCategory)}]` : ""}: ${link.url}`,
+                `  - ${link.siteName === null ? "(this catalogue names no site)" : inline(link.siteName)}${link.siteCategory ? ` [${inline(link.siteCategory)}]` : ""}: ${link.url}`,
             )
             .join("\n")}`
         : null,
@@ -212,12 +218,12 @@ export function renderScene(
               (row) =>
                 `  - ${row.algorithm} ${row.hash}, ${row.submissions === null ? "submissions not counted" : `${row.submissions} submission(s)`}, ${
                   row.reports === null ? "reports not counted here" : `${row.reports} report(s)`
-                }`,
+                }${row.contested === null ? "" : row.contested ? ", contested" : ", uncontested"}`,
             )
             .join("\n")}`
         : null,
       wantsImages && record.images
-        ? `\nImages:\n${record.images.map((image) => `  - ${image.url}`).join("\n")}`
+        ? `\nImages (${record.images.length}):\n${record.images.map((image) => `  - ${image.url}`).join("\n")}`
         : null,
       `\n${sourceLine(record.sourceUrl)}`,
     ]) + notesBlock(notes);
