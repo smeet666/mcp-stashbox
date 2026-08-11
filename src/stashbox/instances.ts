@@ -29,7 +29,13 @@ export type Capability =
    */
   | "index_total"
   /** Publishes the status of an edit, which is what makes an open one countable. */
-  | "pending_edits";
+  | "pending_edits"
+  /**
+   * Its fingerprint route answers a perceptual hash. A catalogue that stores
+   * perceptual fingerprints and matches none of them answers a different
+   * question from the one asked.
+   */
+  | "perceptual_lookup";
 
 /**
  * How strictly an instance types its interface.
@@ -64,6 +70,7 @@ const FULL: readonly Capability[] = [
   "fingerprint_reports",
   "index_total",
   "pending_edits",
+  "perceptual_lookup",
 ];
 
 export const INSTANCES: readonly InstanceSpec[] = [

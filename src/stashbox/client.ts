@@ -184,6 +184,18 @@ function readIdentifierArgument(id: string): void {
   }
 }
 
+/** A page inside what this client pages through, or a refusal naming the bound. */
+function readPageArgument(page: number | undefined): number {
+  if (page === undefined) return 1;
+  if (!Number.isInteger(page) || page < 1 || page > StashboxClient.MAX_PAGE) {
+    throw invalidInput(
+      `Page ${page} is outside the pages this client reads.`,
+      `Ask for a page between 1 and ${StashboxClient.MAX_PAGE}, and narrow the question to reach further.`,
+    );
+  }
+  return page;
+}
+
 /** The hexadecimal length each algorithm produces. */
 const HASH_LENGTH: Record<FingerprintAlgorithm, number> = { MD5: 32, OSHASH: 16, PHASH: 16 };
 
@@ -368,6 +380,9 @@ export class StashboxClient {
   }
 
   /** The whole question, so two different ones cannot share an entry. */
+  /** The furthest page this client pages through, declared and applied alike. */
+  static readonly MAX_PAGE = 10_000;
+
   private searchKey(kind: string, input: unknown, asked: readonly InstanceSpec[]): string {
     return `${kind}:${asked.map((spec) => spec.id).join(",")}:${JSON.stringify(input)}`;
   }
@@ -385,7 +400,9 @@ export class StashboxClient {
     const capability: Capability = wantsText ? "search_scenes" : "get_scene";
     const { asked, absent } = this.plan(capability, input.sources);
     const limit = clamp(input.limit ?? 10, 1, 100);
-    const page = clamp(input.page ?? 1, 1, 10_000);
+    // Bringing an out-of-range page back to the last one would answer a page
+    // nobody asked for while the answer went on naming the page they did.
+    const page = readPageArgument(input.page);
 
     const perSource: SourceReport[] = [...absent];
     const collected: SceneRecord[][] = [];
@@ -537,7 +554,9 @@ export class StashboxClient {
     const capability: Capability = wantsText ? "search_performers" : "get_performer";
     const { asked, absent } = this.plan(capability, input.sources);
     const limit = clamp(input.limit ?? 10, 1, 100);
-    const page = clamp(input.page ?? 1, 1, 10_000);
+    // Bringing an out-of-range page back to the last one would answer a page
+    // nobody asked for while the answer went on naming the page they did.
+    const page = readPageArgument(input.page);
 
     const perSource: SourceReport[] = [...absent];
     const collected: PerformerRecord[][] = [];
@@ -779,16 +798,31 @@ export class StashboxClient {
       );
     }
 
-    const wanted = input.fingerprints.map((entry) => ({
-      hash: entry.hash,
-      algorithm: entry.algorithm,
-    }));
+    // A hash given twice is one question. Answering it twice would double every
+    // count built from the matches.
+    const seen = new Set<string>();
+    const wanted = input.fingerprints.flatMap((entry) => {
+      const key = `${entry.algorithm}:${entry.hash.toLowerCase()}`;
+      if (seen.has(key)) return [];
+      seen.add(key);
+      return [{ hash: entry.hash, algorithm: entry.algorithm }];
+    });
 
     const retrievedAt = now();
     const settled = await Promise.all(
       asked.map(async (spec) => {
+        const answerable = supports(spec, "perceptual_lookup")
+          ? wanted
+          : wanted.filter((entry) => entry.algorithm !== "PHASH");
+        const refused = wanted
+          .filter((entry) => !answerable.includes(entry))
+          .map((entry) => entry.algorithm);
+
+        if (answerable.length === 0) {
+          return { spec, empty: true as const, refused };
+        }
         try {
-          return { spec, data: await this.askFingerprints(spec, wanted) };
+          return { spec, data: await this.askFingerprints(spec, answerable), refused };
         } catch (cause) {
           return { spec, cause };
         }
@@ -797,10 +831,22 @@ export class StashboxClient {
 
     for (const outcome of settled) {
       const spec = outcome.spec;
+      if ("empty" in outcome) {
+        // Every algorithm asked for is one this catalogue cannot search. Saying
+        // it looked and found nothing would answer for a question never put.
+        perSource.push({
+          source: spec.id,
+          name: spec.name,
+          state: "absent",
+          reason: `this catalogue's fingerprint route does not search ${[...new Set(outcome.refused)].join(", ")}`,
+        });
+        continue;
+      }
       if (!("data" in outcome)) {
         perSource.push(failureReport(spec, outcome.cause, "fingerprint lookup"));
         continue;
       }
+      const refusedHere = [...new Set(outcome.refused)];
       {
         const data = outcome.data;
         const groups = Array.isArray(data.findScenesBySceneFingerprints)
@@ -861,6 +907,7 @@ export class StashboxClient {
           // Matches this catalogue contributed, which is what the answer holds.
           count: attributed,
           ...(found - attributed > 0 ? { unattributed: found - attributed } : {}),
+          ...(refusedHere.length ? { narrowingsNotReceived: refusedHere } : {}),
         });
       }
     }
