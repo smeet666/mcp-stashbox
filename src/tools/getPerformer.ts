@@ -18,6 +18,7 @@ import {
   inlineAll,
   joinLines,
   storedNote,
+  sourceOffers,
   line,
   notesBlock,
   sourceLine,
@@ -88,7 +89,7 @@ export function renderPerformer(
         : []),
       ...(record.mergedInto ? [`Read ${record.mergedInto} for the record that continues it.`] : []),
     ];
-    const stored = storedNote(cached);
+    const stored = storedNote(cached, record.retrievedAt);
     if (stored) markerNotes.push(stored);
     structured.notes = markerNotes;
     return { text: text + notesBlock(markerNotes), structured };
@@ -147,11 +148,32 @@ export function renderPerformer(
       `The death date is recorded to the ${record.deathDate.precision} only, so no day is stated.`,
     );
   }
+  if (record.urls.length && !sourceOffers(record.source, "site_categories")) {
+    notes.push(
+      `${record.source} publishes no table sorting the sites a record links to, so no link here carries a category. Nothing was asked of it about what these addresses point at, and that is no evidence that the catalogue places them in none.`,
+    );
+  }
+  for (const [what, flagged] of [
+    ["birth date", record.birthDateUnreadable],
+    ["death date", record.deathDateUnreadable],
+  ] as const) {
+    if (flagged) {
+      structured[what === "birth date" ? "birth_date_unreadable" : "death_date_unreadable"] = true;
+      notes.push(
+        `${record.source} published a ${what} this client could not read, so none is stated here. That is a date dropped and never a record carrying none.`,
+      );
+    }
+  }
   if (record.rowsSkipped) {
     structured.rows_skipped = record.rowsSkipped;
     structured.rows_skipped_in = record.rowsSkippedIn ?? [];
     notes.push(
       `${record.rowsSkipped} row(s) of this record's own lists could not be read and are left out of ${(record.rowsSkippedIn ?? []).join(", ")}. What is shown of those is therefore short of what the catalogue answered with.`,
+    );
+  }
+  if (!sourceOffers(record.source, "pending_edits")) {
+    notes.push(
+      `${record.source} publishes no count of edits open against a record, so whether this one is under revision there is unknown. Nothing here states that what it says is settled.`,
     );
   }
   if (record.pendingEdits) {
@@ -160,11 +182,31 @@ export function renderPerformer(
       `${record.pendingEdits} edit(s) to this record are open on ${record.source}, so what it states is under revision there.`,
     );
   }
-  const storedHere = storedNote(cached);
+  const storedHere = storedNote(cached, record.retrievedAt);
   if (storedHere) notes.push(storedHere);
   if (cached) structured.cached = true;
   structured.notes = notes;
 
+  if (sections.includes("appearance") && !record.appearance) {
+    // A section asked for and absent from the answer reads as a section nobody
+    // asked for. The emptiness is published so the two stay apart.
+    structured.appearance = {
+      ethnicity: null,
+      eye_color: null,
+      hair_color: null,
+      height_cm: null,
+      breast_type: null,
+      cup_size: null,
+      band_size: null,
+      waist_size: null,
+      hip_size: null,
+      tattoos: null,
+      piercings: null,
+    };
+    notes.push(
+      `${record.source} publishes none of the fields the appearance section holds for this record, so the section is empty rather than unread.`,
+    );
+  }
   if (sections.includes("appearance") && record.appearance) {
     // Only what the record carries. Printing a placeholder for an absent
     // measurement would state more than the catalogue holds.
@@ -284,8 +326,8 @@ export function renderPerformer(
         "Scenes indexed here",
         record.sceneCount === null ? null : `${record.sceneCount} on ${record.source}`,
       ),
-      sections.includes("appearance") && record.appearance && appearanceLines(record).length
-        ? `\nAppearance:\n${appearanceLines(record).join("\n")}`
+      sections.includes("appearance")
+        ? `\nAppearance:\n${appearanceLines(record).join("\n") || "  (this catalogue publishes none of the fields this section holds)"}`
         : null,
       record.urls.length
         ? `\nLinks:\n${record.urls
@@ -350,8 +392,12 @@ export function registerGetPerformer(server: McpServer, client: StashboxClient):
         id: z.string().describe("Identifier as returned by another tool, such as stashdb:<uuid>."),
         sections: z
           .array(z.enum(GET_PERFORMER_SECTIONS))
+          .min(1, {
+            error:
+              "[invalid_input] An empty list names no block to load. Leave the argument out for the basic block, or name the blocks you want.",
+          })
           .optional()
-          .describe("Which blocks to load. Defaults to basic."),
+          .describe("Which blocks to load. Defaults to basic when the argument is left out."),
       }),
       outputSchema: getPerformerOutput,
       annotations: {

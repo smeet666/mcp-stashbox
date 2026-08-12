@@ -57,6 +57,7 @@ function performer(over: Partial<PerformerAppearance> = {}): PerformerAppearance
   return {
     id: "stashdb:6d7c8b9a-0e1f-4a2b-9c3d-4e5f6a7b8c9d",
     name: "Ilva Norrsken",
+    status: "established",
     creditedAs: null,
     disambiguation: null,
     ...over,

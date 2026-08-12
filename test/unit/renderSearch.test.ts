@@ -94,6 +94,7 @@ function scene(source: InstanceId, index: number, title: string, studioName: str
         name: "Nadia Verlaine",
         creditedAs: null,
         disambiguation: null,
+        status: "established",
       },
     ],
     tags: [],
@@ -500,6 +501,7 @@ describe("renderSceneRows notes", () => {
         [scene("stashdb", 0, "The Midnight Garden Sessions", "Blue Harbour Media")],
         [
           answered("stashdb", 12),
+          answered("fansdb", 4),
           failed("tpdb", "search", "the request timed out"),
           absent("javstash", "no key configured"),
         ],
@@ -508,6 +510,8 @@ describe("renderSceneRows notes", () => {
     );
     expect(text).toMatch(/^\s*Note:/m);
     expect(text).toContain(ORDERING);
+    // The warning against adding counts belongs to an answer holding more than
+    // one to add, which is why two catalogues answer in this fixture.
     expect(text).toMatch(/never (added|summed)|not added/i);
     expect(someLine(text, "tpdb", FAILURE)).toBe(true);
     expect(someLine(text, "javstash", NEVER_ASKED)).toBe(true);
@@ -698,6 +702,7 @@ describe("renderPerformerRows", () => {
         [performer("stashdb", 0, "Nadia Verlaine", 34)],
         [
           answered("stashdb", 158),
+          answered("fansdb", 6),
           failed("tpdb", "search", "the request timed out"),
           absent("javstash", "no key configured"),
         ],
@@ -706,6 +711,8 @@ describe("renderPerformerRows", () => {
     );
     expect(text).toMatch(/^\s*Note:/m);
     expect(text).toContain(ORDERING);
+    // The warning against adding counts belongs to an answer holding more than
+    // one to add, which is why two catalogues answer in this fixture.
     expect(text).toMatch(/never (added|summed)|not added/i);
     expect(someLine(text, "tpdb", FAILURE)).toBe(true);
     expect(someLine(text, "javstash", NEVER_ASKED)).toBe(true);

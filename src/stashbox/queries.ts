@@ -58,7 +58,7 @@ const SCENE_BASIC = (dialect: Dialect, edits: string) => `
   director
   deleted
   studio { id name parent { id name } }
-  performers { as performer { id name disambiguation } }
+  performers { as performer { id name disambiguation deleted merged_into_id } }
   tags { id name category { id name } }
   ${URLS(dialect)}
   ${edits}
@@ -73,7 +73,7 @@ const SCENE_ROW = (dialect: Dialect) => `
   duration
   deleted
   studio { id name parent { id name } }
-  performers { as performer { id name disambiguation } }
+  performers { as performer { id name disambiguation deleted merged_into_id } }
   ${URLS(dialect)}
   created
   updated

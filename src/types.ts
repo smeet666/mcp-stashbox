@@ -71,6 +71,8 @@ export interface PerformerAppearance {
   /** The name printed on this release, null where it matches the performer's. */
   creditedAs: string | null;
   disambiguation: string | null;
+  /** What the credited identifier addresses now, which a folded record changes. */
+  status: RecordStatus;
 }
 
 export type FingerprintAlgorithm = "MD5" | "OSHASH" | "PHASH";
@@ -190,6 +192,10 @@ export interface PerformerRecord {
   careerEndYear: number | null;
   sceneCount: number | null;
   urls: SiteLink[];
+  /** A birth date the catalogue published that this client could not read. */
+  birthDateUnreadable?: boolean;
+  /** A death date the catalogue published that this client could not read. */
+  deathDateUnreadable?: boolean;
   /** Rows of this record's own lists that came back unreadable and were left out. */
   rowsSkipped?: number;
   /** Which of those lists lost rows, so the count can say what it counts. */

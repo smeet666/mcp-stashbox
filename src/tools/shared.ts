@@ -7,7 +7,7 @@
 
 import type { ReadDate } from "../stashbox/normalise.js";
 import { indentBlock, indentMarkerLines } from "../stashbox/normalise.js";
-import { instanceName } from "../stashbox/instances.js";
+import { instanceById, instanceName, supports, type Capability } from "../stashbox/instances.js";
 import type { SourceReport } from "../types.js";
 
 export interface Rendered {
@@ -73,6 +73,41 @@ export function inlineAll(values: readonly string[]): string {
 }
 
 /**
+ * Whether a catalogue offers something, read from the identifier on a record.
+ *
+ * A field a catalogue was never asked for comes back empty, and an emptiness
+ * that was never a question reads as an answer. The answer says which it was.
+ */
+export function sourceOffers(source: string, capability: Capability): boolean {
+  const spec = instanceById(source);
+  return spec !== undefined && supports(spec, capability);
+}
+
+/**
+ * The people credited on these scenes whose record the catalogue has folded.
+ *
+ * A row lists a scene's cast by name, and a name is what the catalogue printed
+ * when the credit was made. Where it has since merged or withdrawn that record,
+ * the person is held under another identifier, and a reader pivoting on the
+ * name alone looks for someone that catalogue no longer holds under it.
+ */
+export function foldedCreditsNote(
+  scenes: readonly { performers: readonly { name: string; status: string }[] }[],
+): string | null {
+  const folded = [
+    ...new Set(
+      scenes.flatMap((scene) =>
+        scene.performers
+          .filter((entry) => entry.status !== "established")
+          .map((entry) => entry.name),
+      ),
+    ),
+  ];
+  if (folded.length === 0) return null;
+  return `Credited on the rows here and folded on the catalogue that answered: ${inlineAll(folded)}. Each of those credits names a record the catalogue has merged or withdrawn, so what it holds about that person is under another identifier.`;
+}
+
+/**
  * What became of each catalogue, in prose.
  *
  * Three states are kept apart on purpose: a catalogue that looked and found
@@ -94,7 +129,13 @@ export function perSourceText(reports: readonly SourceReport[]): string[] {
         report.indexTotal === undefined
           ? ""
           : `, of ${report.indexTotal} its index holds for this question`;
-      return `${name}: answered, ${report.count ?? 0} row(s)${reach}${fields}${narrowings}${why}`;
+      // A record answering more than one of the things asked contributes a row
+      // for each, so the number of rows reads as more records than were found.
+      const behind =
+        report.records === undefined || report.records === report.count
+          ? ""
+          : ` on ${report.records} record(s)`;
+      return `${name}: answered, ${report.count ?? 0} row(s)${behind}${reach}${fields}${narrowings}${why}`;
     }
     if (report.state === "failed") {
       return `${name}: failed at ${report.moment ?? "an unnamed moment"} (${report.error ?? "error"}): ${inline(report.reason) ?? ""}`.trim();
@@ -144,12 +185,23 @@ export function reportPayload(reports: readonly SourceReport[]): Record<string, 
 
 export function narrowingNote(reports: readonly SourceReport[]): string | null {
   const refused = new Map<string, string[]>();
+  // How a list of identifiers reads is something a row can be said to satisfy
+  // only where the list itself reached the catalogue. Where it did not, the
+  // reading describes nothing the rows carry, and saying a row holds one of the
+  // identifiers contradicts the sentence saying the list was set aside.
+  const idle: string[] = [];
   for (const report of reports) {
-    for (const name of report.narrowingsNotReceived ?? []) {
-      refused.set(name, [...(refused.get(name) ?? []), report.name ?? report.source]);
+    const names = report.narrowingsNotReceived ?? [];
+    const who = report.name ?? report.source;
+    for (const name of names) {
+      if (name === "match" && names.some((other) => other.endsWith("_ids"))) {
+        idle.push(who);
+        continue;
+      }
+      refused.set(name, [...(refused.get(name) ?? []), who]);
     }
   }
-  if (refused.size === 0) return null;
+  if (refused.size === 0 && idle.length === 0) return null;
   // Paging and order shape the answer; the rest select rows. Only the second
   // kind is something a row can be said to satisfy.
   const shapes = new Set(["page", "sort", "direction"]);
@@ -167,6 +219,11 @@ export function narrowingNote(reports: readonly SourceReport[]): string | null {
   if (reading.length) {
     lines.push(
       `Asked for and not received: ${say(reading)}. A list of identifiers was read as any one of them, so a row carries one of those asked for and not all.`,
+    );
+  }
+  if (idle.length) {
+    lines.push(
+      `Asked for and not received: 'match' by ${[...new Set(idle)].join(", ")}. The lists of identifiers it would have applied to were not received there either, so it selected nothing.`,
     );
   }
   if (shaping.length) {
@@ -251,9 +308,12 @@ export function skippedNote(reports: readonly SourceReport[]): string | null {
  * Every qualification here reaches the prose, and an answer that named no
  * catalogue this time would otherwise read as one that had just asked them.
  */
-export function storedNote(cached: boolean): string | null {
+export function storedNote(cached: boolean, readAt?: string | null): string | null {
   if (!cached) return null;
-  return "This answer was replayed from this client's store, so no catalogue was asked for it. What each one is reported as saying is what it said when the answer was first read.";
+  // The moment belongs in the sentence: 'when it was first read' names a time a
+  // reader has no way to obtain, and a held answer is worth exactly its age.
+  const when = readAt ? ` That reading was at ${readAt}.` : "";
+  return `This answer was replayed from this client's store, so no catalogue was asked for it. What each catalogue is reported as saying is what it said when the answer was first read.${when}`;
 }
 
 export function indexTotalNote(reports: readonly SourceReport[]): string | null {

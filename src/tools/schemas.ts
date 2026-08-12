@@ -78,9 +78,14 @@ const sourceReportSchema = z.object({
     .number()
     .optional()
     .describe(
-      "Distinct scenes behind this catalogue's matches, where one scene answered more than one hash asked and so contributed more than one match.",
+      "Distinct records behind this catalogue's rows, carried where one record can answer more than once: a fingerprint lookup returns a match per hash a scene carries, so two hashes on one scene are two rows and one record.",
     ),
-  unattributed: z.number().optional(),
+  unattributed: z
+    .number()
+    .optional()
+    .describe(
+      "Rows this catalogue answered with while returning none of what was asked about, so which of the things asked reached them is unknown.",
+    ),
   skipped: z.number().optional(),
   index_total: z
     .number()
@@ -145,12 +150,27 @@ export const sceneSchema = z.object({
           "The name printed on this release, where it differs from the performer's own. It travels beside that name and never in place of it.",
         ),
       disambiguation: z.string().nullable(),
+      status: statusSchema.describe(
+        "What the credited identifier addresses now. 'merged' and 'deleted' mean it resolves to a marker rather than to the person this credit names.",
+      ),
     }),
   ),
   tags: z.array(z.object({ id: z.string(), name: z.string(), category: z.string().nullable() })),
   urls: z.array(siteLinkSchema),
   images: z.array(imageSchema).optional(),
   fingerprints: z.array(fingerprintSchema).optional(),
+  release_date_unreadable: z
+    .literal(true)
+    .optional()
+    .describe(
+      "Present where the catalogue published a release date this client could not read, which is a date dropped rather than a record carrying none.",
+    ),
+  production_date_unreadable: z
+    .literal(true)
+    .optional()
+    .describe(
+      "Present where the catalogue published a production date this client could not read, which is a date dropped rather than a record carrying none.",
+    ),
   fingerprints_held: z
     .number()
     .optional()
@@ -269,10 +289,23 @@ export const performerSchema = z.object({
         title: z.string().nullable(),
         release_date: dateSchema,
         studio: z.string().nullable(),
+        status: statusSchema,
         source_url: z.string(),
       }),
     )
     .optional(),
+  birth_date_unreadable: z
+    .literal(true)
+    .optional()
+    .describe(
+      "Present where the catalogue published a birth date this client could not read, which is a date dropped rather than a record carrying none.",
+    ),
+  death_date_unreadable: z
+    .literal(true)
+    .optional()
+    .describe(
+      "Present where the catalogue published a death date this client could not read, which is a date dropped rather than a record carrying none.",
+    ),
   scenes_total: z
     .number()
     .optional()
@@ -412,6 +445,12 @@ export const searchScenesOutput = z.object({
   result_count: z
     .number()
     .describe("Rows returned here. Counts are never added across catalogues."),
+  rows_skipped: z
+    .number()
+    .optional()
+    .describe(
+      "Rows inside the records listed here that could not be read and are left out of what each one shows of its own lists.",
+    ),
   ordering: orderingSchema,
   window: windowSchema,
   per_source: z.array(sourceReportSchema),
@@ -477,6 +516,8 @@ export const findByFingerprintOutput = z.object({
         release_date: dateSchema,
         studio: z.string().nullable(),
         performers: z.array(z.string()),
+        status: statusSchema,
+        retrieved_at: retrievedAtSchema,
         source_url: z.string(),
       }),
       fingerprint: fingerprintSchema.nullable(),
@@ -484,12 +525,6 @@ export const findByFingerprintOutput = z.object({
   ),
   match_count: z.number().describe("Matches returned: one per scene per fingerprint it carries."),
   scenes_matched: z.number().describe("Distinct scenes behind those matches."),
-  records: z
-    .number()
-    .optional()
-    .describe(
-      "Distinct scenes behind this catalogue's matches, where one scene answered more than one hash asked and so contributed more than one match.",
-    ),
   unattributed: z
     .number()
     .describe(

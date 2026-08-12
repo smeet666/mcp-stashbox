@@ -12,13 +12,14 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { StashboxClient } from "../stashbox/client.js";
 import type { FingerprintResult } from "../types.js";
-import { strictInput } from "./arguments.js";
+import { strictInput, sourcesArgument } from "./arguments.js";
 import { findByFingerprintOutput } from "./schemas.js";
 import {
   coverageNote,
   reportPayload,
   nobodyAskedNote,
   skippedNote,
+  foldedCreditsNote,
   failureNote,
   dateText,
   joinLines,
@@ -74,11 +75,21 @@ export function renderFingerprintMatches(result: FingerprintResult): Rendered {
 
   const failures = failureNote(result.perSource);
   if (failures) notes.push(failures);
+  const folded = foldedCreditsNote(result.matches.map((match) => match.scene));
+  if (folded) notes.push(folded);
   const lost = skippedNote(result.perSource);
   if (lost) notes.push(lost);
-  notes.push(
-    "Counts are reported per catalogue and are never added: the catalogues index overlapping corpora, and one film held by two of them carries two identifiers there, which 'scenes_matched' counts separately.",
-  );
+  // The warning against adding counts is owed to an answer holding more than
+  // one to add. Beside a single catalogue's count it describes an arithmetic
+  // nobody could perform, and beside no count at all it describes nothing.
+  const counting = result.perSource.filter(
+    (entry) => entry.state === "answered" && entry.count,
+  ).length;
+  if (counting > 1) {
+    notes.push(
+      "Counts are reported per catalogue and are never added: the catalogues index overlapping corpora, and one film held by two of them is a separate record on each, counted separately here.",
+    );
+  }
   // An algorithm a catalogue's route does not search was never put to it, and
   // its silence there is no answer about the file.
   const unasked = new Map<string, string[]>();
@@ -99,6 +110,11 @@ export function renderFingerprintMatches(result: FingerprintResult): Rendered {
   if (nobody) notes.push(nobody);
   const coverage = coverageNote(result.perSource);
   if (!nobody && coverage) notes.push(coverage);
+
+  // A file carries one hash per algorithm, so one record answering two of them
+  // is two matches. The number of records is what a caller identifying a file
+  // is asking for, and the number of matches reads as more of them.
+  const distinctScenes = new Set(result.matches.map((match) => match.scene.id)).size;
 
   const structured = {
     asked: result.asked.map((entry) => ({ hash: entry.hash, algorithm: entry.algorithm })),
@@ -131,7 +147,7 @@ export function renderFingerprintMatches(result: FingerprintResult): Rendered {
         : null,
     })),
     match_count: result.matches.length,
-    scenes_matched: new Set(result.matches.map((match) => match.scene.id)).size,
+    scenes_matched: distinctScenes,
     unattributed: result.unattributed,
     per_source: reportPayload(result.perSource),
     notes,
@@ -139,7 +155,7 @@ export function renderFingerprintMatches(result: FingerprintResult): Rendered {
 
   const text =
     joinLines([
-      `# ${result.matches.length} match(es) for ${result.asked.length} fingerprint(s)`,
+      `# ${result.matches.length} match(es) on ${distinctScenes} record(s), for ${result.asked.length} fingerprint(s)`,
       `Asked: ${result.asked.map((entry) => `${entry.algorithm} ${entry.hash}`).join(", ")}`,
       ...result.matches.map((match) =>
         joinLines([
@@ -162,7 +178,7 @@ export function renderFingerprintMatches(result: FingerprintResult): Rendered {
                   : `${match.fingerprint.reports} report(s)`
               }${
                 match.fingerprint.contested === null
-                  ? ""
+                  ? ", contest unknown"
                   : match.fingerprint.contested
                     ? ", contested"
                     : ", uncontested"
@@ -199,11 +215,9 @@ export function registerFindByFingerprint(server: McpServer, client: StashboxCli
           .describe(
             "Every fingerprint held for one file. A file carries one hash per algorithm, so a longer list is an inventory rather than a question.",
           ),
-        sources: z
-          .array(z.string())
-          .min(1)
-          .optional()
-          .describe("Narrow to named catalogues. Every configured catalogue is asked by default."),
+        sources: sourcesArgument(
+          "Narrow to named catalogues. Every configured catalogue is asked by default.",
+        ).optional(),
       }),
       outputSchema: findByFingerprintOutput,
       annotations: {

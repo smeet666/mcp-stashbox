@@ -39,10 +39,9 @@ function answering(reports: readonly SourceReport[]): SourceReport[] {
 }
 
 describe("searchScenes on the full-text path", () => {
-  it("reports 'match' as not received by every catalogue that answered", async () => {
-    // `match` reads a list of identifiers, and the full-text path sends no list.
-    // A caller who typed it and reads nothing about it takes the answer for one
-    // that honoured it.
+  it("says nothing about 'match' where no list of identifiers was sent", async () => {
+    // `match` reads a list of identifiers. Reporting it as not received where no
+    // list was written states that the rows carry one of a set nobody named.
     const read = await clientWithKeys().searchScenes({
       query: "midnight garden",
       match: "any",
@@ -53,7 +52,7 @@ describe("searchScenes on the full-text path", () => {
     const answered = answering(read.data.perSource);
     expect(answered.length).toBeGreaterThan(0);
     for (const report of answered) {
-      expect(report.narrowingsNotReceived ?? []).toContain("match");
+      expect(report.narrowingsNotReceived ?? []).not.toContain("match");
     }
   });
 

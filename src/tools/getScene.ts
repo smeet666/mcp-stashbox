@@ -16,6 +16,7 @@ import {
   durationText,
   joinLines,
   storedNote,
+  sourceOffers,
   line,
   notesBlock,
   quoted,
@@ -79,7 +80,7 @@ export function renderScene(
         : []),
       ...(record.mergedInto ? [`Read ${record.mergedInto} for the record that continues it.`] : []),
     ];
-    const stored = storedNote(cached);
+    const stored = storedNote(cached, record.retrievedAt);
     if (stored) markerNotes.push(stored);
     structured.notes = markerNotes;
     return { text: text + notesBlock(markerNotes), structured };
@@ -107,6 +108,7 @@ export function renderScene(
       name: entry.name,
       credited_as: entry.creditedAs,
       disambiguation: entry.disambiguation,
+      status: entry.status,
     })),
     tags: record.tags,
     urls: record.urls.map((link) => ({
@@ -134,6 +136,11 @@ export function renderScene(
       `${unnamedLinks} of these ${record.urls.length} links carry no site ${record.source} names, and are shown by their address alone.`,
     );
   }
+  if (record.urls.length && !sourceOffers(record.source, "site_categories")) {
+    notes.push(
+      `${record.source} publishes no table sorting the sites a record links to, so no link here carries a category. Nothing was asked of it about what these addresses point at, and that is no evidence that the catalogue places them in none.`,
+    );
+  }
   if (record.rowsSkipped) {
     structured.rows_skipped = record.rowsSkipped;
     structured.rows_skipped_in = record.rowsSkippedIn ?? [];
@@ -146,10 +153,18 @@ export function renderScene(
     ["production date", record.productionDateUnreadable],
   ] as const) {
     if (flagged) {
+      structured[
+        what === "release date" ? "release_date_unreadable" : "production_date_unreadable"
+      ] = true;
       notes.push(
         `${record.source} published a ${what} this client could not read, so none is stated here. That is a date dropped and never a record carrying none.`,
       );
     }
+  }
+  if (!sourceOffers(record.source, "pending_edits")) {
+    notes.push(
+      `${record.source} publishes no count of edits open against a record, so whether this one is under revision there is unknown. Nothing here states that what it says is settled.`,
+    );
   }
   if (record.pendingEdits) {
     structured.pending_edits = record.pendingEdits;
@@ -157,7 +172,7 @@ export function renderScene(
       `${record.pendingEdits} edit(s) to this record are open on ${record.source}, so what it states is under revision there.`,
     );
   }
-  const storedHere = storedNote(cached);
+  const storedHere = storedNote(cached, record.retrievedAt);
   if (storedHere) notes.push(storedHere);
   if (cached) structured.cached = true;
   structured.notes = notes;
@@ -174,7 +189,7 @@ export function renderScene(
     const shown = record.fingerprints.slice(0, FINGERPRINTS_SHOWN);
     if (record.fingerprints.length > shown.length) {
       notes.push(
-        `This record holds ${record.fingerprints.length} fingerprints and ${shown.length} are shown here.`,
+        `This record holds ${record.fingerprints.length} fingerprints and ${shown.length} are shown here, in the order the catalogue returned them. They are the first it named and not the most submitted.`,
       );
     }
     structured.fingerprints_held = record.fingerprints.length;
@@ -189,7 +204,7 @@ export function renderScene(
     structured.fingerprint_count = record.fingerprintCount ?? {};
     if (record.fingerprints.some((row) => row.reports === null)) {
       notes.push(
-        `${record.source} publishes no count of reports against a fingerprint, so 'contested' is unknown there.`,
+        `${record.source} publishes no count of reports against a fingerprint, so whether a fingerprint here is disputed is unknown. A fingerprint nobody has disputed and one on a catalogue that counts no disputes are different things.`,
       );
     }
   }
@@ -235,6 +250,11 @@ export function renderScene(
                     inline(entry.name),
                     entry.disambiguation ? ` (${inline(entry.disambiguation)})` : "",
                     entry.creditedAs ? ` (credited as ${inline(entry.creditedAs)})` : "",
+                    entry.status === "established"
+                      ? ""
+                      : entry.status === "merged"
+                        ? " (this credit's identifier is merged into another record)"
+                        : " (this credit's identifier is withdrawn)",
                   ].join("") || null,
               )
               .filter((entry): entry is string => entry !== null)
@@ -288,8 +308,12 @@ export function registerGetScene(server: McpServer, client: StashboxClient): voi
         id: z.string().describe("Identifier as returned by another tool, such as stashdb:<uuid>."),
         sections: z
           .array(z.enum(GET_SCENE_SECTIONS))
+          .min(1, {
+            error:
+              "[invalid_input] An empty list names no block to load. Leave the argument out for the basic block, or name the blocks you want.",
+          })
           .optional()
-          .describe("Which blocks to load. Defaults to basic."),
+          .describe("Which blocks to load. Defaults to basic when the argument is left out."),
       }),
       outputSchema: getSceneOutput,
       annotations: {

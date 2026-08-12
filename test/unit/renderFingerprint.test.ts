@@ -86,6 +86,7 @@ function scene(over: Partial<SceneRecord> = {}): SceneRecord {
         name: "Ilva Norrsken",
         creditedAs: null,
         disambiguation: null,
+        status: "established",
       },
     ],
     tags: [],

@@ -10,7 +10,13 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { StashboxClient } from "../stashbox/client.js";
 import type { RowsResult, SceneRecord } from "../types.js";
-import { strictInput } from "./arguments.js";
+import {
+  strictInput,
+  narrowingText,
+  narrowingList,
+  dayArgument,
+  sourcesArgument,
+} from "./arguments.js";
 import { searchScenesOutput } from "./schemas.js";
 import {
   coverageNote,
@@ -23,6 +29,7 @@ import {
   pastTheEndNote,
   failureNote,
   skippedNote,
+  foldedCreditsNote,
   storedNote,
   narrowingNote,
   dateText,
@@ -59,16 +66,22 @@ export function renderSceneRows(
   // every call is what stops a reader reading the notes that matter.
   const notes: string[] = [];
 
-  // How the order was built is worth saying whatever answered: a reader takes
-  // the first row for the best one, and no row here was ranked against another.
-  notes.push(`Rows are ${result.ordering}.`);
+  // How the order was built belongs to an answer that has rows to order: a
+  // reader takes the first row for the best one, and no row here was ranked
+  // against another.
+  if (result.rows.length) notes.push(`Rows are ${result.ordering}.`);
 
-  // A count belongs to the catalogue that answered it, and the answer names
-  // catalogues that did not: a reader summing them would count a total nobody
-  // published.
-  notes.push(
-    "Counts are reported per catalogue and are never added: the catalogues index overlapping corpora, and one scene held by two of them carries two identifiers there.",
-  );
+  // A count belongs to the catalogue that answered it. The warning against
+  // adding them is owed to an answer holding more than one to add, and read
+  // beside a single count it describes an arithmetic nobody could perform.
+  const counting = result.perSource.filter(
+    (entry) => entry.state === "answered" && entry.count,
+  ).length;
+  if (counting > 1) {
+    notes.push(
+      "Counts are reported per catalogue and are never added: the catalogues index overlapping corpora, and one scene held by two of them carries two identifiers there.",
+    );
+  }
   // Only where a catalogue received the narrowing and answered with rows: a
   // note built from the argument would assert a filter on rows nobody filtered.
   const filtered = result.perSource.some(
@@ -124,6 +137,8 @@ export function renderSceneRows(
       `${damaged} row(s) inside the records listed here could not be read and are left out of what each one shows of its own lists. Read a record for what it says about its own losses.`,
     );
   }
+  const folded = foldedCreditsNote(result.rows);
+  if (folded) notes.push(folded);
   const lost = skippedNote(result.perSource);
   if (lost) notes.push(lost);
   const failures = failureNote(result.perSource);
@@ -132,7 +147,7 @@ export function renderSceneRows(
   if (nobody) notes.push(nobody);
   const coverage = coverageNote(result.perSource);
   if (!nobody && coverage) notes.push(coverage);
-  const stored = storedNote(cached);
+  const stored = storedNote(cached, result.rows[0]?.retrievedAt ?? null);
   if (stored) notes.push(stored);
 
   const structured: Record<string, unknown> = {
@@ -200,33 +215,29 @@ export function registerSearchScenes(server: McpServer, client: StashboxClient):
       description:
         "Ask every configured catalogue for scenes. The two paths are exclusive: giving 'query' runs the full-text search and every typed argument is reported as not received, while omitting it runs the faceted query on the typed arguments. A catalogue whose search narrows nothing is named as absent from this tool altogether. Counts are per catalogue and are never added, and a catalogue that failed, one never asked and one that found nothing are three different states an answer names.",
       inputSchema: strictInput({
-        query: z.string().optional().describe("Free text matched against a scene's own fields."),
-        title: z.string().optional(),
-        code: z.string().optional().describe("The studio's own reference for the scene."),
-        performer_ids: z.array(z.string()).optional().describe("Namespaced performer identifiers."),
+        query: narrowingText("Free text matched against a scene's own fields.").optional(),
+        title: narrowingText().optional(),
+        code: narrowingText("The studio's own reference for the scene.").optional(),
+        performer_ids: narrowingList("Namespaced performer identifiers.").optional(),
         match: z
           .enum(["all", "any"])
           .optional()
           .describe(
             "How a list of identifiers reads. 'all' returns scenes carrying every one of them and is the default; 'any' returns scenes carrying at least one.",
           ),
-        studio_ids: z.array(z.string()).optional(),
-        tag_ids: z.array(z.string()).optional(),
-        date_from: z
-          .string()
-          .optional()
-          .describe(
-            "Released strictly after this date, as YYYY-MM-DD. A catalogue takes one date comparison at a time, so giving both bounds sends this one and reports the other as not received.",
-          ),
-        date_to: z
-          .string()
-          .optional()
-          .describe("Released strictly before this date, as YYYY-MM-DD."),
+        studio_ids: narrowingList().optional(),
+        tag_ids: narrowingList().optional(),
+        date_from: dayArgument(
+          "Released strictly after this date, as YYYY-MM-DD. A catalogue takes one date comparison at a time, so giving both bounds sends this one and reports the other as not received.",
+        ).optional(),
+        date_to: dayArgument("Released strictly before this date, as YYYY-MM-DD.").optional(),
         sort: z.enum(["title", "date", "duration", "created", "updated"]).optional(),
         direction: z.enum(["asc", "desc"]).optional(),
         limit: z.number().int().min(1).max(100).optional(),
         page: z.number().int().min(1).max(10_000).optional(),
-        sources: z.array(z.string()).min(1).optional(),
+        sources: sourcesArgument(
+          "Narrow to named catalogues. Every configured catalogue is asked by default.",
+        ).optional(),
       }),
       outputSchema: searchScenesOutput,
       annotations: {

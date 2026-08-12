@@ -129,6 +129,36 @@ const TEXT_SEARCH_IGNORES = [
   "page",
 ];
 
+/**
+ * How the order of an answer's rows was built.
+ *
+ * Interleaving is a statement about rows drawn from several catalogues. Read
+ * where one catalogue answered, it warns against a comparison nobody made and
+ * withholds the thing a reader needs, which is whose order they are looking at.
+ */
+function orderingText(reports: readonly SourceReport[], sortedOn?: string): string {
+  const answering = reports.filter((entry) => entry.state === "answered" && entry.count);
+  const sortedBy = (entry: SourceReport) =>
+    sortedOn && !(entry.narrowingsNotReceived ?? []).includes("sort") ? sortedOn : null;
+
+  if (answering.length === 1) {
+    const only = answering[0]!;
+    const who = only.name ?? only.source;
+    const on = sortedBy(only);
+    return on
+      ? `in ${who}'s order, sorted on ${on}`
+      : `in ${who}'s own order for this question, and nothing here is ranked against another catalogue`;
+  }
+
+  const everyoneSorted = answering.length > 0 && answering.every((entry) => sortedBy(entry));
+  return everyoneSorted
+    ? `interleaved by catalogue, in the order the catalogues were asked, each catalogue's rows sorted on ${sortedOn}; no score is shared across them`
+    : "interleaved by catalogue, in the order the catalogues were asked; no score is shared across them";
+}
+
+/** The narrowings written as a list of identifiers, which 'match' reads. */
+const SCENE_IDENTIFIER_LISTS = ["performer_ids", "studio_ids", "tag_ids"];
+
 /** The narrowings each faceted search can be given, paging and order apart. */
 const SCENE_NARROWINGS = [
   "title",
@@ -453,6 +483,7 @@ export class StashboxClient {
             source: spec.id,
             name: spec.name,
             state: "absent",
+            narrowingsNotReceived: answer.refused,
             reason: `this catalogue could receive none of the narrowings asked for (${answer.refused.join(", ")}), so its rows would answer no question`,
           });
           continue;
@@ -477,8 +508,7 @@ export class StashboxClient {
     const answer = {
       rows: interleave(collected),
       perSource,
-      ordering:
-        "interleaved by catalogue, in the order the catalogues were asked; no score is shared across them",
+      ordering: orderingText(perSource, input.sort),
     };
     // An answer holding a catalogue that failed is not the answer that was asked
     // for, so it is returned and never stored.
@@ -508,8 +538,14 @@ export class StashboxClient {
       return {
         ...readRows(data.searchScenes?.scenes, spec, mapScene, now()),
         total: supports(spec, "index_total") ? readInteger(data.searchScenes?.count) : null,
-        refused: TEXT_SEARCH_IGNORES.filter((name) =>
-          hasNarrowing(input as unknown as Record<string, unknown>, name),
+        refused: TEXT_SEARCH_IGNORES.filter(
+          (name) =>
+            hasNarrowing(input as unknown as Record<string, unknown>, name) &&
+            // How a list of identifiers reads is a question only a list raises.
+            (name !== "match" ||
+              SCENE_IDENTIFIER_LISTS.some((list) =>
+                hasNarrowing(input as unknown as Record<string, unknown>, list),
+              )),
         ),
         fields: FIELDS_SEARCHED,
       };
@@ -640,6 +676,7 @@ export class StashboxClient {
             source: spec.id,
             name: spec.name,
             state: "absent",
+            narrowingsNotReceived: answer.refused,
             reason: `this catalogue could receive none of the narrowings asked for (${answer.refused.join(", ")}), so its rows would answer no question`,
           });
           continue;
@@ -663,8 +700,7 @@ export class StashboxClient {
     const answer = {
       rows: interleave(collected),
       perSource,
-      ordering:
-        "interleaved by catalogue, in the order the catalogues were asked; no score is shared across them",
+      ordering: orderingText(perSource, input.sort),
     };
     // An answer holding a catalogue that failed is not the answer that was asked
     // for, so it is returned and never stored.

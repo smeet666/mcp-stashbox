@@ -10,6 +10,8 @@
 
 import { z } from "zod";
 
+import { INSTANCE_IDS, type InstanceId } from "../stashbox/instances.js";
+
 /** The code a caller branches on when the arguments cannot produce a request. */
 const INVALID_INPUT = "invalid_input";
 
@@ -21,6 +23,97 @@ export function strictInput<Shape extends z.ZodRawShape>(shape: Shape) {
     error: (issue) =>
       issue.code === "unrecognized_keys" ? unknownArgumentMessage(issue.keys, declared) : undefined,
   });
+}
+
+/**
+ * A narrowing written as text, which must carry something to narrow on.
+ *
+ * An empty string reaches the catalogue as no restriction at all, so the answer
+ * that comes back is the whole index handed to a caller who asked for a part of
+ * it. Refusing it at the door is the only place the distinction survives.
+ */
+export function narrowingText(description?: string) {
+  const schema = z.string().min(1, {
+    error: `[${INVALID_INPUT}] An empty value narrows nothing, and a catalogue asked with it answers everything it holds. Give the text to narrow on, or leave the argument out.`,
+  });
+  return description ? schema.describe(description) : schema;
+}
+
+/**
+ * A list of namespaced identifiers, which must name at least one.
+ *
+ * An empty list is a question about no record, and a catalogue given one
+ * answers its whole index, which reads as every record satisfying the list.
+ */
+export function narrowingList(description?: string) {
+  const schema = z.array(narrowingText()).min(1, {
+    error: `[${INVALID_INPUT}] An empty list names no record to narrow on, and a catalogue asked with it answers everything it holds. Give at least one identifier, or leave the argument out.`,
+  });
+  return description ? schema.describe(description) : schema;
+}
+
+/**
+ * A day, which must be one the calendar has.
+ *
+ * A catalogue reinterprets a date it cannot read rather than refusing it, so a
+ * thirteenth month comes back as an answer to a question nobody asked. The
+ * check is on the calendar and not on the shape: 2021-02-30 is written
+ * correctly and names no day.
+ */
+export function dayArgument(description: string) {
+  return z
+    .string()
+    .refine(namesADay, {
+      error: `[${INVALID_INPUT}] A date is written YYYY-MM-DD and must name a day the calendar has. A catalogue reinterprets a date it cannot read, so the answer would be to a question that was never asked.`,
+    })
+    .describe(description);
+}
+
+function namesADay(value: string): boolean {
+  const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!parts) return false;
+  const [, year, month, day] = parts as unknown as [string, string, string, string];
+  const at = new Date(`${year}-${month}-${day}T00:00:00Z`);
+  if (Number.isNaN(at.getTime())) return false;
+  // Date rolls an overlong month into the next one, so the day it names back is
+  // what says whether the calendar has the one that was written.
+  return (
+    at.getUTCFullYear() === Number(year) &&
+    at.getUTCMonth() + 1 === Number(month) &&
+    at.getUTCDate() === Number(day)
+  );
+}
+
+/**
+ * A two-letter country code, in the shape the catalogues index on.
+ *
+ * A country written out in full reaches the index as a code it holds for
+ * nobody, and the emptiness that comes back reads as a catalogue holding no
+ * performer from that country.
+ */
+export function countryArgument(description: string) {
+  return z
+    .string()
+    .regex(/^[A-Za-z]{2}$/, {
+      error: `[${INVALID_INPUT}] A country is asked for as its two-letter code, such as 'AU' for Australia. The catalogues index on the code, so a name written out matches nobody and the emptiness would read as a catalogue holding none.`,
+    })
+    .describe(description);
+}
+
+/**
+ * The catalogues to ask, named from the closed set this server reads.
+ *
+ * The set is small and fixed, so declaring it lets a caller offer the choices
+ * and settles the spelling before a request is built, rather than after an
+ * answer comes back naming a catalogue nobody meant.
+ */
+export function sourcesArgument(description: string) {
+  return z
+    .array(z.enum(INSTANCE_IDS as unknown as [InstanceId, ...InstanceId[]]))
+    .min(1, {
+      error: `[${INVALID_INPUT}] An empty list names no catalogue to ask. Name at least one, or leave the argument out to ask every configured catalogue.`,
+    })
+    .describe(description);
 }
 
 function unknownArgumentMessage(keys: readonly string[], declared: readonly string[]): string {

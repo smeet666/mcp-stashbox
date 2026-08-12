@@ -150,7 +150,7 @@ function mapStudio(raw: unknown, spec: InstanceSpec, lost?: { skipped: number })
   if (!row || !id || !name || !isUuid(id)) {
     // A studio the catalogue answered with and this client could not read is a
     // loss. Returning null silently makes it a scene with no studio.
-    if (row !== undefined && row !== null && lost) lost.skipped += 1;
+    if (raw !== undefined && raw !== null && lost) lost.skipped += 1;
     return null;
   }
   return {
@@ -183,6 +183,10 @@ function mapAppearances(
         // letter as often as by a whole stage name, so it travels beside it.
         creditedAs: creditedAs && creditedAs !== name ? creditedAs : null,
         disambiguation: readText(performer.disambiguation),
+        // A credit is an identifier a caller reads next. One the catalogue has
+        // folded resolves to a marker, and printing it bare offers a person the
+        // catalogue no longer holds under that identifier.
+        status: readStatus(performer.deleted === true, readText(performer.merged_into_id)),
       },
     ];
   });
@@ -204,25 +208,30 @@ function mapTags(raw: unknown, spec: InstanceSpec): { rows: TagRow[]; skipped: n
   return { rows, skipped };
 }
 
-function mapBodyModifications(raw: unknown): string[] {
+function mapBodyModifications(raw: unknown, lost?: { skipped: number }): string[] {
   return asArray(raw).flatMap((entry) => {
     const row = asRecord(entry);
     const location = readText(row?.location);
     const description = readText(row?.description);
-    if (!location && !description) return [];
+    // A mark the catalogue answered with and this client could not read is a
+    // loss. Dropping it silently makes it a person carrying one fewer mark.
+    if (!location && !description) {
+      if (lost) lost.skipped += 1;
+      return [];
+    }
     return [[location, description].filter(Boolean).join(": ")];
   });
 }
 
-function mapAppearanceDetails(raw: Raw): PerformerAppearanceDetails {
+function mapAppearanceDetails(raw: Raw, lost?: { skipped: number }): PerformerAppearanceDetails {
   return {
     ethnicity: readText(raw.ethnicity),
     eyeColor: readText(raw.eye_color),
     hairColor: readText(raw.hair_color),
     // A folded record publishes a height of zero, which no person has.
     heightCm: positiveOrNull(readInteger(raw.height)),
-    tattoos: mapBodyModifications(raw.tattoos),
-    piercings: mapBodyModifications(raw.piercings),
+    tattoos: mapBodyModifications(raw.tattoos, lost),
+    piercings: mapBodyModifications(raw.piercings, lost),
     breastType: readText(raw.breast_type),
     cupSize: readText(raw.cup_size),
     bandSize: positiveOrNull(readInteger(raw.band_size)),
@@ -358,7 +367,12 @@ export function mapPerformer(
   const uuid = readUuid(row?.id);
   if (!row || !uuid) return null;
 
-  const mergedIntoRaw = readText(row.merged_into_id);
+  // The successor is held to what every printed identifier is held to: a string
+  // this catalogue could have minted. It is handed back as the record to read
+  // next, so one that is not an identifier sends a caller to a refusal.
+  const successorRaw = readText(row.merged_into_id);
+  const mergedIntoRaw = successorRaw !== null && isUuid(successorRaw) ? successorRaw : null;
+  const successorSkipped = successorRaw !== null && mergedIntoRaw === null ? 1 : 0;
   const status = readStatus(row.deleted === true, mergedIntoRaw);
   const rawMergedIds = asArray(row.merged_ids);
   // An absorbed identifier is held to what the record's own is held to: a
@@ -383,6 +397,15 @@ export function mapPerformer(
     return {
       ...base,
       mergedIds,
+      ...(mergedIdsSkipped + successorSkipped
+        ? {
+            rowsSkipped: mergedIdsSkipped + successorSkipped,
+            rowsSkippedIn: [
+              ...(mergedIdsSkipped ? ["the identifiers folded into it"] : []),
+              ...(successorSkipped ? ["the record it continues as"] : []),
+            ],
+          }
+        : {}),
       name: readText(row.name),
       disambiguation: null,
       aliases: [],
@@ -416,7 +439,13 @@ export function mapPerformer(
     gender: readText(row.gender),
     country: readText(row.country),
     birthDate: readDate(readText(row.birth_date)),
+    ...(readText(row.birth_date) !== null && readDate(readText(row.birth_date)) === null
+      ? { birthDateUnreadable: true }
+      : {}),
     deathDate: readDate(readText(row.death_date)),
+    ...(readText(row.death_date) !== null && readDate(readText(row.death_date)) === null
+      ? { deathDateUnreadable: true }
+      : {}),
     careerStartYear: readInteger(row.career_start_year),
     careerEndYear: readInteger(row.career_end_year),
     // What this catalogue has indexed. A settled record naming a career spanning
@@ -425,13 +454,14 @@ export function mapPerformer(
     // would be indistinguishable from a person it holds nothing for.
     sceneCount: supports(spec, "scene_count") ? readInteger(row.scene_count) : null,
     urls: performerUrls.rows,
-    ...(performerUrls.skipped + aliasesSkipped + mergedIdsSkipped
+    ...(performerUrls.skipped + aliasesSkipped + mergedIdsSkipped + successorSkipped
       ? {
-          rowsSkipped: performerUrls.skipped + aliasesSkipped + mergedIdsSkipped,
+          rowsSkipped: performerUrls.skipped + aliasesSkipped + mergedIdsSkipped + successorSkipped,
           rowsSkippedIn: [
             ...(performerUrls.skipped ? ["its links"] : []),
             ...(aliasesSkipped ? ["the names it is also known by"] : []),
             ...(mergedIdsSkipped ? ["the identifiers folded into it"] : []),
+            ...(successorSkipped ? ["the record it continues as"] : []),
           ],
         }
       : {}),
@@ -440,7 +470,15 @@ export function mapPerformer(
   };
 
   if (row.ethnicity !== undefined || row.height !== undefined) {
-    performer.appearance = mapAppearanceDetails(row);
+    const marksLost = { skipped: 0 };
+    performer.appearance = mapAppearanceDetails(row, marksLost);
+    if (marksLost.skipped) {
+      performer.rowsSkipped = (performer.rowsSkipped ?? 0) + marksLost.skipped;
+      performer.rowsSkippedIn = [
+        ...(performer.rowsSkippedIn ?? []),
+        "the marks on its body it describes",
+      ];
+    }
   }
   if (row.images !== undefined) {
     const { rows: images, skipped: imagesSkipped } = mapImages(row.images);
