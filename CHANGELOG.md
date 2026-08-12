@@ -5,7 +5,66 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.2] - 2026-08-11
+## [0.3.0] - 2026-08-12
+
+Four adversarial rounds and a rewrite. Every module under `src/` is written from
+the test suite and owes nothing to the shape it replaces.
+
+One defect shape had accounted for most of the previous rounds: a rule honoured
+at six sites out of seven, where the seventh was found by a reviewer rather than
+by the code. The notes an answer owes are now an ordered list of rules that both
+searches run, a folded record is marked in one place, and a catalogue's report is
+translated to its published names in one place. The aggregation is thirteen
+modules where it was one file of fifteen hundred lines.
+
+### Changed
+
+- A scene is held or withdrawn and never merged. These catalogues fold a
+  performer into a successor and publish which one; they withdraw a scene, a
+  studio and a tag without naming anything in its place. The published shapes
+  declare the readings that exist, so `status` on a scene, a studio and a tag
+  carries two of them and `merged_into` is gone from a scene's answer, where
+  nothing could ever have filled it.
+- A value carrying no characters is refused where it is declared, spaces alone
+  included: a catalogue asked with one answers everything it holds.
+- A list of identifiers names each record once and is bounded, since a list
+  asking for a record carrying fifty identifiers asks about no record.
+- An empty list of sections is refused rather than read as the argument left out.
+
+### Fixed
+
+- A catalogue answering a shape this client cannot read is reported as one that
+  failed, with the moment and the code. It was reported as a catalogue that
+  looked and found nothing, and that emptiness was stored and replayed.
+- An identifier a catalogue has folded, written as a narrowing, is named along
+  with the record it was folded into. The rows moved to that record while the
+  answer said the catalogue held none.
+- A list naming one record twice asked for a record holding it twice, which no
+  record holds, and the emptiness was published three times over as what a
+  catalogue indexes.
+- A list naming records on two catalogues reached each of them shorn of the
+  others' identifiers and was answered as though it had arrived whole.
+- Every refusal carries one of the six codes and names the argument it refused.
+  Bounds, closed sets and a required argument arrived as the validator's own
+  prose, which a caller cannot branch on.
+- A fingerprint states what a file is, so the hashes of a withdrawn record travel
+  with its marker and a record answering under two hashes is counted once.
+- A count is a whole number of what it counts, and a total a catalogue
+  contradicts is dropped rather than published as a reach its own rows disprove.
+- A catalogue naming how long to wait in a `Retry-After` header is waited for.
+- What a catalogue publishes is read from the capability registry, so one
+  record's null no longer makes the server state a fact about a catalogue.
+
+### Added
+
+- Two test suites that enumerate the sites a rule lives at rather than the
+  places a reviewer named: one reads the source, one walks every answer of every
+  tool. Between them they found four rules the suite did not protect, each now
+  pinned: three capabilities tested nowhere, the mapper that had drawn more
+  defects than any other module and had no suite of its own, a published argument
+  of `search_performers`, and the cast of a scene a fingerprint identifies.
+
+### The round whose findings sit in the notes
 
 A fifth adversarial round, whose findings sit entirely in the notes. A sentence
 that qualifies an answer is worth nothing when it describes a case the answer is
