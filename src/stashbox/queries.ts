@@ -398,16 +398,15 @@ export function fingerprintRequest(
   sections: readonly SceneSection[] = ["basic", "fingerprints"],
 ): GraphQLRequest {
   return {
-    query: `query FindScenesBySceneFingerprints($fingerprints: [FingerprintQueryInput!]!) {
+    query: `query FindScenesBySceneFingerprints($fingerprints: [[FingerprintQueryInput!]!]!) {
   findScenesBySceneFingerprints(fingerprints: $fingerprints) {
     ${sceneSelection(spec, sections)}
   }
 }`,
+    // One group per hash asked, since the answer comes back a group per group
+    // sent: that is what lets a record be attributed to the hash that found it.
     variables: {
-      fingerprints: fingerprints.map((print) => ({
-        hash: print.hash,
-        algorithm: print.algorithm,
-      })),
+      fingerprints: fingerprints.map((print) => [{ hash: print.hash, algorithm: print.algorithm }]),
     },
   };
 }
@@ -415,6 +414,16 @@ export function fingerprintRequest(
 /* -------------------------------------------------------------------- inputs */
 
 /** A list of identifiers, with what it takes for a row to satisfy it. */
+/**
+ * Free text as the catalogues take it.
+ *
+ * Their filters read a value and how to compare it. A bare string reaches them
+ * as a shape their schema does not declare, and the whole request is refused.
+ */
+function textCriterion(value: string | undefined): Record<string, unknown> | undefined {
+  return value === undefined ? undefined : { value, modifier: "EQUALS" };
+}
+
 function identifierCriterion(
   ids: readonly string[] | undefined,
   match: MatchMode | undefined,
@@ -424,17 +433,17 @@ function identifierCriterion(
 }
 
 /**
- * A window on release dates, written as the one criterion the catalogues take.
- * A single bound is an open interval on that side, and naming the other bound
- * would narrow the question past what was asked.
+ * A bound on release dates, written as the one comparison these catalogues take.
+ *
+ * A scene filter here compares against a single date. Two bounds sent together
+ * are refused outright, so the earlier one travels and the caller is told the
+ * other was not received: a question answered on one bound is narrower than the
+ * rows it returns, and saying so is the only thing that keeps it honest.
  */
 function dateCriterion(
   from: string | undefined,
   to: string | undefined,
 ): Record<string, unknown> | undefined {
-  if (from !== undefined && to !== undefined) {
-    return { value: from, value2: to, modifier: "BETWEEN" };
-  }
   if (from !== undefined) return { value: from, modifier: "GREATER_THAN" };
   if (to !== undefined) return { value: to, modifier: "LESS_THAN" };
   return undefined;
@@ -447,10 +456,10 @@ function put(input: Record<string, unknown>, key: string, value: unknown): void 
 function sceneQueryInput(spec: InstanceSpec, narrowing: SceneNarrowing): Record<string, unknown> {
   const input: Record<string, unknown> = {};
   put(input, "title", narrowing.title);
-  put(input, "code", narrowing.code);
+  put(input, "code", textCriterion(narrowing.code));
   put(input, "date", dateCriterion(narrowing.dateFrom, narrowing.dateTo));
   put(input, "performers", identifierCriterion(narrowing.performerIds, narrowing.match));
-  put(input, "studios", identifierCriterion(narrowing.studioIds, narrowing.match));
+  put(input, "studios", identifierCriterion(narrowing.studioIds, "any"));
   put(input, "tags", identifierCriterion(narrowing.tagIds, narrowing.match));
   put(input, "page", narrowing.page);
   put(input, "per_page", narrowing.limit);
@@ -475,8 +484,8 @@ function performerQueryInput(
 ): Record<string, unknown> {
   const input: Record<string, unknown> = {};
   put(input, "name", narrowing.name);
-  put(input, "disambiguation", narrowing.disambiguation);
-  put(input, "country", narrowing.country);
+  put(input, "disambiguation", textCriterion(narrowing.disambiguation));
+  put(input, "country", textCriterion(narrowing.country));
   put(input, "performed_with", narrowing.performedWith);
   put(input, "studio_id", narrowing.studioId);
   put(input, "page", narrowing.page);

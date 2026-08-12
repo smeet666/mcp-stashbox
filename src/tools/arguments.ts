@@ -172,8 +172,14 @@ export function strictInput<Shape extends z.ZodRawShape>(shape: Shape): z.ZodObj
   const declared = Object.keys(shape);
   return z.strictObject(shape, {
     error: (issue) => {
-      if (issue.code !== "unrecognized_keys") return undefined;
-      return unknownArgumentMessage(issue.keys, declared);
+      if (issue.code === "unrecognized_keys") return unknownArgumentMessage(issue.keys, declared);
+      // Anything else the validator writes about this object is still an
+      // argument that cannot produce a request, which is the one thing this code
+      // names. Its own sentence already says which argument and why, so it is
+      // prefixed rather than rewritten.
+      return issue.message === undefined || issue.message.startsWith(CODE)
+        ? undefined
+        : `${CODE} ${issue.message}`;
     },
   }) as z.ZodObject<Shape>;
 }

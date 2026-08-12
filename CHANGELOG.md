@@ -5,6 +5,50 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-08-12
+
+Six routes of 0.3.0 reached no catalogue. The documents were written from the
+field names the catalogues publish, without the shapes their schemas require: a
+criterion is an object carrying a value and a comparison, a scene carries one
+studio so a list of them is a union, and the fingerprint route reads a list of
+groups. Every unit test passed, because none of them sends a request, and the
+live suite asked one question per route where the shape varies per narrowing.
+
+### Fixed
+
+- `find_by_fingerprint` reached neither configured catalogue and answered that
+  no record carried the hashes asked. It sends one group per hash, which is
+  also what lets a record be attributed to the hash that found it.
+- `search_scenes` narrowed on `code`, on `studio_ids`, or on both date bounds
+  was refused outright, as was `search_performers` narrowed on `country` or on
+  `disambiguation`. Free text travels as a criterion, a list of studios as a
+  union, and a date as the one bound a scene filter compares against, with the
+  other named as not received.
+- The store keyed an answer without the catalogues it was asked of, so a second
+  question was served the first one's answer and read its reasons: a catalogue
+  the caller had not excluded was reported as excluded.
+- The full-text route reported every typed argument as a narrowing the catalogue
+  cannot receive, which states a limitation of a catalogue that has none. What a
+  route does not take is now reported apart from what a catalogue cannot be
+  given, and the two are different facts.
+- A page whose every row came back unreadable was published as a catalogue that
+  looked and found nothing, and stored. The emptiness is this client's reading,
+  it says so, and it is not kept.
+- A refusal about the shape of a nested argument arrived in the validator's own
+  words with no code, and a catalogue's own error text reached a caller inside a
+  line this server wrote. Both are now this server's sentence, and borrowed text
+  is shifted the way all borrowed text is.
+- The declared shape of a fingerprint match required six fields the answer never
+  filled. It declares what a match carries, the cast of the record included.
+- The documented defaults for the store did not match the code's.
+
+### Added
+
+- A live suite asking one question per **narrowing** rather than per route, the
+  three fingerprint algorithms among them, and one case that reads a hash a
+  catalogue published and puts it straight back: a route that cannot find a hash
+  it was just handed is broken whatever else it does.
+
 ## [0.3.0] - 2026-08-12
 
 Four adversarial rounds and a rewrite. Every module under `src/` is written from

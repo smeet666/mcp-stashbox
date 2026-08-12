@@ -78,7 +78,13 @@ describe("searchScenes on the full-text path", () => {
     const answered = answering(read.data.perSource);
     expect(answered.length).toBeGreaterThan(0);
     for (const report of answered) {
-      const notReceived = report.narrowingsNotReceived ?? [];
+      // The full-text route takes words alone. What it does not take is a fact
+      // about the route, reported apart from what a catalogue cannot receive,
+      // and this assertion is about the arguments being reported at all.
+      const notReceived = [
+        ...(report.narrowingsNotReceived ?? []),
+        ...(report.narrowingsOutsideThisRoute ?? []),
+      ];
       expect(notReceived).toContain("match");
       expect(notReceived).toContain("performer_ids");
     }

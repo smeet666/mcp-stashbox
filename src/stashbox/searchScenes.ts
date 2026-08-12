@@ -114,6 +114,10 @@ export async function searchScenes(
       page: plan.page,
       limit: plan.limit,
       sections: [...plan.sections].sort(),
+      // The catalogues asked belong in the key: an answer holds a report per
+      // catalogue saying why it was or was not asked, and replaying one built
+      // for a narrower call would state a reason that was never this call's.
+      sources: asks.map((ask) => ask.spec.id).sort(),
     },
     asks,
     unasked,
@@ -186,7 +190,10 @@ async function askOne(
 
   if (plan.query !== undefined) {
     const notReceived = notReceivedOnTheTextPath(plan);
-    if (notReceived.length > 0) report.narrowingsNotReceived = notReceived;
+    // The full-text route reads words alone. An argument it does not take is a
+    // fact about the route, and reporting it as one the catalogue cannot
+    // receive would state a limitation of a catalogue that has none.
+    if (notReceived.length > 0) report.narrowingsOutsideThisRoute = notReceived;
     if (plan.match !== undefined && plan.lists.length === 0) {
       report.argumentsWithNothingToDo = ["match"];
     }
@@ -277,6 +284,14 @@ function facets(spec: InstanceSpec, plan: Plan, report: SourceReport): SceneNarr
   // it selected nothing here, which is not a narrowing the catalogue refused.
   if (plan.match !== undefined && !identifiers) report.argumentsWithNothingToDo = ["match"];
 
+  // A scene filter compares a date against one bound. Two sent together are
+  // refused outright, so the earlier one travels and the other is named as not
+  // received: rows answered on one bound are wider than the question written.
+  const bothBounds = plan.dateFrom !== undefined && plan.dateTo !== undefined;
+  if (bothBounds) {
+    report.narrowingsNotReceived = [...(report.narrowingsNotReceived ?? []), "date_to"];
+  }
+
   const wroteSomething = text || plan.lists.length > 0;
   if (wroteSomething && !text && !identifiers) return undefined;
 
@@ -284,7 +299,7 @@ function facets(spec: InstanceSpec, plan: Plan, report: SourceReport): SceneNarr
     ...(plan.title === undefined ? {} : { title: plan.title }),
     ...(plan.code === undefined ? {} : { code: plan.code }),
     ...(plan.dateFrom === undefined ? {} : { dateFrom: plan.dateFrom }),
-    ...(plan.dateTo === undefined ? {} : { dateTo: plan.dateTo }),
+    ...(plan.dateTo === undefined || bothBounds ? {} : { dateTo: plan.dateTo }),
     ...(given.performer_ids === undefined ? {} : { performerIds: given.performer_ids }),
     ...(given.studio_ids === undefined ? {} : { studioIds: given.studio_ids }),
     ...(given.tag_ids === undefined ? {} : { tagIds: given.tag_ids }),

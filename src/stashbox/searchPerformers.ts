@@ -101,6 +101,10 @@ export async function searchPerformers(
       page: plan.page,
       limit: plan.limit,
       sections: [...plan.sections].sort(),
+      // The catalogues asked belong in the key: an answer holds a report per
+      // catalogue saying why it was or was not asked, and replaying one built
+      // for a narrower call would state a reason that was never this call's.
+      sources: asks.map((ask) => ask.spec.id).sort(),
     },
     asks,
     unasked,
@@ -159,7 +163,10 @@ async function askOne(
 
   if (plan.query !== undefined) {
     const notReceived = notReceivedOnTheTextPath(plan);
-    if (notReceived.length > 0) report.narrowingsNotReceived = notReceived;
+    // The full-text route reads words alone. An argument it does not take is a
+    // fact about the route, and reporting it as one the catalogue cannot
+    // receive would state a limitation of a catalogue that has none.
+    if (notReceived.length > 0) report.narrowingsOutsideThisRoute = notReceived;
     key = "searchPerformers";
     request = searchPerformersRequest(spec, plan.query, plan.limit, plan.sections);
   } else {

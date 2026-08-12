@@ -420,8 +420,15 @@ describe("a narrowing a caller writes reaches the catalogue", () => {
       const request = queryPerformersRequest(specWith(["search_performers"]), narrowing);
       const input = (request.variables as { input: Record<string, unknown> }).input;
 
+      // Free text reaches these catalogues wrapped as a criterion, so the value
+      // is looked for inside one as well as beside one.
+      const carries = (value: unknown): boolean =>
+        value === written ||
+        (typeof value === "object" &&
+          value !== null &&
+          (value as { value?: unknown }).value === written);
       expect(
-        Object.entries(input).find(([, value]) => value === written)?.[0],
+        Object.entries(input).find(([, value]) => carries(value))?.[0],
         `'${field}' was written by the caller and reaches the catalogue under no name, so it narrowed nothing`,
       ).toBe(field);
     });

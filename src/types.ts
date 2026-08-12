@@ -71,6 +71,13 @@ export interface SourceReport {
   records?: number;
   /** Narrowings it could not receive, which is a limit of the catalogue. */
   narrowingsNotReceived?: string[];
+  /**
+   * Narrowings this route does not take, where another route of the same
+   * catalogue does. Writing words and typed arguments together picks the
+   * full-text route, which reads words alone: the catalogue can be given these,
+   * and this question was not the one that gave them.
+   */
+  narrowingsOutsideThisRoute?: string[];
   /** Narrowings written with identifiers no record of its own carries. */
   narrowingsNamingNoRecord?: string[];
   /** Narrowings it received short, the rest of the list naming other catalogues. */

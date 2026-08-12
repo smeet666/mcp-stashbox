@@ -151,7 +151,14 @@ const EXTRA_RULES: readonly Rule<SceneRecord>[] = [
  */
 function orderedOn(result: RowsResult<SceneRecord>, source: string): boolean {
   const report = result.perSource.find((entry) => entry.source === source);
-  return report !== undefined && !(report.narrowingsNotReceived ?? []).includes("sort");
+  // A sort the route did not take ordered the rows as little as one the
+  // catalogue could not receive, so a stamp read off either would describe an
+  // order nothing was put in.
+  const away = [
+    ...(report?.narrowingsNotReceived ?? []),
+    ...(report?.narrowingsOutsideThisRoute ?? []),
+  ];
+  return report !== undefined && !away.includes("sort");
 }
 
 function sceneLines(row: SceneRecord, times: boolean, ordered: boolean): string {

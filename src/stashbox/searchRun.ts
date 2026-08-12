@@ -86,7 +86,13 @@ export async function runSearch<T>(
       : {}),
   };
 
-  const worthKeeping = settled(checked) && !reports.some((report) => report.state === "failed");
+  // An answer holding a catalogue that failed is not the answer that was asked
+  // for. Neither is one whose rows were all lost in the reading: stored, it
+  // replays this client's failure as a catalogue's emptiness for the whole
+  // lifetime of the entry.
+  const everyRowLost = reports.some((report) => !report.count && report.skipped);
+  const worthKeeping =
+    settled(checked) && !everyRowLost && !reports.some((report) => report.state === "failed");
   if (worthKeeping) ctx.cache.set(key, result);
 
   const skipped = reports.reduce((lost, report) => lost + (report.skipped ?? 0), 0);

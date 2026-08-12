@@ -511,7 +511,10 @@ describe("'created' and 'updated' are carried only where the catalogue received 
 
     const report = reportFor(outcome.structured, "stashdb");
     expect(
-      (field(report, "narrowingsNotReceived") as string[] | undefined) ?? [],
+      ([
+        ...((field(report, "narrowings_not_received") as string[] | undefined) ?? []),
+        ...((field(report, "narrowings_outside_this_route") as string[] | undefined) ?? []),
+      ] as string[]),
       "the catalogue received the sort, so this case is not the one measured",
     ).toContain("sort");
 

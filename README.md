@@ -48,8 +48,8 @@ A key is found on your profile page once you are registered and logged in.
 ```
 
 Optional settings: `SB_USER_AGENT`, `SB_MIN_INTERVAL_MS` (default and floor
-1000), `SB_TIMEOUT_MS` (20000), `SB_MAX_RETRIES` (3), `SB_CACHE_TTL_MS` (900000),
-`SB_CACHE_MAX_ENTRIES` (200), `SB_LOG_LEVEL` (`error`).
+1000), `SB_TIMEOUT_MS` (20000), `SB_MAX_RETRIES` (3), `SB_CACHE_TTL_MS` (300000),
+`SB_CACHE_MAX_ENTRIES` (500), `SB_LOG_LEVEL` (`error`).
 
 ## Tools
 
@@ -170,8 +170,8 @@ de chaque réponse**, jamais retiré en silence.
 clé se lit sur la page de profil une fois connecté.
 
 Réglages facultatifs : `SB_USER_AGENT`, `SB_MIN_INTERVAL_MS` (défaut et plancher
-1000), `SB_TIMEOUT_MS` (20000), `SB_MAX_RETRIES` (3), `SB_CACHE_TTL_MS` (900000),
-`SB_CACHE_MAX_ENTRIES` (200), `SB_LOG_LEVEL` (`error`).
+1000), `SB_TIMEOUT_MS` (20000), `SB_MAX_RETRIES` (3), `SB_CACHE_TTL_MS` (300000),
+`SB_CACHE_MAX_ENTRIES` (500), `SB_LOG_LEVEL` (`error`).
 
 ## Les outils
 

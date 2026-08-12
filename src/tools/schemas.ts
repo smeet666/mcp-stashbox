@@ -79,6 +79,12 @@ export const sourceReport = z.object({
     .describe(
       "Narrowings this catalogue cannot receive, so the rows here were never narrowed by them. This is the one field that says a catalogue cannot do something.",
     ),
+  narrowings_outside_this_route: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "Narrowings this route does not take, where another route of the same catalogue does. Writing words alongside typed arguments picks the full-text route, which reads words alone, so this states nothing about what the catalogue can be given.",
+    ),
   narrowings_naming_no_record_here: z
     .array(z.string())
     .optional()
@@ -226,11 +232,36 @@ export const getPerformerOutput = performerRecord.extend({ cached, notes });
 
 /* ------------------------------------------------------------- the lookup */
 
+/**
+ * The record a hash reached, as much of it as a fingerprint answer states.
+ *
+ * A fingerprint identifies a file, so a match names the release, what its
+ * identifier addresses now, who it credits and what it lost while being read.
+ * The rest of the record is read from its identifier, and declaring fields this
+ * answer never fills would promise a caller something nothing keeps.
+ */
+const matchedRecord = sceneRecord.pick({
+  id: true,
+  source: true,
+  source_url: true,
+  retrieved_at: true,
+  status: true,
+  title: true,
+  code: true,
+  duration_seconds: true,
+  release_date: true,
+  release_date_unreadable: true,
+  studio: true,
+  performers: true,
+  rows_skipped: true,
+  rows_skipped_in: true,
+});
+
 export const findByFingerprintOutput = z.object({
   matches: z
     .array(
       z.object({
-        scene: sceneRecord,
+        scene: matchedRecord,
         algorithm: z
           .enum(["MD5", "OSHASH", "PHASH"])
           .describe("The algorithm of the hash that reached this record."),

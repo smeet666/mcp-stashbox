@@ -172,6 +172,7 @@ function scenePayload(scene: SceneRecord): Record<string, unknown> {
       id: entry.id,
       name: entry.name,
       credited_as: entry.creditedAs,
+      disambiguation: entry.disambiguation,
       status: entry.status,
     })),
     ...(scene.rowsSkipped === undefined ? {} : { rows_skipped: scene.rowsSkipped }),

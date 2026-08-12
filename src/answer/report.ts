@@ -29,6 +29,7 @@ export function reportPayload(reports: readonly SourceReport[]): Record<string, 
     ...maybe("index_total", entry.indexTotal),
     ...maybe("fields_searched", entry.fieldsSearched),
     ...maybe("narrowings_not_received", entry.narrowingsNotReceived),
+    ...maybe("narrowings_outside_this_route", entry.narrowingsOutsideThisRoute),
     ...maybe("narrowings_naming_no_record_here", entry.narrowingsNamingNoRecord),
     ...maybe("narrowings_received_in_part", entry.narrowingsReceivedInPart),
     ...maybe("arguments_with_nothing_to_do", entry.argumentsWithNothingToDo),
@@ -76,6 +77,9 @@ export function reportLines(reports: readonly SourceReport[]): string[] {
       report.fieldsSearched?.length ? `; its index read ${report.fieldsSearched.join(", ")}` : "",
       report.narrowingsNotReceived?.length
         ? `; did not receive: ${report.narrowingsNotReceived.join(", ")}`
+        : "",
+      report.narrowingsOutsideThisRoute?.length
+        ? `; the route this question took does not take ${report.narrowingsOutsideThisRoute.join(", ")}`
         : "",
       report.algorithmsNotSearched?.length
         ? `; does not search ${report.algorithmsNotSearched.join(", ")}`

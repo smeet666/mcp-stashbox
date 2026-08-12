@@ -93,6 +93,7 @@ function writtenWithIdentifiers(narrowing: string): boolean {
 function receivedTheListEntire(entry: SourceReport): boolean {
   const short = [
     ...(entry.narrowingsNotReceived ?? []),
+    ...(entry.narrowingsOutsideThisRoute ?? []),
     ...(entry.narrowingsNamingNoRecord ?? []),
     ...(entry.narrowingsReceivedInPart ?? []),
   ];
@@ -134,6 +135,11 @@ export const narrowingsUnreceivedRule: Rule<unknown> = ({ result }) => {
     const who = entry.name ?? entry.source;
     for (const narrowing of entry.narrowingsNotReceived ?? []) {
       parts.push(`${narrowing}, which ${who} cannot receive`);
+    }
+    for (const narrowing of entry.narrowingsOutsideThisRoute ?? []) {
+      parts.push(
+        `${narrowing}, which the route this question took does not take, though ${who} can be given it`,
+      );
     }
     for (const narrowing of entry.narrowingsNamingNoRecord ?? []) {
       parts.push(`${narrowing}, whose identifiers name no record ${who} holds`);
@@ -197,7 +203,21 @@ export const emptyPageRule: Rule<unknown> = ({ result, window }) => {
   if ((window?.page ?? 1) > 1 && paged.length > 0) {
     return `This page is past everything these catalogues hold for the question, so its emptiness belongs to the page: ${named(paged)}.`;
   }
-  return `These catalogues looked and found nothing for this question: ${named(looked)}.`;
+  // A catalogue whose every row came back unreadable answered with records. The
+  // emptiness is this client's reading of them, and calling it a catalogue that
+  // found nothing states an absence nobody established.
+  const lostEverything = looked.filter((entry) => !entry.count && entry.skipped);
+  const found = looked.filter((entry) => !entry.skipped);
+  const parts: string[] = [];
+  if (found.length > 0) {
+    parts.push(`These catalogues looked and found nothing for this question: ${named(found)}.`);
+  }
+  if (lostEverything.length > 0) {
+    parts.push(
+      `These catalogues answered with records this client could not read, so this emptiness is that reading and no answer about what they hold: ${named(lostEverything)}.`,
+    );
+  }
+  return parts.length === 0 ? null : parts.join(" ");
 };
 
 /** Catalogues that could not answer, whose silence is no evidence about them. */

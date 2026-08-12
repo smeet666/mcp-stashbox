@@ -15,6 +15,7 @@
  */
 
 import type { Logger } from "../config.js";
+import { indentMarkerLines } from "./normalise.js";
 import { StashboxError, parseFailure, rateLimited } from "../errors.js";
 import { CONTACT_URL, PKG_NAME, VERSION } from "../version.js";
 import type { InstanceSpec } from "./instances.js";
@@ -324,7 +325,10 @@ function readBody(
     // it an absence would deny a record nobody said was missing.
     return {
       outcome: "failed",
-      error: parseFailure(`${spec.name} answered an error this client cannot read: ${said}`, where),
+      error: parseFailure(
+        `${spec.name} answered an error this client cannot read. Its own words, which this server did not write: ${indentMarkerLines(said)}`,
+        where,
+      ),
       retryable: false,
     };
   }
