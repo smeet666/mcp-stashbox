@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 
 import { renderFingerprintMatches as renderAttributedMatches } from "../../src/tools/findByFingerprint.js";
 import type {
+  FingerprintAlgorithm,
   FingerprintMatch,
   FingerprintResult,
   FingerprintRow,
@@ -16,7 +17,7 @@ import type {
  */
 function renderFingerprintMatches(
   result: Omit<FingerprintResult, "unattributed" | "asked">,
-  asked: readonly { hash: string; algorithm: string }[],
+  asked: readonly { hash: string; algorithm: FingerprintAlgorithm }[],
 ) {
   return renderAttributedMatches({ ...result, unattributed: 0, asked });
 }
@@ -66,7 +67,6 @@ function scene(over: Partial<SceneRecord> = {}): SceneRecord {
     // Pinned, so no test reads a clock.
     retrievedAt: "2026-08-11T00:00:00.000Z",
     status: "established",
-    mergedInto: null,
     pendingEdits: 0,
     title: "Harbour Lights, Chapter Two",
     details: null,

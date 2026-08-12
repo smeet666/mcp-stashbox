@@ -1,407 +1,251 @@
 /**
- * One scene, read from the catalogue its identifier names.
+ * One scene, answered for the identifier that names it.
  *
- * Sections exist because a scene's fingerprints weigh more than everything else
- * it carries put together.
+ * Two readings of the one rule decide everything here. **A marker describes the
+ * record and never the scene it once named**: a withdrawn identifier renders
+ * what the catalogue still holds, which is the identifier and the title the
+ * record carried, and the sections a caller asked for are named as unrenderable
+ * rather than answered with a record holding none of them. **A section asked for
+ * always renders**, with its zero stated on the heading line, because a section
+ * that vanishes when it is empty reads exactly like one nobody loaded.
+ *
+ * These catalogues publish no successor for a scene, so a scene is held or
+ * withdrawn and this answer names nothing in its place.
  */
 
-import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { StashboxClient } from "../stashbox/client.js";
-import type { SceneRecord } from "../types.js";
-import { strictInput, requiredText } from "./arguments.js";
-import { getSceneOutput } from "./schemas.js";
+
 import {
+  catalogueOf,
   dateText,
   durationText,
+  fingerprintRows,
+  headLine,
+  imageRows,
+  linksText,
+  markerHead,
+  recordNotes,
+  scenePayload,
+  tagsText,
+  type Catalogue,
+} from "../answer/records.js";
+import { isFolded, markerSuffix } from "../answer/marker.js";
+import {
   joinLines,
-  storedNote,
-  sourceOffers,
   line,
   notesBlock,
   quoted,
+  section,
   sourceLine,
-  inline,
   type Rendered,
-} from "./shared.js";
-import { toolError } from "./errorShape.js";
+} from "../answer/text.js";
+import { inline } from "../answer/text.js";
+import type { StashboxClient } from "../stashbox/client.js";
+import type { SceneSection } from "../stashbox/queries.js";
+import type { SceneRecord, StudioRef } from "../types.js";
+import { identifier, severalOf, strictInput } from "./arguments.js";
+import { toolFailure } from "./errorShape.js";
+import { getSceneOutput } from "./schemas.js";
 
-export const GET_SCENE_SECTIONS = ["basic", "fingerprints", "images"] as const;
+/** The blocks a caller can ask for, in the order an answer renders them. */
+const SECTIONS = ["basic", "fingerprints", "images"] as const;
+
+/** What a caller asked for, an empty list read as the block that identifies a record. */
+function asked(sections: readonly string[]): readonly string[] {
+  return sections.length === 0 ? ["basic"] : sections;
+}
+
+/** The studio credited, with the mark a withdrawn record carries. */
+function studioText(studio: StudioRef | null): string | null {
+  if (studio === null) return null;
+  const named = `${inline(studio.name) ?? studio.id}${markerSuffix(studio.status)}`;
+  const parent = inline(studio.parent);
+  if (parent === null) return named;
+  const withdrawn = studio.parentWithdrawn === true ? ", a record the catalogue withdrew" : "";
+  return `${named}, under ${parent}${withdrawn}`;
+}
+
+/** Who is credited, under the name this release printed and under their own. */
+function creditsText(record: SceneRecord): string {
+  return record.performers
+    .map((credit) => {
+      const own = inline(credit.name) ?? credit.id;
+      const about = inline(credit.disambiguation);
+      const printed = inline(credit.creditedAs);
+      const parts = [
+        about === null ? null : ` (${about})`,
+        printed === null ? null : `, credited as ${printed}`,
+        markerSuffix(credit.status),
+      ].filter((part): part is string => part !== null && part !== "");
+      return `${own}${parts.join("")}`;
+    })
+    .join("; ");
+}
+
+/** The heavy blocks, each stating its own zero where it holds nothing. */
+function sceneSections(
+  record: SceneRecord,
+  catalogue: Catalogue,
+  sections: readonly string[],
+): (string | null)[] {
+  const parts: (string | null)[] = [];
+  if (sections.includes("fingerprints")) {
+    parts.push(
+      section(
+        "Fingerprints",
+        fingerprintRows(record.fingerprints ?? []),
+        `${catalogue.name} published none with this record.`,
+      ),
+    );
+  }
+  if (sections.includes("images")) {
+    parts.push(
+      section(
+        "Images",
+        imageRows(record.images ?? []),
+        `${catalogue.name} published none with this record.`,
+      ),
+    );
+  }
+  return parts;
+}
+
+/** What a scene owes a reader beyond the fields a scene carries. */
+function sceneExtras(
+  record: SceneRecord,
+  catalogue: Catalogue,
+  sections: readonly string[],
+): (string | null)[] {
+  const notes: (string | null)[] = [];
+  const shown = sections.includes("fingerprints") ? (record.fingerprints ?? []) : [];
+
+  if (shown.length > 0 && !catalogue.publishes("fingerprint_reports")) {
+    notes.push(
+      `${catalogue.name} counts no disputes against a fingerprint, so whether one here is disputed was never recorded, and none of them is a hash nobody has questioned.`,
+    );
+  }
+  if (record.fingerprintsSkipped !== undefined && sections.includes("fingerprints")) {
+    notes.push(
+      `${record.fingerprintsSkipped} fingerprint(s) ${catalogue.name} answered with could not be read and are left out of the block here.`,
+    );
+  }
+  if (record.imagesSkipped !== undefined && sections.includes("images")) {
+    notes.push(
+      `${record.imagesSkipped} image(s) ${catalogue.name} answered with could not be read and are left out of the block here.`,
+    );
+  }
+  return notes;
+}
 
 /**
- * Fingerprints rendered at once.
- *
- * A heavily submitted scene carries hundreds, and the whole list is the largest
- * single-record answer this server can produce. The count of what the record
- * holds travels beside the page, so a shortened list never reads as a complete
- * one.
+ * One scene as a caller reads it: the prose and the payload, carrying the same
+ * facts and the same qualifications.
  */
-const FINGERPRINTS_SHOWN = 25;
-
 export function renderScene(
   record: SceneRecord,
-  sections: readonly string[],
-  cached = false,
+  sections: readonly string[] = ["basic"],
+  read: { cached?: boolean } = {},
 ): Rendered {
-  const notes: string[] = [];
+  const wanted = asked(sections);
+  const catalogue = catalogueOf(record.source);
+  const folded = isFolded(record.status);
+  const unrendered = wanted.filter((name) => name !== "basic");
+  const payload = scenePayload(record, folded ? ["basic"] : wanted);
 
-  if (record.status !== "established") {
-    // A withdrawn record describes itself. Rendering what it still carries as a
-    // scene would state facts the catalogue withdrew.
-    const structured = {
-      id: record.id,
-      source: record.source,
-      source_url: record.sourceUrl,
-      retrieved_at: record.retrievedAt,
+  const notes = recordNotes(
+    {
+      catalogue,
+      kind: "scene",
       status: record.status,
-      former_title: record.title,
-      // A marker carries little, so what little it lost is the whole of what
-      // this client could not read of it.
-      ...(record.rowsSkipped
-        ? { rows_skipped: record.rowsSkipped, rows_skipped_in: record.rowsSkippedIn ?? [] }
-        : {}),
-      notes: [] as string[],
-      ...(cached ? { cached: true } : {}),
-    };
-    const text = joinLines([
-      `This identifier addresses a record ${record.source} has withdrawn.`,
-      line("Former title", inline(record.title)),
-      sourceLine(record.sourceUrl),
-    ]);
-    const unrendered = sections.filter((name) => name !== "basic");
-    const markerNotes = [
-      ...(record.rowsSkipped
-        ? [
-            `${record.rowsSkipped} row(s) of this marker could not be read and are left out of ${(record.rowsSkippedIn ?? []).join(", ")}. What is shown is therefore short of what the catalogue answered with.`,
-          ]
-        : []),
-      "A withdrawn record states nothing about the scene it once described.",
-      ...(unrendered.length
-        ? [`A marker carries no body, so ${unrendered.join(", ")} could not be rendered here.`]
-        : []),
-      ...(record.mergedInto ? [`Read ${record.mergedInto} for the record that continues it.`] : []),
-    ];
-    const stored = storedNote(cached, record.retrievedAt);
-    if (stored) markerNotes.push(stored);
-    structured.notes = markerNotes;
-    return { text: text + notesBlock(markerNotes), structured };
-  }
+      // These catalogues name no scene in the place of a scene they withdrew.
+      successor: null,
+      unrendered,
+      dates: [
+        {
+          what: "release date",
+          date: record.releaseDate,
+          unreadable: record.releaseDateUnreadable === true,
+        },
+        {
+          what: "production date",
+          date: record.productionDate,
+          unreadable: record.productionDateUnreadable === true,
+        },
+      ],
+      links: record.urls,
+      tags: record.tags,
+      pendingEdits: record.pendingEdits,
+      pendingEditsUnreadable: record.pendingEditsUnreadable === true,
+      rowsSkipped: record.rowsSkipped ?? 0,
+      rowsSkippedIn: record.rowsSkippedIn ?? [],
+      cached: read.cached === true,
+      retrievedAt: record.retrievedAt,
+      payload,
+    },
+    folded ? [] : sceneExtras(record, catalogue, wanted),
+  );
 
-  const wantsFingerprints = sections.includes("fingerprints");
-  const wantsImages = sections.includes("images");
+  const parts: (string | null)[] = folded
+    ? markerHead(catalogue, "scene", record, inline(record.title), null)
+    : [
+        headLine(record.title, record.id),
+        `${catalogue.name}, scene ${record.id}`,
+        line("Released", dateText(record.releaseDate)),
+        line("Produced", dateText(record.productionDate)),
+        line("Duration", durationText(record.durationSeconds)),
+        line("Code", inline(record.code)),
+        line("Director", inline(record.director)),
+        line("Studio", studioText(record.studio)),
+        `Performers: ${record.performers.length === 0 ? `${catalogue.name} credits nobody on this record.` : creditsText(record)}`,
+        `Tags: ${record.tags.length === 0 ? `${catalogue.name} carries none on this record.` : tagsText(record.tags)}`,
+        `Links: ${record.urls.length === 0 ? `${catalogue.name} links this record nowhere else.` : linksText(record.urls)}`,
+        record.details === null ? null : `Details:\n${quoted(record.details) ?? ""}`,
+        ...sceneSections(record, catalogue, wanted),
+      ];
 
-  const structured: Record<string, unknown> = {
-    id: record.id,
-    source: record.source,
-    source_url: record.sourceUrl,
-    retrieved_at: record.retrievedAt,
-    status: record.status,
-    title: record.title,
-    details: record.details,
-    code: record.code,
-    director: record.director,
-    duration_seconds: record.durationSeconds,
-    release_date: record.releaseDate,
-    production_date: record.productionDate,
-    studio: record.studio
-      ? {
-          id: record.studio.id,
-          name: record.studio.name,
-          parent: record.studio.parent,
-          status: record.studio.status,
-        }
-      : null,
-    performers: record.performers.map((entry) => ({
-      id: entry.id,
-      name: entry.name,
-      credited_as: entry.creditedAs,
-      disambiguation: entry.disambiguation,
-      status: entry.status,
-    })),
-    tags: record.tags.map((tag) => ({
-      id: tag.id,
-      name: tag.name,
-      category: tag.category,
-      status: tag.status,
-    })),
-    urls: record.urls.map((link) => ({
-      url: link.url,
-      site_name: link.siteName,
-      site_category: link.siteCategory,
-    })),
-    created: record.created,
-    updated: record.updated,
+  parts.push(sourceLine(record.sourceUrl));
+  parts.push(`Read from ${catalogue.name} at ${record.retrievedAt}`);
+
+  return {
+    text: joinLines(parts) + notesBlock(notes),
+    structured: { ...payload, ...(read.cached === true ? { cached: true } : {}), notes },
   };
-  if (record.imagesSkipped) {
-    structured.images_skipped = record.imagesSkipped;
-    notes.push(
-      `${record.imagesSkipped} image row(s) this catalogue answered with could not be read and are left out of this section and of the number shown.`,
-    );
-  }
-  if (record.urls.length && record.urls.every((link) => link.siteName === null)) {
-    notes.push(
-      `No link on this record carries a site ${record.source} names, so none of these addresses is named here. Each one is what the catalogue published, and what it points at is not stated.`,
-    );
-  }
-  const unnamedLinks = record.urls.filter((link) => link.siteName === null).length;
-  if (unnamedLinks && unnamedLinks < record.urls.length) {
-    notes.push(
-      `${unnamedLinks} of these ${record.urls.length} links carry no site ${record.source} names, and are shown by their address alone.`,
-    );
-  }
-  if (record.tags.length && !sourceOffers(record.source, "tag_categories")) {
-    notes.push(
-      `${record.source} publishes no taxonomy sorting the tags a record carries, so no tag here names a category. Nothing was asked of it about how these tags are grouped, and that is no evidence that it groups them under none.`,
-    );
-  }
-  if (record.urls.length && !sourceOffers(record.source, "site_categories")) {
-    notes.push(
-      `${record.source} publishes no table sorting the sites a record links to, so no link here carries a category. Nothing was asked of it about what these addresses point at, and that is no evidence that the catalogue places them in none.`,
-    );
-  }
-  const foldedHere = [
-    ...(record.studio && record.studio.status !== "established"
-      ? [`the studio it names (${record.studio.name})`]
-      : []),
-    ...(record.studio?.parentWithdrawn ? ["the parent of that studio"] : []),
-    ...(record.tags.some((tag) => tag.status !== "established")
-      ? [
-          `the tags ${record.tags
-            .filter((tag) => tag.status !== "established")
-            .map((tag) => tag.name)
-            .join(", ")}`,
-        ]
-      : []),
-  ];
-  if (foldedHere.length) {
-    notes.push(
-      `This record names records its catalogue has withdrawn: ${foldedHere.join("; ")}. Those identifiers resolve to markers, so narrowing a search with one of them matches nothing.`,
-    );
-  }
-  if (record.rowsSkipped) {
-    structured.rows_skipped = record.rowsSkipped;
-    structured.rows_skipped_in = record.rowsSkippedIn ?? [];
-    notes.push(
-      `${record.rowsSkipped} row(s) of this record's own lists could not be read and are left out of ${(record.rowsSkippedIn ?? []).join(", ")}. What is shown of those is therefore short of what the catalogue answered with.`,
-    );
-  }
-  for (const [what, flagged] of [
-    ["release date", record.releaseDateUnreadable],
-    ["production date", record.productionDateUnreadable],
-  ] as const) {
-    if (flagged) {
-      structured[
-        what === "release date" ? "release_date_unreadable" : "production_date_unreadable"
-      ] = true;
-      notes.push(
-        `${record.source} published a ${what} this client could not read, so none is stated here. That is a date dropped and never a record carrying none.`,
-      );
-    }
-  }
-  if (!sourceOffers(record.source, "pending_edits")) {
-    notes.push(
-      `${record.source} publishes no count of edits open against a record, so whether this one is under revision there is unknown. Nothing here states that what it says is settled.`,
-    );
-  }
-  if (record.pendingEditsUnreadable) {
-    structured.pending_edits_unreadable = true;
-    notes.push(
-      `${record.source} publishes the edits open against a record and answered them in a shape this client could not read, so whether this one is under revision there is unknown. Nothing here states that what it says is settled.`,
-    );
-  }
-  if (record.pendingEdits) {
-    structured.pending_edits = record.pendingEdits;
-    notes.push(
-      `${record.pendingEdits} edit(s) to this record are open on ${record.source}, so what it states is under revision there.`,
-    );
-  }
-  const storedHere = storedNote(cached, record.retrievedAt);
-  if (storedHere) notes.push(storedHere);
-  if (cached) structured.cached = true;
-  structured.notes = notes;
-
-  // A section nobody asked for is absent from the payload rather than present
-  // and empty: an empty list reads as a catalogue holding none.
-  if (wantsFingerprints && record.fingerprintsSkipped) {
-    structured.fingerprints_skipped = record.fingerprintsSkipped;
-    notes.push(
-      `${record.fingerprintsSkipped} fingerprint row(s) this catalogue answered with could not be read and are left out of the list and of every count here.`,
-    );
-  }
-  if (wantsFingerprints && record.fingerprints) {
-    const shown = record.fingerprints.slice(0, FINGERPRINTS_SHOWN);
-    if (record.fingerprints.length > shown.length) {
-      notes.push(
-        `This record holds ${record.fingerprints.length} fingerprints and ${shown.length} are shown here, in the order the catalogue returned them. They are the first it named and not the most submitted.`,
-      );
-    }
-    structured.fingerprints_held = record.fingerprints.length;
-    structured.fingerprints = shown.map((row) => ({
-      algorithm: row.algorithm,
-      hash: row.hash,
-      duration_seconds: row.durationSeconds,
-      submissions: row.submissions,
-      reports: row.reports,
-      contested: row.contested,
-    }));
-    structured.fingerprint_count = record.fingerprintCount ?? {};
-    if (!sourceOffers(record.source, "fingerprint_reports")) {
-      notes.push(
-        `${record.source} publishes no count of reports against a fingerprint, so whether a fingerprint here is disputed is unknown. A fingerprint nobody has disputed and one on a catalogue that counts no disputes are different things.`,
-      );
-    }
-  }
-  if (wantsImages && record.images) {
-    structured.images = record.images;
-  }
-
-  if (record.releaseDate && record.releaseDate.precision !== "day") {
-    notes.push(
-      `The release date is recorded to the ${record.releaseDate.precision} only, so no day is stated.`,
-    );
-  }
-  if (record.productionDate && record.productionDate.precision !== "day") {
-    notes.push(
-      `The production date is recorded to the ${record.productionDate.precision} only, so no day is stated.`,
-    );
-  }
-  if (record.productionDate !== null && record.releaseDate !== null) {
-    // Worth a note only when both dates exist, which is where a reader could
-    // take one for the other.
-    notes.push(
-      "This record carries both dates. When a scene was made is a different question from when it was published.",
-    );
-  }
-
-  const text =
-    joinLines([
-      record.title ? `# ${inline(record.title)}` : "# (this record states no title)",
-      line("Catalogue", `${record.source} (${record.status})`),
-      line("Studio", record.studio ? formatStudio(record.studio) : null),
-      line("Released", dateText(record.releaseDate)),
-      line("Produced", dateText(record.productionDate)),
-      line("Duration", durationText(record.durationSeconds)),
-      line("Director", inline(record.director)),
-      line("Studio code", inline(record.code)),
-      line(
-        "Performers",
-        record.performers.length
-          ? record.performers
-              .map(
-                (entry) =>
-                  [
-                    inline(entry.name),
-                    entry.disambiguation ? ` (${inline(entry.disambiguation)})` : "",
-                    entry.creditedAs ? ` (credited as ${inline(entry.creditedAs)})` : "",
-                    entry.status === "established"
-                      ? ""
-                      : entry.status === "merged"
-                        ? " (this credit's identifier is merged into another record)"
-                        : " (this credit's identifier is withdrawn)",
-                  ].join("") || null,
-              )
-              .filter((entry): entry is string => entry !== null)
-              .join(", ")
-          : "(none credited on this record)",
-      ),
-      line(
-        "Tags",
-        record.tags.length
-          ? record.tags
-              .map(
-                (tag) => `${inline(tag.name)}${tag.status === "established" ? "" : " (withdrawn)"}`,
-              )
-              .join(", ")
-          : "(none on this record)",
-      ),
-      record.details ? `\n${quoted(record.details)}` : null,
-      record.urls.length === 0
-        ? "\nLinks: (none on this record)"
-        : `\nLinks:\n${record.urls
-            .map(
-              (link) =>
-                `  - ${link.siteName === null ? "(this catalogue names no site)" : inline(link.siteName)}${link.siteCategory ? ` [${inline(link.siteCategory)}]` : ""}: ${link.url}`,
-            )
-            .join("\n")}`,
-      wantsFingerprints && record.fingerprints?.length === 0
-        ? "\nFingerprints: (none on this record)"
-        : wantsFingerprints && record.fingerprints
-          ? `\nFingerprints (${record.fingerprints.length} held, ${Math.min(record.fingerprints.length, FINGERPRINTS_SHOWN)} shown):\n${record.fingerprints
-              .slice(0, FINGERPRINTS_SHOWN)
-              .map(
-                (row) =>
-                  `  - ${row.algorithm} ${row.hash}, ${row.submissions === null ? "submissions not counted" : `${row.submissions} submission(s)`}, ${
-                    row.reports === null ? "reports not counted here" : `${row.reports} report(s)`
-                  }${row.contested === null ? ", contest unknown" : row.contested ? ", contested" : ", uncontested"}`,
-              )
-              .join("\n")}`
-          : null,
-      wantsImages && record.images?.length === 0
-        ? "\nImages: (none on this record)"
-        : wantsImages && record.images
-          ? `\nImages (${record.images.length}):\n${record.images.map((image) => `  - ${image.url}`).join("\n")}`
-          : null,
-      `\n${sourceLine(record.sourceUrl)}`,
-    ]) + notesBlock(notes);
-
-  return { text, structured };
 }
 
-function formatStudio(studio: {
-  name: string;
-  parent: string | null;
-  status: string;
-  parentWithdrawn?: boolean;
-}): string {
-  const name = inline(studio.name) ?? "(unnamed studio)";
-  const withdrawn = studio.status === "established" ? "" : " (this identifier is withdrawn)";
-  const parent = inline(studio.parent);
-  if (!parent) return `${name}${withdrawn}`;
-  const parentMark = studio.parentWithdrawn ? ", whose identifier is withdrawn" : "";
-  return `${name}${withdrawn} (part of ${parent}${parentMark})`;
-}
+/* --------------------------------------------------------- the declaration */
+
+const input = strictInput({
+  id: identifier("id"),
+  sections: severalOf("sections", "the blocks of the record to render", SECTIONS).optional(),
+});
+
+const DESCRIPTION = [
+  "Read one scene from the catalogue its identifier names, written instance:uuid.",
+  "The answer states what the catalogue holds and what it publishes no field for, and it never turns one into the other.",
+  "An identifier the catalogue withdrew still resolves: what comes back describes the record rather than the scene it once named, and says so.",
+].join(" ");
 
 export function registerGetScene(server: McpServer, client: StashboxClient): void {
   server.registerTool(
     "get_scene",
     {
-      title: "Read one scene",
-      description:
-        "Read one catalogued scene by its identifier. The identifier names the catalogue that minted it, as returned by search_scenes or find_by_fingerprint. Sections are opt-in because a scene's fingerprints weigh more than everything else it carries.",
-      inputSchema: strictInput({
-        id: requiredText("Identifier as returned by another tool, such as stashdb:<uuid>."),
-        sections: z
-          .array(
-            z.enum(GET_SCENE_SECTIONS, {
-              error: `[invalid_input] A block is named as one of: ${GET_SCENE_SECTIONS.join(", ")}.`,
-            }),
-          )
-          .min(1, {
-            error:
-              "[invalid_input] An empty list names no block to load. Leave the argument out for the basic block, or name the blocks you want.",
-          })
-          .optional()
-          .describe("Which blocks to load. Defaults to basic when the argument is left out."),
-      }),
+      title: "Get one scene",
+      description: DESCRIPTION,
+      inputSchema: input,
       outputSchema: getSceneOutput,
-      annotations: {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: true,
-      },
+      annotations: { readOnlyHint: true, openWorldHint: true },
     },
-    async ({ id, sections }) => {
+    async (args: { id: string; sections?: SceneSection[] | undefined }) => {
       try {
-        const wanted = sections?.length ? sections : ["basic"];
-        const read = await client.getScene(id, wanted);
-        const rendered = renderScene(read.data, wanted, read.cached);
+        const wanted = asked(args.sections ?? ["basic"]) as readonly SceneSection[];
+        const read = await client.getScene(args.id, wanted);
+        const rendered = renderScene(read.data, wanted, { cached: read.cached });
         return {
           content: [{ type: "text" as const, text: rendered.text }],
           structuredContent: rendered.structured,
         };
-      } catch (cause) {
-        return toolError(cause);
+      } catch (error) {
+        return toolFailure(error);
       }
     },
   );

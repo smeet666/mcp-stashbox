@@ -1,456 +1,313 @@
 /**
- * One performer, read from the catalogue its identifier names.
+ * One performer, answered for the identifier that names them.
  *
- * The count of scenes is the field a reader most easily misreads, so it is
- * labelled everywhere it appears: it counts what this catalogue has indexed, and
- * a settled record naming a career spanning decades can report none.
+ * Two readings of the one rule decide everything here. **A marker describes the
+ * record and never the person it once named**: a folded identifier renders what
+ * the catalogue still holds, which is the identifier, the name the record
+ * carried and the successor the catalogue publishes, and the sections a caller
+ * asked for are named as unrenderable rather than answered with a record holding
+ * none of them. **A count of scenes is what this catalogue indexed**: a settled
+ * record naming a career of forty years can report none, so the number is
+ * printed with the catalogue it counts on, on the line that carries it.
  */
 
-import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { StashboxClient } from "../stashbox/client.js";
-import type { PerformerRecord } from "../types.js";
-import { strictInput, requiredText } from "./arguments.js";
-import { getPerformerOutput } from "./schemas.js";
+
+import { isFolded, markerSuffix } from "../answer/marker.js";
 import {
+  catalogueOf,
   dateText,
+  headLine,
+  imageRows,
+  linksText,
+  markerHead,
+  performerPayload,
+  recordNotes,
+  type Catalogue,
+} from "../answer/records.js";
+import {
   inline,
   inlineAll,
   joinLines,
-  storedNote,
-  sourceOffers,
   line,
   notesBlock,
+  section,
   sourceLine,
   type Rendered,
-} from "./shared.js";
-import { toolError } from "./errorShape.js";
+} from "../answer/text.js";
+import type { StashboxClient } from "../stashbox/client.js";
+import type { PerformerSection } from "../stashbox/queries.js";
+import type { PerformerAppearanceDetails, PerformerRecord } from "../types.js";
+import { identifier, severalOf, strictInput } from "./arguments.js";
+import { toolFailure } from "./errorShape.js";
+import { getPerformerOutput } from "./schemas.js";
 
-/**
- * Studios shown for a performer.
- *
- * A busy record credits well over a hundred, and returning them all left this as
- * the one section whose size a caller could not see before receiving it.
- */
-const STUDIOS_SHOWN = 25;
+/** The blocks a caller can ask for, in the order an answer renders them. */
+const SECTIONS = ["basic", "appearance", "images", "scenes", "studios"] as const;
 
-export const GET_PERFORMER_SECTIONS = [
-  "basic",
-  "appearance",
-  "images",
-  "scenes",
-  "studios",
-] as const;
+/** What a caller asked for, an empty list read as the block that identifies a record. */
+function asked(sections: readonly string[]): readonly string[] {
+  return sections.length === 0 ? ["basic"] : sections;
+}
 
-export function renderPerformer(
+/** The years a record carries for a career, in whichever of them it carries. */
+function careerText(record: PerformerRecord): string | null {
+  const { careerStartYear: from, careerEndYear: to } = record;
+  if (from !== null && to !== null) return `${from} to ${to}`;
+  if (from !== null) return `from ${from}`;
+  if (to !== null) return `to ${to}`;
+  return null;
+}
+
+/** The fields of a body the record carries, each named with its unit. */
+function appearanceRows(appearance: PerformerAppearanceDetails): string[] {
+  const rows: (string | null)[] = [
+    line("  Height", appearance.heightCm === null ? null : `${appearance.heightCm} cm`),
+    line("  Ethnicity", inline(appearance.ethnicity)),
+    line("  Eye colour", inline(appearance.eyeColor)),
+    line("  Hair colour", inline(appearance.hairColor)),
+    line("  Breast type", inline(appearance.breastType)),
+    line("  Cup size", inline(appearance.cupSize)),
+    line("  Band size", appearance.bandSize === null ? null : `${appearance.bandSize} inches`),
+    line("  Waist", appearance.waistSize === null ? null : `${appearance.waistSize} inches`),
+    line("  Hips", appearance.hipSize === null ? null : `${appearance.hipSize} inches`),
+    appearance.tattoos.length === 0 ? null : `  Tattoos: ${inlineAll(appearance.tattoos)}`,
+    appearance.piercings.length === 0 ? null : `  Piercings: ${inlineAll(appearance.piercings)}`,
+  ];
+  return rows.filter((row): row is string => row !== null);
+}
+
+/** One scene the catalogue indexes for this performer, with the mark it carries. */
+function sceneRows(record: PerformerRecord): string[] {
+  return (record.scenes ?? []).map((scene) => {
+    const named = `${inline(scene.title) ?? scene.id}${markerSuffix(scene.status)}`;
+    const when = scene.releaseDate === null ? "" : `, ${scene.releaseDate.value}`;
+    return `  - ${named}${when} [${scene.id}]`;
+  });
+}
+
+/** One studio this catalogue credits the performer on, with the mark it carries. */
+function studioRows(record: PerformerRecord, catalogue: Catalogue): string[] {
+  return (record.studios ?? []).map((studio) => {
+    const named = `${inline(studio.name) ?? studio.id}${markerSuffix(studio.status)}`;
+    const counted =
+      studio.sceneCount === null
+        ? ""
+        : `, ${studio.sceneCount} scene(s) indexed on ${catalogue.name}`;
+    return `  - ${named}${counted} [${studio.id}]`;
+  });
+}
+
+/** The heavy blocks, each stating its own zero where it holds nothing. */
+function performerSections(
   record: PerformerRecord,
+  catalogue: Catalogue,
   sections: readonly string[],
-  cached = false,
-): Rendered {
-  const notes: string[] = [];
-
-  if (record.status !== "established") {
-    // A folded record answers under its old identifier carrying the name it held
-    // then and an emptied body. It names its successor and stops there.
-    const structured = {
-      id: record.id,
-      source: record.source,
-      source_url: record.sourceUrl,
-      retrieved_at: record.retrievedAt,
-      status: record.status,
-      merged_into: record.mergedInto,
-      merged_ids: record.mergedIds,
-      former_name: record.name,
-      // A marker carries little, so what little it lost is the whole of what
-      // this client could not read of it.
-      ...(record.rowsSkipped
-        ? { rows_skipped: record.rowsSkipped, rows_skipped_in: record.rowsSkippedIn ?? [] }
-        : {}),
-      scene_count: null,
-      notes: [] as string[],
-      ...(cached ? { cached: true } : {}),
-    };
-    const text = joinLines([
-      record.status === "merged"
-        ? `This identifier addresses a record ${record.source} has merged into another.`
-        : `This identifier addresses a record ${record.source} has withdrawn.`,
-      line("Former name", inline(record.name)),
-      line("Continues as", record.mergedInto),
-      line(
-        "Identifiers folded in here",
-        record.mergedIds.length ? record.mergedIds.join(", ") : null,
+): (string | null)[] {
+  const parts: (string | null)[] = [];
+  if (sections.includes("appearance")) {
+    parts.push(
+      section(
+        "Appearance",
+        record.appearance === undefined ? [] : appearanceRows(record.appearance),
+        `this record carries none of what ${catalogue.name} records here.`,
       ),
-      sourceLine(record.sourceUrl),
-    ]);
-    const unrendered = sections.filter((name) => name !== "basic");
-    const markerNotes = [
-      ...(record.rowsSkipped
-        ? [
-            `${record.rowsSkipped} row(s) of this marker could not be read and are left out of ${(record.rowsSkippedIn ?? []).join(", ")}. What is shown is therefore short of what the catalogue answered with.`,
-          ]
-        : []),
-      record.status === "merged"
-        ? "This record is a marker. Its emptiness describes the record and states nothing about the person it once named."
-        : "A withdrawn record states nothing about the person it once named.",
-      ...(unrendered.length
-        ? [
-            `A marker carries no body, so ${unrendered.join(", ")} could not be rendered here.${record.mergedInto ? " Ask for them on the record that continues it." : ""}`,
-          ]
-        : []),
-      ...(record.mergedInto ? [`Read ${record.mergedInto} for the record that continues it.`] : []),
-    ];
-    const stored = storedNote(cached, record.retrievedAt);
-    if (stored) markerNotes.push(stored);
-    structured.notes = markerNotes;
-    return { text: text + notesBlock(markerNotes), structured };
+    );
+  }
+  if (sections.includes("images")) {
+    parts.push(
+      section(
+        "Images",
+        imageRows(record.images ?? []),
+        `${catalogue.name} published none with this record.`,
+      ),
+    );
+  }
+  if (sections.includes("scenes")) {
+    parts.push(
+      section(
+        "Scenes",
+        sceneRows(record),
+        record.scenesUnavailable ?? `${catalogue.name} has indexed none crediting this performer.`,
+      ),
+    );
+  }
+  if (sections.includes("studios")) {
+    parts.push(
+      section(
+        "Studios",
+        studioRows(record, catalogue),
+        record.studiosUnavailable ?? `${catalogue.name} credits this performer on none.`,
+      ),
+    );
+  }
+  return parts;
+}
+
+/** What a performer owes a reader beyond the fields a record carries. */
+function performerExtras(
+  record: PerformerRecord,
+  catalogue: Catalogue,
+  sections: readonly string[],
+): (string | null)[] {
+  const notes: (string | null)[] = [];
+
+  if (!catalogue.publishes("scene_count")) {
+    notes.push(
+      `${catalogue.name} publishes no count of the scenes crediting a performer, so nothing here counts them.`,
+    );
+  } else if (record.sceneCount === null) {
+    notes.push(
+      `${catalogue.name} publishes a count of the scenes crediting a performer and this record carries none, so nothing here counts them.`,
+    );
   }
 
-  const structured: Record<string, unknown> = {
-    id: record.id,
-    source: record.source,
-    source_url: record.sourceUrl,
-    retrieved_at: record.retrievedAt,
-    status: record.status,
-    merged_into: record.mergedInto,
-    merged_ids: record.mergedIds,
-    name: record.name,
-    disambiguation: record.disambiguation,
-    aliases: record.aliases,
-    gender: record.gender,
-    country: record.country,
-    birth_date: record.birthDate,
-    death_date: record.deathDate,
-    career_start_year: record.careerStartYear,
-    career_end_year: record.careerEndYear,
-    scene_count: record.sceneCount,
-    ...(record.sceneCount === null
-      ? {}
-      : {
-          scene_count_means: `scenes ${record.source} has indexed crediting this performer`,
-        }),
-    urls: record.urls.map((link) => ({
-      url: link.url,
-      site_name: link.siteName,
-      site_category: link.siteCategory,
-    })),
-    created: record.created,
-    updated: record.updated,
-  };
-  if (record.imagesSkipped) {
-    structured.images_skipped = record.imagesSkipped;
+  if (record.imagesSkipped !== undefined && sections.includes("images")) {
     notes.push(
-      `${record.imagesSkipped} image row(s) this catalogue answered with could not be read and are left out of this section and of the number shown.`,
+      `${record.imagesSkipped} image(s) ${catalogue.name} answered with could not be read and are left out of the block here.`,
     );
   }
-  if (record.urls.length && record.urls.every((link) => link.siteName === null)) {
-    notes.push(
-      `No link on this record carries a site ${record.source} names, so none of these addresses is named here. Each one is what the catalogue published, and what it points at is not stated.`,
-    );
-  }
-  const unnamedLinks = record.urls.filter((link) => link.siteName === null).length;
-  if (unnamedLinks && unnamedLinks < record.urls.length) {
-    notes.push(
-      `${unnamedLinks} of these ${record.urls.length} links carry no site ${record.source} names, and are shown by their address alone.`,
-    );
-  }
-  if (record.deathDate && record.deathDate.precision !== "day") {
-    notes.push(
-      `The death date is recorded to the ${record.deathDate.precision} only, so no day is stated.`,
-    );
-  }
-  if (record.urls.length && !sourceOffers(record.source, "site_categories")) {
-    notes.push(
-      `${record.source} publishes no table sorting the sites a record links to, so no link here carries a category. Nothing was asked of it about what these addresses point at, and that is no evidence that the catalogue places them in none.`,
-    );
-  }
-  for (const [what, flagged] of [
-    ["birth date", record.birthDateUnreadable],
-    ["death date", record.deathDateUnreadable],
-  ] as const) {
-    if (flagged) {
-      structured[what === "birth date" ? "birth_date_unreadable" : "death_date_unreadable"] = true;
+
+  if (sections.includes("scenes")) {
+    if (record.scenesUnavailable !== undefined) notes.push(record.scenesUnavailable);
+    else if (record.scenes !== undefined) {
       notes.push(
-        `${record.source} published a ${what} this client could not read, so none is stated here. That is a date dropped and never a record carrying none.`,
+        record.scenesTotal === null || record.scenesTotal === undefined
+          ? `${catalogue.name} publishes no count of what its index holds behind this page, so the scenes here are what came back and no number says how many more it indexes.`
+          : `${catalogue.name} has indexed ${record.scenesTotal} scene(s) crediting this performer and ${record.scenesShown ?? record.scenes.length} are shown here. That counts what the catalogue indexed and never a person's work.`,
+      );
+    }
+    if (record.scenesSkipped !== undefined) {
+      notes.push(
+        `${record.scenesSkipped} scene(s) ${catalogue.name} answered with could not be read and are left out of the block here.`,
       );
     }
   }
-  if (record.rowsSkipped) {
-    structured.rows_skipped = record.rowsSkipped;
-    structured.rows_skipped_in = record.rowsSkippedIn ?? [];
-    notes.push(
-      `${record.rowsSkipped} row(s) of this record's own lists could not be read and are left out of ${(record.rowsSkippedIn ?? []).join(", ")}. What is shown of those is therefore short of what the catalogue answered with.`,
-    );
-  }
-  if (!sourceOffers(record.source, "pending_edits")) {
-    notes.push(
-      `${record.source} publishes no count of edits open against a record, so whether this one is under revision there is unknown. Nothing here states that what it says is settled.`,
-    );
-  }
-  if (record.pendingEditsUnreadable) {
-    structured.pending_edits_unreadable = true;
-    notes.push(
-      `${record.source} publishes the edits open against a record and answered them in a shape this client could not read, so whether this one is under revision there is unknown. Nothing here states that what it says is settled.`,
-    );
-  }
-  if (record.pendingEdits) {
-    structured.pending_edits = record.pendingEdits;
-    notes.push(
-      `${record.pendingEdits} edit(s) to this record are open on ${record.source}, so what it states is under revision there.`,
-    );
-  }
-  const storedHere = storedNote(cached, record.retrievedAt);
-  if (storedHere) notes.push(storedHere);
-  if (cached) structured.cached = true;
-  structured.notes = notes;
 
-  const appearanceEmpty = !record.appearance || appearanceLines(record).length === 0;
-  if (sections.includes("appearance") && !record.appearance) {
-    // A section asked for and absent from the answer reads as a section nobody
-    // asked for. The emptiness is published so the two stay apart.
-    structured.appearance = {
-      ethnicity: null,
-      eye_color: null,
-      hair_color: null,
-      height_cm: null,
-      breast_type: null,
-      cup_size: null,
-      band_size: null,
-      waist_size: null,
-      hip_size: null,
-      tattoos: null,
-      piercings: null,
-    };
-  }
-  if (sections.includes("appearance") && appearanceEmpty) {
-    notes.push(
-      `${record.source} publishes none of the fields the appearance section holds for this record, so the section is empty rather than unread.`,
-    );
-  }
-  if (sections.includes("appearance") && record.appearance) {
-    // Only what the record carries. Printing a placeholder for an absent
-    // measurement would state more than the catalogue holds.
-    const present = {
-      ethnicity: record.appearance.ethnicity,
-      eye_color: record.appearance.eyeColor,
-      hair_color: record.appearance.hairColor,
-      height_cm: record.appearance.heightCm,
-      breast_type: record.appearance.breastType,
-      cup_size: record.appearance.cupSize,
-      band_size: record.appearance.bandSize,
-      waist_size: record.appearance.waistSize,
-      hip_size: record.appearance.hipSize,
-      tattoos: record.appearance.tattoos.length ? record.appearance.tattoos : null,
-      piercings: record.appearance.piercings.length ? record.appearance.piercings : null,
-    };
-    structured.appearance = present;
-  }
-  if (sections.includes("images") && record.images) structured.images = record.images;
-  if (sections.includes("studios") && record.studiosUnavailable) {
-    structured.studios_unavailable = record.studiosUnavailable;
-    notes.push(
-      `The studios section was asked for and could not be read (${record.studiosUnavailable}). Its absence here says nothing about what ${record.source} holds.`,
-    );
-  }
-  if (sections.includes("studios") && record.studiosSkipped) {
-    structured.studios_skipped = record.studiosSkipped;
-    notes.push(
-      `${record.studiosSkipped} studio row(s) this catalogue answered with could not be read and are left out of this section, while the number credited counts them.`,
-    );
-  }
-  if (sections.includes("studios") && record.studios) {
-    const shown = record.studios.slice(0, STUDIOS_SHOWN);
-    structured.studios = shown.map((studio) => ({
-      id: studio.id,
-      name: studio.name,
-      scene_count: studio.sceneCount,
-      status: studio.status,
-    }));
-    if (record.studiosTotal !== undefined) {
-      structured.studios_total = record.studiosTotal;
-      if (record.studiosTotal - (record.studiosSkipped ?? 0) > shown.length) {
-        notes.push(
-          `This record credits ${record.studiosTotal} studios and ${shown.length} are shown here, in the order the catalogue returned them. They are the first it named and not the ones it credits most.`,
-        );
-      }
+  if (sections.includes("studios")) {
+    if (record.studiosUnavailable !== undefined) notes.push(record.studiosUnavailable);
+    if (record.studiosSkipped !== undefined) {
+      notes.push(
+        `${record.studiosSkipped} studio(s) ${catalogue.name} answered with could not be read and are left out of the block here.`,
+      );
     }
   }
-  if (sections.includes("scenes") && record.scenesUnavailable) {
-    structured.scenes_unavailable = record.scenesUnavailable;
-    notes.push(
-      `The scenes section was asked for and is not here: ${record.scenesUnavailable}. Its absence says nothing about what ${record.source} holds.`,
-    );
-  }
-  if (sections.includes("scenes") && record.scenesSkipped) {
-    structured.scenes_skipped = record.scenesSkipped;
-    notes.push(
-      `${record.scenesSkipped} scene(s) this catalogue answered with could not be read and are left out of this section and of the number shown.`,
-    );
-  }
-  if (sections.includes("scenes") && record.scenes) {
-    if (record.scenesTotal !== null && record.scenesTotal !== undefined) {
-      structured.scenes_total = record.scenesTotal;
-      if (record.scenesTotal > (record.scenesShown ?? 0)) {
-        notes.push(
-          `This section shows ${record.scenesShown ?? 0} of the ${record.scenesTotal} scenes ${record.source} indexes for this performer.`,
-        );
-      }
-    }
-    structured.scenes = record.scenes.map((scene) => ({
-      id: scene.id,
-      title: scene.title,
-      status: scene.status,
-      release_date: scene.releaseDate,
-      studio: scene.studio?.name ?? null,
-      source_url: scene.sourceUrl,
-    }));
-  }
 
-  // What a catalogue publishes is read from what it declares, never from one
-  // record's null: a supporting catalogue answering a null on one row would
-  // otherwise make the server state a fact about the catalogue.
-  if (record.status === "established" && !sourceOffers(record.source, "scene_count")) {
-    notes.push(
-      `${record.source} publishes no count of the scenes it indexes for a performer, so this record carries none. That is this catalogue's silence and states nothing about the person's work.`,
-    );
-  }
-  if (record.sceneCount === 0) {
-    notes.push(
-      `${record.source} has indexed no scenes crediting this performer. That counts this catalogue's coverage and states nothing about the person's work.`,
-    );
-  }
-  if (record.birthDate && record.birthDate.precision !== "day") {
-    notes.push(
-      `The birth date is recorded to the ${record.birthDate.precision} only, so no day is stated.`,
-    );
-  }
-  if (record.mergedIds.length > 0) {
-    notes.push(
-      `This record has absorbed ${record.mergedIds.length} other identifier(s), which still resolve to it.`,
-    );
-  }
-
-  const text =
-    joinLines([
-      record.name ? `# ${inline(record.name)}` : "# (this record states no name)",
-      line("Catalogue", `${record.source} (${record.status})`),
-      line("Told apart by", inline(record.disambiguation)),
-      line("Also credited as", record.aliases.length ? inlineAll(record.aliases) : null),
-      line("Gender", record.gender),
-      line("Country", record.country),
-      line("Born", dateText(record.birthDate)),
-      line("Died", dateText(record.deathDate)),
-      line(
-        "Career",
-        record.careerStartYear || record.careerEndYear
-          ? `${record.careerStartYear ?? "?"}–${record.careerEndYear ?? "?"}`
-          : null,
-      ),
-      line(
-        "Scenes indexed here",
-        record.sceneCount === null ? null : `${record.sceneCount} on ${record.source}`,
-      ),
-      sections.includes("appearance")
-        ? `\nAppearance:\n${appearanceLines(record).join("\n") || "  (this catalogue publishes none of the fields this section holds)"}`
-        : null,
-      record.urls.length
-        ? `\nLinks:\n${record.urls
-            .map(
-              (link) =>
-                `  - ${link.siteName === null ? "(this catalogue names no site)" : inline(link.siteName)}${link.siteCategory ? ` [${inline(link.siteCategory)}]` : ""}: ${link.url}`,
-            )
-            .join("\n")}`
-        : null,
-      sections.includes("studios") && record.studios?.length === 0
-        ? "\nStudios: (none credited on this record)"
-        : sections.includes("studios") && record.studios
-          ? `\nStudios (${record.studiosTotal === undefined ? "count not published" : `${record.studiosTotal} credited`}, ${Math.min(record.studios.length, STUDIOS_SHOWN)} shown):\n${record.studios
-              .slice(0, STUDIOS_SHOWN)
-              .map(
-                (studio) =>
-                  `  - ${inline(studio.name)}${studio.status === "established" ? "" : " (this identifier is withdrawn)"}: ${studio.sceneCount === null ? "scenes not counted here" : `${studio.sceneCount} scene(s) indexed`}`,
-              )
-              .join("\n")}`
-          : null,
-      sections.includes("scenes") && record.scenes?.length === 0
-        ? "\nScenes: (none indexed for this record)"
-        : sections.includes("scenes") && record.scenes
-          ? `\nScenes (${record.scenesTotal === null || record.scenesTotal === undefined ? "count not published" : `${record.scenesTotal} indexed`}, ${record.scenes.length} shown):\n${record.scenes
-              .map(
-                (scene) =>
-                  `  - ${inline(scene.title) ?? "(untitled)"}${scene.status === "established" ? "" : scene.status === "merged" ? " (merged into another record)" : " (withdrawn)"}: ${scene.sourceUrl}`,
-              )
-              .join("\n")}`
-          : null,
-      sections.includes("images") && record.images?.length === 0
-        ? "\nImages: (none on this record)"
-        : sections.includes("images") && record.images
-          ? `\nImages (${record.images.length}):\n${record.images.map((image) => `  - ${image.url}`).join("\n")}`
-          : null,
-      `\n${sourceLine(record.sourceUrl)}`,
-    ]) + notesBlock(notes);
-
-  return { text, structured };
+  return notes;
 }
 
-function appearanceLines(record: PerformerRecord): string[] {
-  const appearance = record.appearance;
-  if (!appearance) return [];
-  return [
-    line("  Height", appearance.heightCm === null ? null : `${appearance.heightCm} cm`),
-    line("  Ethnicity", inline(appearance.ethnicity)),
-    line("  Eyes", appearance.eyeColor),
-    line("  Hair", appearance.hairColor),
-    line("  Breast type", appearance.breastType),
-    line("  Cup size", inline(appearance.cupSize)),
-    line("  Band size", appearance.bandSize === null ? null : String(appearance.bandSize)),
-    line("  Waist", appearance.waistSize === null ? null : String(appearance.waistSize)),
-    line("  Hips", appearance.hipSize === null ? null : String(appearance.hipSize)),
-    line("  Tattoos", appearance.tattoos.length ? inlineAll(appearance.tattoos) : null),
-    line("  Piercings", appearance.piercings.length ? inlineAll(appearance.piercings) : null),
-  ].filter((entry): entry is string => entry !== null);
+/**
+ * One performer as a caller reads them: the prose and the payload, carrying the
+ * same facts and the same qualifications.
+ */
+export function renderPerformer(
+  record: PerformerRecord,
+  sections: readonly string[] = ["basic"],
+  read: { cached?: boolean } = {},
+): Rendered {
+  const wanted = asked(sections);
+  const catalogue = catalogueOf(record.source);
+  const folded = isFolded(record.status);
+  const unrendered = wanted.filter((name) => name !== "basic");
+  const payload = performerPayload(record, folded ? ["basic"] : wanted);
+
+  const notes = recordNotes(
+    {
+      catalogue,
+      kind: "performer",
+      status: record.status,
+      successor: record.mergedInto,
+      unrendered,
+      dates: [
+        {
+          what: "birth date",
+          date: record.birthDate,
+          unreadable: record.birthDateUnreadable === true,
+        },
+        {
+          what: "death date",
+          date: record.deathDate,
+          unreadable: record.deathDateUnreadable === true,
+        },
+      ],
+      links: record.urls,
+      tags: [],
+      pendingEdits: record.pendingEdits,
+      pendingEditsUnreadable: record.pendingEditsUnreadable === true,
+      rowsSkipped: record.rowsSkipped ?? 0,
+      rowsSkippedIn: record.rowsSkippedIn ?? [],
+      cached: read.cached === true,
+      retrievedAt: record.retrievedAt,
+      payload,
+    },
+    folded ? [] : performerExtras(record, catalogue, wanted),
+  );
+
+  const about = inline(record.disambiguation);
+  const parts: (string | null)[] = folded
+    ? [
+        ...markerHead(catalogue, "performer", record, inline(record.name), record.mergedInto),
+        record.mergedIds.length === 0 ? null : `Folded into it: ${record.mergedIds.join(", ")}`,
+      ]
+    : [
+        `${headLine(record.name, record.id)}${about === null ? "" : ` (${about})`}`,
+        `${catalogue.name}, performer ${record.id}`,
+        record.aliases.length === 0 ? null : `Aliases: ${inlineAll(record.aliases)}`,
+        line("Gender", inline(record.gender)),
+        line("Country", inline(record.country)),
+        line("Born", dateText(record.birthDate)),
+        line("Died", dateText(record.deathDate)),
+        line("Career", careerText(record)),
+        record.sceneCount === null
+          ? null
+          : `Scenes indexed on ${catalogue.name}: ${record.sceneCount}`,
+        `Links: ${record.urls.length === 0 ? `${catalogue.name} links this record nowhere else.` : linksText(record.urls)}`,
+        ...performerSections(record, catalogue, wanted),
+      ];
+
+  parts.push(sourceLine(record.sourceUrl));
+  parts.push(`Read from ${catalogue.name} at ${record.retrievedAt}`);
+
+  return {
+    text: joinLines(parts) + notesBlock(notes),
+    structured: { ...payload, ...(read.cached === true ? { cached: true } : {}), notes },
+  };
 }
+
+/* --------------------------------------------------------- the declaration */
+
+const input = strictInput({
+  id: identifier("id"),
+  sections: severalOf("sections", "the blocks of the record to render", SECTIONS).optional(),
+});
+
+const DESCRIPTION = [
+  "Read one performer from the catalogue its identifier names, written instance:uuid.",
+  "A count of scenes reports what that catalogue has indexed and never a person's work: a settled record can report none while naming a career spanning decades.",
+  "An identifier the catalogue folded still resolves: what comes back describes the record rather than the person it once named, and names the record that continues it.",
+].join(" ");
 
 export function registerGetPerformer(server: McpServer, client: StashboxClient): void {
   server.registerTool(
     "get_performer",
     {
-      title: "Read one performer",
-      description:
-        "Read one catalogued performer by its identifier. 'scene_count' counts what that catalogue has indexed: a settled record naming a career spanning decades can report none, and that states the catalogue's coverage, never a career. An identifier folded into another answers as a marker naming its successor.",
-      inputSchema: strictInput({
-        id: requiredText("Identifier as returned by another tool, such as stashdb:<uuid>."),
-        sections: z
-          .array(
-            z.enum(GET_PERFORMER_SECTIONS, {
-              error: `[invalid_input] A block is named as one of: ${GET_PERFORMER_SECTIONS.join(", ")}.`,
-            }),
-          )
-          .min(1, {
-            error:
-              "[invalid_input] An empty list names no block to load. Leave the argument out for the basic block, or name the blocks you want.",
-          })
-          .optional()
-          .describe("Which blocks to load. Defaults to basic when the argument is left out."),
-      }),
+      title: "Get one performer",
+      description: DESCRIPTION,
+      inputSchema: input,
       outputSchema: getPerformerOutput,
-      annotations: {
-        readOnlyHint: true,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: true,
-      },
+      annotations: { readOnlyHint: true, openWorldHint: true },
     },
-    async ({ id, sections }) => {
+    async (args: { id: string; sections?: PerformerSection[] | undefined }) => {
       try {
-        const wanted = sections?.length ? sections : ["basic"];
-        const read = await client.getPerformer(id, wanted);
-        const rendered = renderPerformer(read.data, wanted, read.cached);
+        const wanted = asked(args.sections ?? ["basic"]) as readonly PerformerSection[];
+        const read = await client.getPerformer(args.id, wanted);
+        const rendered = renderPerformer(read.data, wanted, { cached: read.cached });
         return {
           content: [{ type: "text" as const, text: rendered.text }],
           structuredContent: rendered.structured,
         };
-      } catch (cause) {
-        return toolError(cause);
+      } catch (error) {
+        return toolFailure(error);
       }
     },
   );

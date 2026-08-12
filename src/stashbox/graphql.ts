@@ -1,313 +1,391 @@
 /**
- * One GraphQL request against one catalogue.
+ * One GraphQL request against one catalogue, and the reading it gives to every
+ * answer that can come back.
  *
- * The trap this module exists for: **a refusal arrives inside a success.** These
- * catalogues answer HTTP 200 with an `errors` array and a payload that is null,
- * so a client reading the status code and the payload alone renders "there is no
- * such record" where the catalogue said "I do not authorise you to ask". Errors
- * are therefore read before the payload, every time.
+ * The rule that governs this file: a failure never arrives as an emptiness.
+ * These catalogues answer HTTP 200 while refusing the question, putting the
+ * refusal in an `errors` array beside a payload of nulls, so a client that
+ * reads the payload first renders "this record does not exist" where the
+ * catalogue said "I do not authorise you to ask". Every failure here leaves as
+ * one of the six codes, naming the moment it happened, and only a payload with
+ * no error beside it reaches the caller as data.
+ *
+ * Diagnostics go to the logger, which writes to stderr: stdout carries the
+ * protocol.
  */
 
-import {
-  invalidInput,
-  networkError,
-  parseFailure,
-  rateLimited,
-  timeout,
-  StashboxError,
-} from "../errors.js";
 import type { Logger } from "../config.js";
+import { StashboxError, parseFailure, rateLimited } from "../errors.js";
+import { CONTACT_URL, PKG_NAME, VERSION } from "../version.js";
 import type { InstanceSpec } from "./instances.js";
-import type { RateLimiter } from "./rateLimiter.js";
-import { sleep } from "./rateLimiter.js";
+import { RateLimiter, sleep } from "./rateLimiter.js";
+
+/** The first wait between two attempts, which doubles with each further one. */
+const FIRST_RETRY_WAIT_MS = 500;
+
+/** The widest wait this client puts between two attempts of its own accord. */
+const LONGEST_RETRY_WAIT_MS = 8000;
+
+/**
+ * The longest delay a `Retry-After` header is honoured for. A catalogue naming
+ * a longer one is telling the caller to come back later, and holding the call
+ * open that long would look like a client that has hung.
+ */
+const LONGEST_HONOURED_RETRY_AFTER_MS = 60_000;
+
+/** A refusal to answer, which every catalogue phrases in its own words. */
+const REFUSAL = /\b(?:not|un)\s*authori[sz]ed\b|\bunauthenticated\b|\binvalid\s+api\s*key\b/i;
+
+/** A catalogue naming its own limit inside an otherwise successful answer. */
+const ASKING_FOR_ROOM = /\brate[\s-]?limit\b|\btoo many requests\b/i;
 
 export interface GraphQLRequest {
   query: string;
   variables?: Record<string, unknown>;
 }
 
-export interface Transport {
-  request<T>(spec: InstanceSpec, apiKey: string, body: GraphQLRequest): Promise<T>;
-}
-
 export interface HttpTransportOptions {
   fetchImpl: typeof fetch;
+  /** The name this client gives itself, completed when it carries no contact. */
   userAgent: string;
+  /** How long one attempt may take before the catalogue is called silent. */
   timeoutMs: number;
+  /** How many attempts follow the first one. */
   maxRetries: number;
-  /** Ceiling on one answer's body, so a stream nobody ends cannot fill memory. */
-  maxBodyBytes?: number;
-  /** One limiter per catalogue, looked up by instance id. */
+  /** The pace owed to the instance a request is going to. */
   limiterFor: (spec: InstanceSpec) => RateLimiter;
-  logger?: Logger;
+  logger: Logger;
 }
 
-interface GraphQLError {
-  message?: unknown;
+export interface HttpTransport {
+  request: <T>(spec: InstanceSpec, apiKey: string, body: GraphQLRequest) => Promise<T>;
 }
 
+/** A body carrying an answer, a refusal, or both. */
 interface GraphQLBody {
   data?: unknown;
-  errors?: GraphQLError[];
+  errors?: unknown;
 }
 
-/** Raised when a request outlives its deadline, so the cause names itself. */
-class DeadlineReached extends Error {
-  constructor() {
-    super("deadline reached");
-    this.name = "TimeoutError";
+/** What one attempt produced: a payload, or a failure and whether asking again is worth it. */
+type Attempt =
+  | { readonly outcome: "answered"; readonly data: unknown }
+  | {
+      readonly outcome: "failed";
+      readonly error: StashboxError;
+      readonly retryable: boolean;
+      readonly namedDelayMs?: number;
+    };
+
+export function createHttpTransport(options: HttpTransportOptions): HttpTransport {
+  const { fetchImpl, timeoutMs, maxRetries, limiterFor, logger } = options;
+  const userAgent = completeUserAgent(options.userAgent);
+
+  async function attemptOnce(
+    spec: InstanceSpec,
+    apiKey: string,
+    body: GraphQLRequest,
+    limiter: RateLimiter,
+  ): Promise<Attempt> {
+    const where = { instance: spec.name, url: spec.endpoint };
+    const controller = new AbortController();
+    // The deadline runs on a timer, so silence is reported at a stated instant
+    // instead of waiting on whatever the socket decides.
+    const deadline = setTimeout(() => controller.abort(), timeoutMs);
+
+    let response: Response;
+    try {
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        "User-Agent": userAgent,
+      };
+      // A key nobody set is a header nobody sends: an empty one would be read
+      // as a credential presented and refused.
+      if (apiKey) headers.ApiKey = apiKey;
+
+      response = await fetchImpl(spec.endpoint, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ query: body.query, variables: body.variables }),
+        signal: controller.signal,
+      });
+    } catch (cause) {
+      clearTimeout(deadline);
+      if (isAbort(cause)) {
+        return {
+          outcome: "failed",
+          error: new StashboxError(
+            "timeout",
+            `${spec.name} did not answer within ${timeoutMs} ms.`,
+            { ...where, hint: "The catalogue may be slow. Ask again in a moment." },
+          ),
+          retryable: true,
+        };
+      }
+      return {
+        outcome: "failed",
+        error: new StashboxError("network_error", `${spec.name} could not be reached.`, {
+          ...where,
+          hint: "The request did not complete, so the catalogue said nothing about this record.",
+        }),
+        retryable: true,
+      };
+    }
+
+    // The status line is read before the body because it carries its whole
+    // meaning on its own: a catalogue refusing a key answers an empty body, and
+    // reading that body first turns the one mistake a new caller makes into a
+    // catalogue that seems unreadable.
+    const status = response.status;
+
+    if (status === 429) {
+      // Room is given back whether or not this attempt is the last: asking
+      // again at the old pace is asking the catalogue to refuse twice.
+      limiter.pushBack();
+      const namedDelayMs = readRetryAfter(response.headers.get("retry-after"));
+      const failure: Attempt = {
+        outcome: "failed",
+        error: rateLimited(`${spec.name} asked this client to slow down.`, {
+          ...where,
+          status,
+        }),
+        retryable: true,
+        ...(namedDelayMs === undefined ? {} : { namedDelayMs }),
+      };
+      return failure;
+    }
+
+    if (status === 401 || status === 403) {
+      return {
+        outcome: "failed",
+        error: new StashboxError("invalid_input", `${spec.name} refused the key it was given.`, {
+          ...where,
+          status,
+          hint: `Set ${spec.envVar} to a key ${spec.name} accepts. This says nothing about whether the record exists.`,
+        }),
+        retryable: false,
+      };
+    }
+
+    if (status >= 500) {
+      return {
+        outcome: "failed",
+        error: new StashboxError("network_error", `${spec.name} answered ${status}.`, {
+          ...where,
+          status,
+          hint: "The catalogue is having trouble. Ask again in a moment.",
+        }),
+        retryable: true,
+      };
+    }
+
+    if (status >= 400) {
+      return {
+        outcome: "failed",
+        error: parseFailure(`${spec.name} answered ${status} to a request it was asked.`, {
+          ...where,
+          status,
+        }),
+        retryable: false,
+      };
+    }
+
+    let text: string;
+    try {
+      text = await response.text();
+    } catch {
+      // A body that stops part-way through is an answer that started and never
+      // arrived, which is silence rather than a connection that never opened.
+      return {
+        outcome: "failed",
+        error: new StashboxError("timeout", `${spec.name} stopped part-way through its answer.`, {
+          ...where,
+          status,
+        }),
+        retryable: true,
+      };
+    } finally {
+      clearTimeout(deadline);
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      return {
+        outcome: "failed",
+        error: parseFailure(`${spec.name} answered something that is not JSON.`, {
+          ...where,
+          status,
+        }),
+        retryable: false,
+      };
+    }
+
+    return readBody(spec, status, parsed, limiter);
   }
+
+  async function request<T>(spec: InstanceSpec, apiKey: string, body: GraphQLRequest): Promise<T> {
+    const limiter = limiterFor(spec);
+    let attemptsLeft = maxRetries;
+    let wait = FIRST_RETRY_WAIT_MS;
+
+    for (;;) {
+      const attempt = await limiter.schedule(() => attemptOnce(spec, apiKey, body, limiter));
+
+      if (attempt.outcome === "answered") {
+        limiter.succeeded();
+        return attempt.data as T;
+      }
+
+      const named = attempt.namedDelayMs;
+      if (named !== undefined && named > LONGEST_HONOURED_RETRY_AFTER_MS) {
+        throw attempt.error;
+      }
+      if (!attempt.retryable || attemptsLeft <= 0) throw attempt.error;
+
+      attemptsLeft -= 1;
+      // A delay the catalogue named governs, since it knows when it will answer
+      // again. Where it names none, the wait widens with each attempt and stops
+      // at a bound, so a retry never looks like a client that has hung.
+      const held = Math.max(wait, named ?? 0);
+      logger.debug(
+        `${spec.name} answered ${attempt.error.code}, asking again in ${held} ms (${attemptsLeft} attempts left after this one)`,
+      );
+      await sleep(held);
+      wait = Math.min(LONGEST_RETRY_WAIT_MS, wait * 2);
+    }
+  }
+
+  return { request };
 }
 
-/** Language a catalogue uses when it is asking for room. */
-const ASKS_FOR_ROOM = /(rate.?limit|too many requests|slow down|throttl)/i;
-/** Language a catalogue uses when the key is missing, wrong or insufficient. */
-const REFUSES_THE_ASK =
-  /(not authori[sz]ed|unauthenticated|unauthorized|forbidden|invalid.*token)/i;
+/**
+ * The reading of a body that arrived whole.
+ *
+ * The `errors` array is read before the payload: a body carrying both states a
+ * refusal beside whatever it managed to answer, and returning the payload would
+ * publish an absence the catalogue never stated.
+ */
+function readBody(
+  spec: InstanceSpec,
+  status: number,
+  parsed: unknown,
+  limiter: RateLimiter,
+): Attempt {
+  const where = { instance: spec.name, url: spec.endpoint, status };
 
-export function createHttpTransport(options: HttpTransportOptions): Transport {
-  const { fetchImpl, userAgent, timeoutMs, maxRetries, limiterFor, logger } = options;
-  const maxBodyBytes = options.maxBodyBytes ?? 32 * 1024 * 1024;
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return {
+      outcome: "failed",
+      error: parseFailure(`${spec.name} answered JSON that is not a GraphQL response.`, where),
+      retryable: false,
+    };
+  }
+
+  const body = parsed as GraphQLBody;
+  const errors = Array.isArray(body.errors) ? body.errors : undefined;
+  const carriesData = "data" in body;
+
+  if (body.errors !== undefined && errors === undefined) {
+    return {
+      outcome: "failed",
+      error: parseFailure(`${spec.name} answered an errors field that is not a list.`, where),
+      retryable: false,
+    };
+  }
+
+  if (errors !== undefined && errors.length > 0) {
+    const messages = errors.map(messageOf).filter((message) => message.length > 0);
+    const said = messages.join("; ") || "an error it did not describe";
+
+    if (messages.some((message) => REFUSAL.test(message))) {
+      return {
+        outcome: "failed",
+        error: new StashboxError("invalid_input", `${spec.name} refused the request: ${said}`, {
+          ...where,
+          hint: `Set ${spec.envVar} to a key ${spec.name} accepts, or ask for something this key may read. This says nothing about whether the record exists.`,
+        }),
+        retryable: false,
+      };
+    }
+
+    if (messages.some((message) => ASKING_FOR_ROOM.test(message))) {
+      limiter.pushBack();
+      return {
+        outcome: "failed",
+        error: rateLimited(`${spec.name} asked this client to slow down: ${said}`, where),
+        retryable: true,
+      };
+    }
+
+    // An error with no reading here is an answer this client cannot use. Calling
+    // it an absence would deny a record nobody said was missing.
+    return {
+      outcome: "failed",
+      error: parseFailure(`${spec.name} answered an error this client cannot read: ${said}`, where),
+      retryable: false,
+    };
+  }
+
+  // An empty errors array states no error, so the payload stands.
+  if (carriesData && body.data !== null && body.data !== undefined) {
+    return { outcome: "answered", data: body.data };
+  }
 
   return {
-    async request<T>(spec: InstanceSpec, apiKey: string, body: GraphQLRequest): Promise<T> {
-      const limiter = limiterFor(spec);
-
-      return limiter.schedule(async () => {
-        let lastTransient: StashboxError | undefined;
-
-        for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
-          // Claimed per attempt: a request that retries makes several calls and
-          // each of them owes the catalogue the same gap.
-          await limiter.beforeRequest();
-
-          let response: Response;
-          // The deadline runs on an ordinary timer rather than on a built-in
-          // one, so a test clock can reach it and the behaviour under a
-          // catalogue that never answers is settled by assertion.
-          const deadline = new AbortController();
-          const timer = setTimeout(() => deadline.abort(new DeadlineReached()), timeoutMs);
-          try {
-            response = await fetchImpl(spec.endpoint, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Accept: "application/json",
-                // The catalogue reads the key from this header. It travels with
-                // every request, since none of them answer without it.
-                ApiKey: apiKey,
-                "User-Agent": userAgent,
-              },
-              body: JSON.stringify(body),
-              signal: deadline.signal,
-            });
-          } catch (cause) {
-            const aborted =
-              deadline.signal.aborted ||
-              cause instanceof DeadlineReached ||
-              (cause instanceof Error &&
-                (cause.name === "TimeoutError" || cause.name === "AbortError"));
-            const error = aborted
-              ? timeout(`${spec.name} did not answer within ${timeoutMs} ms.`, {
-                  url: spec.endpoint,
-                  instance: spec.id,
-                })
-              : networkError(`The request to ${spec.name} did not complete.`, {
-                  url: spec.endpoint,
-                  instance: spec.id,
-                });
-            clearTimeout(timer);
-            if (aborted || attempt === maxRetries) throw error;
-            lastTransient = error;
-            await backoff(attempt, limiter);
-            continue;
-          }
-
-          if (response.status === 429) {
-            clearTimeout(timer);
-            limiter.pushBack();
-            const error = rateLimited(`${spec.name} asked this client to slow down.`, {
-              url: spec.endpoint,
-              status: 429,
-              instance: spec.id,
-            });
-            if (attempt === maxRetries) throw error;
-            lastTransient = error;
-            // A catalogue naming how long to wait has said what this client owes
-            // it. Asking again sooner is asking it to refuse a second time.
-            await backoff(attempt, limiter, namedDelayMs(response.headers.get("retry-after")));
-            continue;
-          }
-
-          if (response.status >= 500) {
-            clearTimeout(timer);
-            const error = networkError(`${spec.name} answered ${response.status}.`, {
-              url: spec.endpoint,
-              status: response.status,
-              instance: spec.id,
-            });
-            if (attempt === maxRetries) throw error;
-            lastTransient = error;
-            logger?.debug(`${spec.id}: ${response.status}, retrying`);
-            await backoff(attempt, limiter);
-            continue;
-          }
-
-          let text: string;
-          try {
-            text = await readBody(response, spec, maxBodyBytes);
-          } catch (cause) {
-            throw cause instanceof StashboxError
-              ? cause
-              : timeout(`${spec.name} stopped part-way through its answer.`, {
-                  url: spec.endpoint,
-                  instance: spec.id,
-                });
-          } finally {
-            clearTimeout(timer);
-          }
-
-          // The statuses that carry their whole meaning in the status line. A
-          // refusal answers with an empty body, so reading one first turns the
-          // one mistake a new caller makes into an unreadable catalogue.
-          if (response.status === 401 || response.status === 403) {
-            throw invalidInput(
-              `${spec.name} refused this client's key.`,
-              `Set ${spec.envVar} to a key for ${spec.name}, which is issued from a profile on that catalogue. This says nothing about whether the record exists.`,
-            );
-          }
-          if (response.status === 429) {
-            limiter.pushBack();
-            throw rateLimited(`${spec.name} asked this client to slow down.`, {
-              url: spec.endpoint,
-              instance: spec.id,
-            });
-          }
-
-          let parsed: GraphQLBody;
-          try {
-            parsed = JSON.parse(text) as GraphQLBody;
-          } catch {
-            throw parseFailure(
-              text.trim() === ""
-                ? `${spec.name} answered ${response.status} with an empty body.`
-                : `${spec.name} answered something this client cannot read.`,
-              { url: spec.endpoint, status: response.status, instance: spec.id },
-            );
-          }
-
-          // Errors first. A payload beside them describes nothing that was asked.
-          const failure = readErrors(parsed, spec);
-          if (failure) {
-            if (failure.code === "rate_limited") limiter.pushBack();
-            throw failure;
-          }
-
-          if (response.status >= 400) {
-            throw parseFailure(
-              `${spec.name} answered ${response.status} without saying what was wrong.`,
-              { url: spec.endpoint, status: response.status, instance: spec.id },
-            );
-          }
-
-          if (parsed.data === undefined || parsed.data === null) {
-            throw parseFailure(`${spec.name} answered with no payload and no error.`, {
-              url: spec.endpoint,
-              instance: spec.id,
-            });
-          }
-
-          limiter.succeeded();
-          return parsed.data as T;
-        }
-
-        // Every attempt was spent on something transient.
-        throw (
-          lastTransient ??
-          networkError(`The request to ${spec.name} did not complete.`, {
-            url: spec.endpoint,
-            instance: spec.id,
-          })
-        );
-      });
-    },
+    outcome: "failed",
+    error: parseFailure(`${spec.name} answered neither a payload nor an error.`, where),
+    retryable: false,
   };
 }
 
-/** The error a body carries, read as the kind of failure it describes. */
-function readErrors(body: GraphQLBody, spec: InstanceSpec): StashboxError | undefined {
-  const errors = body.errors;
-  if (!Array.isArray(errors) || errors.length === 0) return undefined;
-
-  const messages = errors
-    .map((entry) => (typeof entry?.message === "string" ? entry.message : ""))
-    .filter((message) => message !== "");
-  const joined = messages.join("; ") || "an error it did not describe";
-
-  if (messages.some((message) => ASKS_FOR_ROOM.test(message))) {
-    return rateLimited(`${spec.name} asked this client to slow down.`, {
-      url: spec.endpoint,
-      instance: spec.id,
-    });
+function messageOf(entry: unknown): string {
+  if (typeof entry === "string") return entry;
+  if (typeof entry === "object" && entry !== null) {
+    const message = (entry as { message?: unknown }).message;
+    if (typeof message === "string") return message;
   }
-
-  if (messages.some((message) => REFUSES_THE_ASK.test(message))) {
-    return invalidInput(
-      `${spec.name} refused the request: ${joined}.`,
-      `Set ${spec.envVar} to a key for ${spec.name}. This says nothing about whether the record exists.`,
-    );
-  }
-
-  return parseFailure(`${spec.name} answered with an error: ${joined}.`, {
-    url: spec.endpoint,
-    instance: spec.id,
-  });
+  return "";
 }
 
 /**
- * The body, refused past a ceiling.
+ * The delay a catalogue named, in milliseconds, when the header can be read.
  *
- * A catalogue answering an unbounded stream would otherwise be read into memory
- * whole, and the size of an answer is the one thing a caller cannot see before
- * receiving it.
+ * A header holding a number of seconds and one holding a date are both valid,
+ * and a header holding neither is trusted for nothing: waiting on a value this
+ * client guessed at would be its own delay wearing the catalogue's name.
  */
-async function readBody(response: Response, spec: InstanceSpec, maxBytes: number): Promise<string> {
-  const declared = Number(response.headers.get("content-length"));
-  if (Number.isFinite(declared) && declared > maxBytes) {
-    throw parseFailure(`${spec.name} answered more than this client will read.`, {
-      url: spec.endpoint,
-      instance: spec.id,
-    });
-  }
-  const text = await response.text();
-  if (text.length > maxBytes) {
-    throw parseFailure(`${spec.name} answered more than this client will read.`, {
-      url: spec.endpoint,
-      instance: spec.id,
-    });
-  }
-  return text;
-}
+function readRetryAfter(written: string | null): number | undefined {
+  if (written === null) return undefined;
+  const value = written.trim();
+  if (value === "") return undefined;
 
-/** Widening waits between attempts, bounded so a retry never looks hung. */
-async function backoff(attempt: number, limiter: RateLimiter, namedMs?: number): Promise<void> {
-  const widening = Math.min(limiter.currentIntervalMs * 2 ** attempt, 30_000);
-  await sleep(Math.max(widening, namedMs ?? 0));
-}
+  if (/^\d+$/.test(value)) return Number(value) * 1000;
 
-/**
- * How long a catalogue asked to be left alone, in milliseconds.
- *
- * The header carries either a number of seconds or a date. A value this client
- * cannot read is no instruction, and waiting on a number read wrongly would be
- * as rude as not waiting at all.
- */
-function namedDelayMs(header: string | null): number | undefined {
-  if (header === null) return undefined;
-  const seconds = Number(header.trim());
-  if (Number.isFinite(seconds) && seconds >= 0) return Math.min(seconds * 1000, 300_000);
-  const at = Date.parse(header);
+  const at = Date.parse(value);
   if (Number.isNaN(at)) return undefined;
-  const wait = at - Date.now();
-  return wait > 0 ? Math.min(wait, 300_000) : undefined;
+  return Math.max(0, at - Date.now());
+}
+
+/**
+ * The name this client sends, always carrying this project and an address where
+ * a person can be reached. A caller may put their own name in front of it; a
+ * catalogue reading its logs still learns what asked and who to write to.
+ */
+function completeUserAgent(written: string): string {
+  const own = written.trim();
+  const identifies = own.includes(PKG_NAME) && own.includes(CONTACT_URL);
+  const mine = `${PKG_NAME}/${VERSION} (+${CONTACT_URL})`;
+  if (own === "") return mine;
+  return identifies ? own : `${own} ${mine}`;
+}
+
+function isAbort(cause: unknown): boolean {
+  return (
+    typeof cause === "object" &&
+    cause !== null &&
+    (cause as { name?: unknown }).name === "AbortError"
+  );
 }

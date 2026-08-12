@@ -1,83 +1,79 @@
 /**
- * The catalogues this client reads, and what each of them can answer.
+ * The five catalogues this server reads, and what each of them answers.
  *
- * Four instances run one published open-source catalogue server. A fifth
- * reimplements its interface from a source of its own, which is close enough to
- * share this adapter and far enough that the adapter has to know which one it is
- * talking to. Every divergence below was measured against a live endpoint, and
- * each exists because an answer would otherwise have described an instance as
- * something it is not.
+ * The capability list is the single register of truth for what a catalogue
+ * offers. It exists because a field a catalogue was never asked for comes back
+ * empty, and an emptiness that was never a question reads as an answer: a
+ * caller must be able to tell a record that holds nothing from a catalogue that
+ * was never in a position to say. Every route consults `supports` before it
+ * asks, so a silence in an answer can always be named.
  */
-
-export type InstanceId = "stashdb" | "tpdb" | "fansdb" | "pmv" | "javstash";
-
-export type Capability =
-  /** The plural full-text search over scenes. */
-  | "search_scenes"
-  /** The plural full-text search over performers. */
-  | "search_performers"
-  | "get_scene"
-  | "get_performer"
-  | "find_by_fingerprint"
-  /** Publishes the table sorting the sites its records link to. */
-  | "site_categories"
-  | "tag_categories"
-  /** Publishes how many people disputed a fingerprint. */
-  | "fingerprint_reports"
-  /**
-   * Publishes, beside a page of rows, how many records its index holds for the
-   * question. A catalogue whose count echoes the page size publishes none.
-   */
-  | "index_total"
-  /** Publishes the status of an edit, which is what makes an open one countable. */
-  | "pending_edits"
-  /**
-   * Its fingerprint route answers a perceptual hash. A catalogue that stores
-   * perceptual fingerprints and matches none of them answers a different
-   * question from the one asked.
-   */
-  | "perceptual_lookup"
-  | "scene_count"
-  | "performer_studios";
 
 /**
- * How strictly an instance types its interface.
+ * The things a catalogue can be asked for, each one a route or a field that can
+ * be absent.
  *
- * `strict` is the published software: a fingerprint algorithm is an enumeration,
- * and a scene query's paging arguments are optional. `loose` takes the algorithm
- * as free text and requires the page, the sort and the direction. Sending one
- * request shape to both makes one of them refuse it.
+ * The first five are whole routes. The rest are fields a catalogue either
+ * publishes or does not, and each earned its place by being measured: a field
+ * one catalogue carries and another leaves empty comes back as a null that
+ * reads like an answer, so the answer has to be able to say which of the two it
+ * was.
  */
-export type Dialect = "strict" | "loose";
-
-export interface InstanceSpec {
-  id: InstanceId;
-  /** The name the instance calls itself, used wherever an answer names it. */
-  name: string;
-  endpoint: string;
-  /** Address a record's `source_url` is built from. */
-  webBase: string;
-  /** Environment variable carrying this instance's key. */
-  envVar: string;
-  capabilities: readonly Capability[];
-  dialect: Dialect;
-}
-
-const FULL: readonly Capability[] = [
+export const CAPABILITIES = [
   "search_scenes",
   "search_performers",
   "get_scene",
   "get_performer",
   "find_by_fingerprint",
+  /** A table sorting the sites a record links to, so a link can name a category. */
   "site_categories",
+  /** A taxonomy sorting the tags a record carries, so a tag can name a category. */
   "tag_categories",
+  /** A count of the reports against a fingerprint, without which a contest is unknown. */
   "fingerprint_reports",
+  /** A count of what the index holds for a question, beyond the page returned. */
   "index_total",
+  /** A count of the edits open against a record, without which revision is unknown. */
   "pending_edits",
+  /** A fingerprint route that searches perceptual hashes and not only exact ones. */
   "perceptual_lookup",
+  /** A count of the scenes indexed crediting a performer. */
   "scene_count",
+  /** The table of studios a performer is credited on. */
   "performer_studios",
-];
+] as const;
+
+export type Capability = (typeof CAPABILITIES)[number];
+
+/**
+ * How a request has to be written for a catalogue to accept it.
+ *
+ * `strict` is the shape the published open-source server takes. `loose` marks a
+ * catalogue that reimplements that interface over a source of its own: it names
+ * fingerprint algorithms in free text and requires a page, a sort and a
+ * direction on a scene query, so a request built for the published shape is
+ * refused outright.
+ */
+export type Dialect = "strict" | "loose";
+
+export type InstanceId = "stashdb" | "tpdb" | "fansdb" | "pmv" | "javstash";
+
+export interface InstanceSpec {
+  id: InstanceId;
+  /** The name the catalogue calls itself, which is the name an answer credits. */
+  name: string;
+  endpoint: string;
+  /** The address a source_url is built from, with no trailing slash so a path appends cleanly. */
+  webBase: string;
+  /** The environment variable holding the key for this catalogue alone. */
+  envVar: string;
+  /** What this catalogue answers. A route absent from here is never asked for. */
+  capabilities: readonly Capability[];
+  dialect: Dialect;
+}
+
+/** Everything the published open-source server answers, which is every route. */
+const PUBLISHED_SOFTWARE_CAPABILITIES: readonly Capability[] = CAPABILITIES;
 
 export const INSTANCES: readonly InstanceSpec[] = [
   {
@@ -86,7 +82,7 @@ export const INSTANCES: readonly InstanceSpec[] = [
     endpoint: "https://stashdb.org/graphql",
     webBase: "https://stashdb.org",
     envVar: "STASHBOX_STASHDB_KEY",
-    capabilities: FULL,
+    capabilities: PUBLISHED_SOFTWARE_CAPABILITIES,
     dialect: "strict",
   },
   {
@@ -95,9 +91,11 @@ export const INSTANCES: readonly InstanceSpec[] = [
     endpoint: "https://theporndb.net/graphql",
     webBase: "https://theporndb.net",
     envVar: "STASHBOX_TPDB_KEY",
-    // The plural text searches are absent, it publishes no table of sites, a
-    // fingerprint there carries no report count, and the count beside a page of
-    // rows echoes the page size instead of stating what its index holds.
+    // It answers a record it is handed an identifier for, and it joins on a
+    // fingerprint. It offers no plural search over its own index, publishes no
+    // table of the sites it knows, and counts fingerprint submissions without
+    // ever counting disputes, so a category and a report count stay null on
+    // its records instead of being borrowed from a catalogue that has them.
     capabilities: ["get_scene", "get_performer", "find_by_fingerprint"],
     dialect: "loose",
   },
@@ -107,7 +105,7 @@ export const INSTANCES: readonly InstanceSpec[] = [
     endpoint: "https://fansdb.cc/graphql",
     webBase: "https://fansdb.cc",
     envVar: "STASHBOX_FANSDB_KEY",
-    capabilities: FULL,
+    capabilities: PUBLISHED_SOFTWARE_CAPABILITIES,
     dialect: "strict",
   },
   {
@@ -116,7 +114,7 @@ export const INSTANCES: readonly InstanceSpec[] = [
     endpoint: "https://pmvstash.org/graphql",
     webBase: "https://pmvstash.org",
     envVar: "STASHBOX_PMV_KEY",
-    capabilities: FULL,
+    capabilities: PUBLISHED_SOFTWARE_CAPABILITIES,
     dialect: "strict",
   },
   {
@@ -125,22 +123,29 @@ export const INSTANCES: readonly InstanceSpec[] = [
     endpoint: "https://javstash.org/graphql",
     webBase: "https://javstash.org",
     envVar: "STASHBOX_JAVSTASH_KEY",
-    capabilities: FULL,
+    capabilities: PUBLISHED_SOFTWARE_CAPABILITIES,
     dialect: "strict",
   },
 ];
 
-export const INSTANCE_IDS: readonly InstanceId[] = INSTANCES.map((spec) => spec.id);
-
+/**
+ * The spec an identifier names, or nothing.
+ *
+ * The match is exact: an identifier travels inside a record identifier and in
+ * configuration, and folding case here would let two spellings of one
+ * catalogue circulate.
+ */
 export function instanceById(id: string): InstanceSpec | undefined {
-  return INSTANCES.find((spec) => spec.id === id);
+  return INSTANCES.find((instance) => instance.id === id);
 }
 
+/**
+ * Whether a catalogue answers a route.
+ *
+ * Callers ask this and never read the dialect: the dialect says how a request
+ * is written, and two catalogues sharing a dialect can still answer different
+ * routes.
+ */
 export function supports(spec: InstanceSpec, capability: Capability): boolean {
   return spec.capabilities.includes(capability);
-}
-
-/** The name to use when an answer has to say which catalogue it means. */
-export function instanceName(id: InstanceId): string {
-  return instanceById(id)?.name ?? id;
 }

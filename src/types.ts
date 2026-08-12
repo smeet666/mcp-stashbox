@@ -1,27 +1,54 @@
-/** What the client layer produces, independent of how any tool renders it. */
+/**
+ * The shapes this client hands back, independent of how any tool renders them.
+ *
+ * Two ideas run through every type here.
+ *
+ * **A record says what became of its identifier.** `status` is on every record
+ * and every place a record is named, because an identifier that resolves to a
+ * marker still resolves: what comes back describes the record rather than the
+ * thing it once named, and a caller pivoting on it would look for something
+ * that moved.
+ *
+ * **A loss is carried, never dropped.** Wherever a list can lose a row this
+ * client could not read, a counter travels beside it and names the list it came
+ * from. A row silently dropped turns a record this client failed to read into a
+ * record the catalogue holds nothing for.
+ */
 
 import type { ErrorCode } from "./errors.js";
 import type { InstanceId } from "./stashbox/instances.js";
 import type { ReadDate, RecordStatus } from "./stashbox/normalise.js";
 
+/** Anything read, with whether a catalogue was asked for it. */
 export interface Read<T> {
   data: T;
-  /** Served from the in-memory store rather than from a catalogue. */
+  /** Served from the in-memory store, so no catalogue was asked. */
   cached: boolean;
-  /** Rows that came back unreadable and were left out. */
+  /** Rows that came back unreadable and were left out of the answer. */
   skipped?: number;
 }
 
 /**
  * What became of one catalogue on one question.
  *
- * `answered` with a count of zero is a catalogue that looked and found nothing.
- * `failed` is a catalogue that could not answer. `absent` is a catalogue that
- * was never asked. An answer that collapsed these would let a caller read a
- * failure as an emptiness.
+ * The three states are kept apart because collapsing them is the failure this
+ * server exists to prevent: `answered` with a count of zero is a catalogue that
+ * looked and found nothing, `failed` could not answer at all, and `absent` was
+ * never asked. Only the first is evidence about the world.
  */
 export type SourceState = "answered" | "failed" | "absent";
 
+/**
+ * What one catalogue did with one question.
+ *
+ * The narrowing fields look alike and mean different things, which is why there
+ * are four of them. A narrowing a catalogue **cannot receive** is a limit of the
+ * catalogue. One **naming no record of its own** says only that nothing it holds
+ * was named. One **received in part** reached it shorn of another catalogue's
+ * identifiers. An argument with **nothing to do** shaped no request at all.
+ * Collapsed into one field, the first reading is what a caller takes away, and
+ * it is the only one that says a catalogue cannot do something.
+ */
 export interface SourceReport {
   source: InstanceId;
   /** The catalogue's own name, for prose. Derived from `source` when absent. */
@@ -34,44 +61,34 @@ export interface SourceReport {
   /** Which moment failed, such as the search or the reading of a record. */
   moment?: string;
   error?: ErrorCode;
-  /** What the catalogue's index holds for this question, beyond the page shown. */
+  /** What its index holds for the question, beyond the page returned. */
   indexTotal?: number;
-  /** Rows this catalogue answered that came back unreadable and were left out. */
+  /** Rows it answered with that came back unreadable and were left out. */
   skipped?: number;
-  /** Rows it answered with while returning none of the fingerprints asked for. */
+  /** Rows it answered with while carrying none of what was asked about. */
   unattributed?: number;
-  /**
-   * Distinct scenes behind this catalogue's matches, where one scene answered
-   * more than one of the hashes asked and so contributed more than one match.
-   */
+  /** Distinct records behind its rows, where one record can answer more than once. */
   records?: number;
-  /** Narrowings this catalogue could not receive, each one named. */
+  /** Narrowings it could not receive, which is a limit of the catalogue. */
   narrowingsNotReceived?: string[];
-  /**
-   * Narrowings this catalogue receives, written with identifiers no record of
-   * its own carries. It could have answered the question; nothing it holds was
-   * named in it, which is a different fact from one it cannot be given.
-   */
+  /** Narrowings written with identifiers no record of its own carries. */
   narrowingsNamingNoRecord?: string[];
-  /**
-   * Narrowings this catalogue received short: the list named records on more
-   * than one catalogue, and only its own reached it. A row satisfying what
-   * survived is no row satisfying the list as it was written.
-   */
+  /** Narrowings it received short, the rest of the list naming other catalogues. */
   narrowingsReceivedInPart?: string[];
-  /**
-   * Arguments written that this question gave nothing to do. They shaped no
-   * request, and a row here neither satisfies nor fails them.
-   */
+  /** Arguments this question gave nothing to select on. */
   argumentsWithNothingToDo?: string[];
-  /**
-   * Fingerprint algorithms this catalogue's lookup does not search. Its silence
-   * about one of those is no answer about the hash, and it is not a narrowing:
-   * nothing a row carries could satisfy or fail it.
-   */
+  /** Fingerprint algorithms its lookup does not search, so it was never asked. */
   algorithmsNotSearched?: string[];
-  /** What its index reads, since two catalogues answer a name differently. */
+  /** The fields its text index read, claimed only where one was consulted. */
   fieldsSearched?: string[];
+}
+
+/** A loss, counted and named, so a number never says less than it means. */
+export interface Losses {
+  /** Rows of a record's own lists that came back unreadable. */
+  rowsSkipped?: number;
+  /** Which lists lost them, so the count can say what it counts. */
+  rowsSkippedIn?: string[];
 }
 
 export interface SiteLink {
@@ -86,6 +103,25 @@ export interface ImageRow {
   url: string;
   width: number | null;
   height: number | null;
+}
+
+export interface StudioRef {
+  id: string;
+  name: string;
+  parent: string | null;
+  /** What the identifier addresses now. A studio is held or withdrawn. */
+  status: RecordStatus;
+  /** Set where the parent named here is a record the catalogue withdrew. */
+  parentWithdrawn?: boolean;
+}
+
+export interface TagRow {
+  id: string;
+  name: string;
+  /** Null on a catalogue publishing no taxonomy, which is not a tag without one. */
+  category: string | null;
+  /** What the identifier addresses now. A tag is held or withdrawn. */
+  status: RecordStatus;
 }
 
 export interface PerformerAppearance {
@@ -107,76 +143,8 @@ export interface FingerprintRow {
   submissions: number | null;
   /** How many disputed it, null on a catalogue that counts no disputes. */
   reports: number | null;
-  /** Null where the catalogue publishes no report count. */
+  /** Null where the catalogue publishes no report count: unknown, never false. */
   contested: boolean | null;
-}
-
-export interface StudioRef {
-  id: string;
-  name: string;
-  parent: string | null;
-  /** What the identifier addresses now, which a withdrawn record changes. */
-  status: RecordStatus;
-  /** Set where the parent named here is a record the catalogue has withdrawn. */
-  parentWithdrawn?: boolean;
-}
-
-export interface TagRow {
-  id: string;
-  name: string;
-  category: string | null;
-  /** What the identifier addresses now, which a withdrawn record changes. */
-  status: RecordStatus;
-}
-
-/**
- * One scene.
- *
- * A `merged` status makes this a marker: it carries the
- * identifier, the catalogue, the successor and the title the record held before
- * the merge, and every other field is null or empty. The emptiness of a marker
- * describes the record, never the world.
- */
-export interface SceneRecord {
-  id: string;
-  source: InstanceId;
-  sourceUrl: string;
-  /** When this record came off the catalogue, ISO 8601. */
-  retrievedAt: string;
-  status: RecordStatus;
-  mergedInto: string | null;
-  pendingEdits: number | null;
-  /** The catalogue publishes open edits and answered them unreadably. */
-  pendingEditsUnreadable?: boolean;
-  title: string | null;
-  details: string | null;
-  code: string | null;
-  /** Free text, which can name several people. */
-  director: string | null;
-  durationSeconds: number | null;
-  releaseDate: ReadDate | null;
-  /** When the scene was made, which is a different question from its release. */
-  productionDate: ReadDate | null;
-  /** Set where the catalogue published a date this client could not read. */
-  releaseDateUnreadable?: boolean;
-  productionDateUnreadable?: boolean;
-  studio: StudioRef | null;
-  performers: PerformerAppearance[];
-  tags: TagRow[];
-  urls: SiteLink[];
-  /** Rows of this record's own lists that came back unreadable and were left out. */
-  rowsSkipped?: number;
-  /** Which of those lists lost rows, so the count can say what it counts. */
-  rowsSkippedIn?: string[];
-  images?: ImageRow[];
-  /** Image rows the catalogue answered with that came back unreadable. */
-  imagesSkipped?: number;
-  fingerprints?: FingerprintRow[];
-  /** Fingerprint rows the catalogue answered with that came back unreadable. */
-  fingerprintsSkipped?: number;
-  fingerprintCount?: Partial<Record<FingerprintAlgorithm, number>>;
-  created: string | null;
-  updated: string | null;
 }
 
 export interface PerformerAppearanceDetails {
@@ -193,6 +161,56 @@ export interface PerformerAppearanceDetails {
   hipSize: number | null;
 }
 
+/** What every record carries, whatever it is a record of. */
+interface RecordBase extends Losses {
+  id: string;
+  source: InstanceId;
+  sourceUrl: string;
+  /** When this record came off the catalogue, ISO 8601. */
+  retrievedAt: string;
+  status: RecordStatus;
+  /** Open edits against it, null where the catalogue publishes no count. */
+  pendingEdits: number | null;
+  /** The catalogue publishes them and answered a shape this client could not read. */
+  pendingEditsUnreadable?: boolean;
+}
+
+/**
+ * One scene.
+ *
+ * A `deleted` status makes this a marker: it carries the identifier, the
+ * catalogue and the title the record held before, and every other field is null
+ * or empty. The emptiness of a marker describes the record, never the world.
+ * These catalogues publish no successor for a scene, so a scene is held or
+ * withdrawn and names nothing in its place.
+ */
+export interface SceneRecord extends RecordBase {
+  title: string | null;
+  details: string | null;
+  code: string | null;
+  /** Free text, which can name several people. */
+  director: string | null;
+  durationSeconds: number | null;
+  releaseDate: ReadDate | null;
+  /** When the scene was made, a different question from when it was released. */
+  productionDate: ReadDate | null;
+  /** Set where the catalogue published a date this client could not read. */
+  releaseDateUnreadable?: boolean;
+  productionDateUnreadable?: boolean;
+  studio: StudioRef | null;
+  performers: PerformerAppearance[];
+  tags: TagRow[];
+  urls: SiteLink[];
+  images?: ImageRow[];
+  imagesSkipped?: number;
+  fingerprints?: FingerprintRow[];
+  fingerprintsSkipped?: number;
+  /** How many the record holds per algorithm, which counts held and never shown. */
+  fingerprintCount?: Partial<Record<FingerprintAlgorithm, number>>;
+  created: string | null;
+  updated: string | null;
+}
+
 /**
  * One performer.
  *
@@ -201,18 +219,11 @@ export interface PerformerAppearanceDetails {
  * coverage and never a person's work. On a marker it is null, since the count
  * belongs to the successor.
  */
-export interface PerformerRecord {
-  id: string;
-  source: InstanceId;
-  sourceUrl: string;
-  /** When this record came off the catalogue, ISO 8601. */
-  retrievedAt: string;
-  status: RecordStatus;
+export interface PerformerRecord extends RecordBase {
+  /** The record this identifier was folded into, which a caller reads next. */
   mergedInto: string | null;
+  /** Identifiers folded into this record, which still resolve to it. */
   mergedIds: string[];
-  pendingEdits: number | null;
-  /** The catalogue publishes open edits and answered them unreadably. */
-  pendingEditsUnreadable?: boolean;
   name: string | null;
   /** Free text telling two people apart, which reads and never parses. */
   disambiguation: string | null;
@@ -221,56 +232,34 @@ export interface PerformerRecord {
   country: string | null;
   birthDate: ReadDate | null;
   deathDate: ReadDate | null;
+  birthDateUnreadable?: boolean;
+  deathDateUnreadable?: boolean;
   careerStartYear: number | null;
   careerEndYear: number | null;
   sceneCount: number | null;
   urls: SiteLink[];
-  /** A birth date the catalogue published that this client could not read. */
-  birthDateUnreadable?: boolean;
-  /** A death date the catalogue published that this client could not read. */
-  deathDateUnreadable?: boolean;
-  /** Rows of this record's own lists that came back unreadable and were left out. */
-  rowsSkipped?: number;
-  /** Which of those lists lost rows, so the count can say what it counts. */
-  rowsSkippedIn?: string[];
   appearance?: PerformerAppearanceDetails;
   images?: ImageRow[];
-  /** Image rows the catalogue answered with that came back unreadable. */
   imagesSkipped?: number;
   scenes?: SceneRecord[];
   /** What the catalogue holds behind the one page the section shows. */
   scenesTotal?: number | null;
   scenesShown?: number;
-  /** Why the section is missing, when it was asked for and could not be read. */
-  scenesUnavailable?: string;
-  /** Scenes the catalogue answered with that came back unreadable and were left out. */
   scenesSkipped?: number;
+  /** Why the section is missing where it was asked for and is not here. */
+  scenesUnavailable?: string;
   studios?: { id: string; name: string; sceneCount: number | null; status: RecordStatus }[];
-  /** Why the studios section is missing, where it was asked for and not read. */
-  studiosUnavailable?: string;
-  /** Studio rows the catalogue answered with that came back unreadable. */
-  studiosSkipped?: number;
-  /** How many the record credits, where the section shows a page of them. */
   studiosTotal?: number;
+  studiosSkipped?: number;
+  studiosUnavailable?: string;
   created: string | null;
   updated: string | null;
 }
 
-export type MatchKind = "exact_file" | "perceptual_similarity";
-
-export interface FingerprintMatch {
-  scene: SceneRecord;
-  algorithm: FingerprintAlgorithm;
-  matchKind: MatchKind;
-  /** The fingerprint as this catalogue holds it, when it returned one. */
-  fingerprint: FingerprintRow | null;
-}
-
 /** An identifier a narrowing was written with that its catalogue has folded. */
 export interface FoldedNarrowing {
-  /** The identifier as it was given. */
   given: string;
-  /** The record it now addresses, null on a withdrawn one. */
+  /** The record it now addresses, null on one the catalogue withdrew. */
   successor: string | null;
   status: RecordStatus;
 }
@@ -280,33 +269,38 @@ export interface RowsResult<T> {
   perSource: SourceReport[];
   /** How the order was built, since no score is shared across catalogues. */
   ordering: string;
-  /**
-   * Identifiers the question was narrowed with that their catalogue has folded.
-   * They narrow to nothing while the catalogue holds everything it ever held,
-   * under the record they were folded into.
-   */
+  /** Narrowing identifiers their catalogue has folded, which narrow to nothing. */
   foldedNarrowings?: FoldedNarrowing[];
-  /**
-   * Identifiers the question was narrowed with whose record could not be read,
-   * so whether they explain this emptiness is unknown.
-   */
+  /** Narrowing identifiers whose record could not be read, so nothing is settled. */
   uncheckedNarrowings?: string[];
-  /**
-   * Identifiers the question was narrowed with that their catalogue holds no
-   * record for, which is why nothing came back for them.
-   */
+  /** Narrowing identifiers their catalogue holds no record for. */
   absentNarrowings?: string[];
+}
+
+export type MatchKind = "exact_file" | "perceptual_similarity";
+
+export interface FingerprintMatch {
+  scene: SceneRecord;
+  algorithm: FingerprintAlgorithm;
+  /**
+   * What the match claims. `exact_file` is the same bytes. A perceptual
+   * similarity covers a re-encode, a crop and a different scene from one shoot,
+   * and is no evidence that two files are the same.
+   */
+  matchKind: MatchKind;
+  /** The fingerprint the record carries, so a caller knows which hash reached it. */
+  fingerprint: FingerprintRow | null;
 }
 
 export interface FingerprintResult {
   matches: FingerprintMatch[];
   perSource: SourceReport[];
   /**
-   * Scenes a catalogue answered with while returning none of the fingerprints
+   * Records a catalogue answered with while returning none of the fingerprints
    * asked for. Which hash reached them is unknown, and counting them keeps that
    * apart from a catalogue that found nothing.
    */
   unattributed: number;
-  /** The distinct questions actually put, a hash given twice being one. */
-  asked: readonly { hash: string; algorithm: string }[];
+  /** The fingerprints put to the catalogues, each named once. */
+  asked: readonly { hash: string; algorithm: FingerprintAlgorithm }[];
 }

@@ -79,7 +79,6 @@ function scene(source: InstanceId, index: number, title: string, studioName: str
     retrievedAt: "2026-08-11T00:00:00.000Z",
     status: "established",
     pendingEdits: 0,
-    mergedInto: null,
     title,
     details: null,
     code: null,
@@ -119,6 +118,7 @@ function performer(
     retrievedAt: "2026-08-11T00:00:00.000Z",
     status: "established",
     pendingEdits: 0,
+    // A performer names the record it was folded into; this one is held.
     mergedInto: null,
     mergedIds: [],
     name,

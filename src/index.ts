@@ -1,23 +1,62 @@
 #!/usr/bin/env node
 /**
- * The executable.
+ * The executable, speaking the protocol over stdio.
  *
- * Everything the server says about itself goes to stderr: stdout carries the
- * protocol, and a stray line there corrupts the session.
+ * Two things are load-bearing here. **Nothing writes to stdout** except the
+ * transport: that channel carries the protocol, and a line of ours on it would
+ * be read as a message, so every diagnostic goes to stderr through the logger.
+ * And the process stays up until the transport closes: exiting on an idle
+ * moment would end a session a client believes is open.
  */
 
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+
+import { createLogger, loadConfig } from "./config.js";
+import { StashboxClient } from "./stashbox/client.js";
 import { createServer } from "./server.js";
-import { PKG_NAME } from "./version.js";
+import { registerFindByFingerprint } from "./tools/findByFingerprint.js";
+import { registerGetPerformer } from "./tools/getPerformer.js";
+import { registerGetScene } from "./tools/getScene.js";
+import { registerSearchPerformers } from "./tools/searchPerformers.js";
+import { registerSearchScenes } from "./tools/searchScenes.js";
 
 async function main(): Promise<void> {
-  const server = createServer();
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+  const config = loadConfig();
+  const logger = createLogger(config.logLevel);
+
+  const client = new StashboxClient({
+    keys: config.keys,
+    userAgent: config.userAgent,
+    minIntervalMs: config.minIntervalMs,
+    timeoutMs: config.timeoutMs,
+    maxRetries: config.maxRetries,
+    cacheTtlMs: config.cacheTtlMs,
+    cacheMaxEntries: config.cacheMaxEntries,
+    logger,
+  });
+
+  if (client.configured.length === 0) {
+    // Said once at startup: every answer would otherwise report five catalogues
+    // holding nothing, where the truth is that none of them was asked.
+    logger.warn(
+      "No catalogue key is configured, so every answer will be empty for want of a key. Set one of the STASHBOX_*_KEY variables.",
+    );
+  }
+
+  // The order is fixed, since a client caches the list of tools it is given.
+  const server = createServer(client, [
+    registerSearchScenes,
+    registerSearchPerformers,
+    registerGetScene,
+    registerGetPerformer,
+    registerFindByFingerprint,
+  ]);
+
+  await server.connect(new StdioServerTransport());
+  logger.info(`ready, reading ${client.configured.join(", ") || "no catalogue"}`);
 }
 
 main().catch((cause: unknown) => {
-  const message = cause instanceof Error ? cause.message : String(cause);
-  process.stderr.write(`[${PKG_NAME}] error: ${message}\n`);
-  process.exit(1);
+  process.stderr.write(`mcp-stashbox: ${cause instanceof Error ? cause.message : String(cause)}\n`);
+  process.exitCode = 1;
 });

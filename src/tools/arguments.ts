@@ -1,286 +1,228 @@
 /**
- * How a tool's arguments are declared, and what happens to one that is not.
+ * What a tool takes, declared once and enforced as it is declared.
  *
- * An argument this server does not declare is a question it cannot answer.
- * Reading it and dropping it produces an answer computed on the defaults, which
- * a caller reads as the answer to what they asked. So an undeclared argument is
- * refused, and the refusal names it and offers the declared name when one is
- * close enough to be the one that was meant.
+ * Two rules govern this file, and both come from the same place: the server
+ * never states anything the data does not carry.
+ *
+ * **An argument this server does not declare is refused, at every depth.** Read
+ * and dropped, it produces an answer computed on the defaults, which a caller
+ * reads as the answer to the question they asked. The refusal names the
+ * declared argument a near miss was reaching for, since a caller who wrote
+ * `titel` wants `title` and not a list of everything a tool takes.
+ *
+ * **Every refusal carries one of the six error codes**, because that is what a
+ * caller branches on. A message the validator writes on its own arrives without
+ * one, so every bound, every closed set and every required argument is declared
+ * with its own coded message. A caller never receives an engine's own words.
  */
 
 import { z } from "zod";
 
-import { INSTANCE_IDS, type InstanceId } from "../stashbox/instances.js";
+import { readDate } from "../stashbox/normalise.js";
+import { INSTANCES } from "../stashbox/instances.js";
+import { MOST_IDENTIFIERS } from "../stashbox/narrowings.js";
 
-/** The code a caller branches on when the arguments cannot produce a request. */
-const INVALID_INPUT = "invalid_input";
+/** The one code an argument can be refused under, written where a caller reads it. */
+const CODE = "[invalid_input]";
+
+/** The catalogues an argument may name, in the order the registry declares them. */
+const SOURCE_IDS = INSTANCES.map((instance) => instance.id);
 
 /**
- * Declare a tool's arguments, refusing anything outside the declaration.
+ * A record identifier as this server prints one, and as it takes one back.
  *
- * Every refusal carries the code, since that is what a caller branches on and
- * a message that omits it leaves them reading prose to tell an argument they
- * wrote badly from a catalogue that could not answer.
+ * The catalogue is optional here because a bare uuid is resolvable when a single
+ * catalogue is configured, and which catalogue that is belongs to the
+ * configuration rather than to the declaration.
  */
-export function strictInput<Shape extends z.ZodRawShape>(shape: Shape) {
-  const declared = Object.keys(shape);
+const IDENTIFIER = new RegExp(
+  `^(?:(?:${SOURCE_IDS.join("|")}):)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`,
+  "i",
+);
 
-  return z.strictObject(shape, {
-    error: (issue) =>
-      issue.code === "unrecognized_keys"
-        ? unknownArgumentMessage(issue.keys, declared)
-        : issue.message === undefined
-          ? undefined
-          : coded(issue.message),
-  });
+/** A day written as the calendars these catalogues publish write one. */
+const CALENDAR_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/* --------------------------------------------------------- the declarations */
+
+/**
+ * A narrowing written as text.
+ *
+ * Refused when it carries no characters, spaces alone included: a catalogue
+ * asked with an empty narrowing answers everything it holds, and that page
+ * reaches a caller as the answer to the question they narrowed.
+ */
+export function text(argument: string, what: string): z.ZodString {
+  const error = `${CODE} ${argument} takes ${what}. A ${argument} carrying no characters, spaces alone included, narrows nothing, and the whole index would come back as the answer to it.`;
+  return z.string({ error }).trim().min(1, error);
+}
+
+/** One record identifier, required, which is the whole question a record route answers. */
+export function identifier(argument: string): z.ZodString {
+  const error = identifierError(argument);
+  return z.string({ error }).regex(IDENTIFIER, error);
 }
 
 /**
- * A refusal in the terms this server refuses on.
+ * A bounded list of record identifiers.
  *
- * The validator writes its own sentence for a bound, an option outside a set
- * and an argument left out. Each is an argument that cannot produce a request,
- * which is the one thing this code names, so it is prefixed rather than
- * rewritten: the validator's sentence already says which argument and why.
+ * Empty, it narrows nothing. Long, it is a question about a record carrying
+ * fifty identifiers at once, which no record carries, and answering it would
+ * run a follow-up read per identifier for an emptiness that belongs to the
+ * question.
  */
-function coded(message: string): string {
-  return message.startsWith(`[${INVALID_INPUT}]`) ? message : `[${INVALID_INPUT}] ${message}`;
-}
-
-/**
- * A narrowing written as text, which must carry something to narrow on.
- *
- * A value carrying no characters reaches the catalogue as no restriction at
- * all, so the answer that comes back is the whole index handed to a caller who
- * asked for a part of it. Refusing it at the door is the only place the
- * distinction survives, and a value of nothing but spaces carries as little as
- * one of nothing at all.
- */
-export function narrowingText(description?: string) {
-  const empty = {
-    error: `[${INVALID_INPUT}] A value carrying no characters narrows nothing, and a catalogue asked with it answers everything it holds. Give the text to narrow on, or leave the argument out.`,
-  };
-  const schema = z.string().min(1, empty).refine(carriesCharacters, empty);
-  return description ? schema.describe(description) : schema;
-}
-
-function carriesCharacters(value: string): boolean {
-  return value.trim().length > 0;
-}
-
-/**
- * A list of namespaced identifiers, which must name at least one.
- *
- * An empty list is a question about no record, and a catalogue given one
- * answers its whole index, which reads as every record satisfying the list.
- */
-export function narrowingList(description?: string) {
-  const schema = z
-    .array(narrowingText())
-    .min(1, {
-      error: `[${INVALID_INPUT}] An empty list names no record to narrow on, and a catalogue asked with it answers everything it holds. Give at least one identifier, or leave the argument out.`,
-    })
-    // A list this long is a question about a record carrying all of them, which
-    // no record carries, and an answer left empty by it is read back one
-    // identifier at a time. The bound keeps the work an answer can trigger to
-    // what the question could ever be about.
-    .max(NARROWING_LIST_LIMIT, {
-      error: `[${INVALID_INPUT}] A list of more than ${NARROWING_LIST_LIMIT} identifiers asks about a record carrying every one of them, which no record carries. Ask about fewer.`,
-    });
-  return description ? schema.describe(description) : schema;
-}
-
-/** What a list of identifiers may name, past which the question answers nothing. */
-const NARROWING_LIST_LIMIT = 25;
-
-/**
- * A day, which must be one the calendar has.
- *
- * A catalogue reinterprets a date it cannot read rather than refusing it, so a
- * thirteenth month comes back as an answer to a question nobody asked. The
- * check is on the calendar and not on the shape: 2021-02-30 is written
- * correctly and names no day.
- */
-export function dayArgument(description: string) {
+export function identifiers(argument: string): z.ZodArray<z.ZodString> {
+  const error = `${CODE} ${argument} takes a list of one to ${MOST_IDENTIFIERS} record identifiers, each written instance:uuid.`;
   return z
-    .string()
-    .refine(namesADay, {
-      error: `[${INVALID_INPUT}] A date is written YYYY-MM-DD and must name a day the calendar has. A catalogue reinterprets a date it cannot read, so the answer would be to a question that was never asked.`,
-    })
-    .describe(description);
-}
-
-function namesADay(value: string): boolean {
-  const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!parts) return false;
-  const [, year, month, day] = parts as unknown as [string, string, string, string];
-  const at = new Date(`${year}-${month}-${day}T00:00:00Z`);
-  if (Number.isNaN(at.getTime())) return false;
-  // Date rolls an overlong month into the next one, so the day it names back is
-  // what says whether the calendar has the one that was written.
-  return (
-    at.getUTCFullYear() === Number(year) &&
-    at.getUTCMonth() + 1 === Number(month) &&
-    at.getUTCDate() === Number(day)
-  );
-}
-
-/**
- * A two-letter country code, in the shape the catalogues index on.
- *
- * A country written out in full reaches the index as a code it holds for
- * nobody, and the emptiness that comes back reads as a catalogue holding no
- * performer from that country.
- */
-export function countryArgument(description: string) {
-  return z
-    .string()
-    .regex(/^[A-Za-z]{2}$/, {
-      error: `[${INVALID_INPUT}] A country is asked for as its two-letter code, such as 'AU' for Australia. The catalogues index on the code, so a name written out matches nobody and the emptiness would read as a catalogue holding none.`,
-    })
-    .describe(description);
-}
-
-/**
- * The catalogues to ask, named from the closed set this server reads.
- *
- * The set is small and fixed, so declaring it lets a caller offer the choices
- * and settles the spelling before a request is built, rather than after an
- * answer comes back naming a catalogue nobody meant.
- */
-export function sourcesArgument(description: string) {
-  return z
-    .array(
-      z.enum(INSTANCE_IDS as unknown as [InstanceId, ...InstanceId[]], {
-        error: `[${INVALID_INPUT}] A catalogue is named as one of: ${INSTANCE_IDS.join(", ")}.`,
-      }),
+    .array(identifier(argument), { error })
+    .min(
+      1,
+      `${CODE} ${argument} was written as an empty list, which narrows nothing: the whole index would come back as the answer to a question it was never asked.`,
     )
-    .min(1, {
-      error: `[${INVALID_INPUT}] An empty list names no catalogue to ask. Name at least one, or leave the argument out to ask every configured catalogue.`,
-    })
-    .describe(description);
+    .max(
+      MOST_IDENTIFIERS,
+      `${CODE} ${argument} takes at most ${MOST_IDENTIFIERS} identifiers in one call. A longer list asks about a record carrying every one of them, which no record carries.`,
+    );
 }
 
 /**
- * A whole number inside the bounds this client reads.
+ * A day the calendar has.
  *
- * The bound is declared where the argument is, so the refusal carries the code
- * a caller branches on. Left to the validator, it arrives as prose alone, and a
- * caller cannot tell an argument they wrote badly from a catalogue that failed.
+ * A catalogue handed a date it cannot read reinterprets it, and the rows that
+ * come back answer a question nobody asked. The 45th of the 13th month and the
+ * 30th of February are refused here for that reason.
  */
-export function boundedInteger(min: number, max: number, description: string) {
+export function calendarDay(argument: string, what: string): z.ZodString {
+  const error = `${CODE} ${argument} takes ${what}, written as a day the calendar has, in the form 2019-04-12. A catalogue reinterprets a date it cannot read, and the rows come back answering a question nobody asked.`;
   return z
-    .number({
-      error: `[${INVALID_INPUT}] This argument counts things, so it is written as a whole number between ${min} and ${max}.`,
-    })
-    .int({
-      error: `[${INVALID_INPUT}] This argument counts things, so a fraction of one names nothing. Write a whole number between ${min} and ${max}.`,
-    })
-    .min(min, { error: `[${INVALID_INPUT}] The smallest this argument reads is ${min}.` })
-    .max(max, {
-      error: `[${INVALID_INPUT}] The largest this argument reads is ${max}. Narrow the question to reach further.`,
-    })
-    .describe(description);
+    .string({ error })
+    .regex(CALENDAR_DAY, error)
+    .refine((value) => readDate(value)?.precision === "day", error);
 }
 
-/** One of a closed set of readings, refused in the terms this server refuses on. */
-export function optionSet<const T extends readonly [string, ...string[]]>(
-  values: T,
-  description: string,
-) {
-  return z
-    .enum(values, { error: `[${INVALID_INPUT}] This argument reads one of: ${values.join(", ")}.` })
-    .describe(description);
+/** A two-letter country code, as the catalogues store one. */
+export function countryCode(argument: string): z.ZodString {
+  const error = `${CODE} ${argument} takes a two-letter country code, as in AU or SE. A country written out in full names no code the catalogues store, so it would match nothing they hold.`;
+  return z.string({ error }).regex(/^[A-Za-z]{2}$/, error);
 }
 
-/** An argument a tool cannot be asked without. */
-export function requiredText(description: string) {
-  const empty = {
-    error: `[${INVALID_INPUT}] A value carrying no characters names nothing. Write what to read.`,
-  };
+/**
+ * The closed set of catalogues, which is the set this server holds addresses
+ * for. A catalogue named outside it could be asked nothing, and the emptiness
+ * would read as an answer.
+ */
+export function catalogues(argument: string): z.ZodArray<z.ZodEnum<Record<string, string>>> {
+  const error = `${CODE} ${argument} names the catalogues to ask, out of ${SOURCE_IDS.join(", ")}. An empty ${argument} asks none of them, and an emptiness nobody was asked for is no evidence about anything.`;
   return z
-    .string({ error: `[${INVALID_INPUT}] This argument is required, and is written as text.` })
-    .min(1, empty)
-    .refine(carriesCharacters, empty)
-    .describe(description);
+    .array(z.enum(SOURCE_IDS, { error }), { error })
+    .min(1, error)
+    .max(SOURCE_IDS.length, error);
 }
 
-function unknownArgumentMessage(keys: readonly string[], declared: readonly string[]): string {
-  const named = keys
+/** A whole number inside the bounds an answer of that size can honour. */
+export function wholeNumber(
+  argument: string,
+  what: string,
+  least: number,
+  most: number,
+): z.ZodNumber {
+  const error = `${CODE} ${argument} takes ${what}, as a whole number from ${least} to ${most}.`;
+  return z.number({ error }).int(error).min(least, error).max(most, error);
+}
+
+/** One reading out of a closed set, named in the words a caller writes. */
+export function oneOf<const T extends readonly [string, ...string[]]>(
+  argument: string,
+  what: string,
+  readings: T,
+): z.ZodEnum<Record<T[number], T[number]>> {
+  return z.enum(readings as unknown as T[number][], {
+    error: `${CODE} ${argument} takes ${what}, one of: ${readings.join(", ")}. A reading outside that set names nothing this server can ask for.`,
+  }) as z.ZodEnum<Record<T[number], T[number]>>;
+}
+
+/** A list of readings out of a closed set, each one naming a block of an answer. */
+export function severalOf<const T extends readonly [string, ...string[]]>(
+  argument: string,
+  what: string,
+  readings: T,
+): z.ZodArray<z.ZodEnum<Record<T[number], T[number]>>> {
+  const error = `${CODE} ${argument} takes ${what}, each one of: ${readings.join(", ")}. An empty ${argument} asks for no block at all, so the answer would carry nothing.`;
+  return z
+    .array(oneOf(argument, what, readings), { error })
+    .min(1, error)
+    .max(readings.length, error);
+}
+
+function identifierError(argument: string): string {
+  return `${CODE} ${argument} takes a record identifier written instance:uuid, as in ${SOURCE_IDS[0]}:94ef9c17-82c6-48b0-8dcc-063b69231960, with the catalogue named out of ${SOURCE_IDS.join(", ")}. The same uuid names a different record on each catalogue, so one written without a catalogue is resolved only where a single catalogue is configured.`;
+}
+
+/* ------------------------------------------------------------- strict input */
+
+/**
+ * The declaration a tool publishes, enforcing at runtime exactly what it
+ * announces.
+ *
+ * A schema announcing that it takes nothing else while a runtime accepts
+ * something else makes the announcement worthless, so the strictness is both
+ * declared in the published schema and applied to every call.
+ */
+export function strictInput<Shape extends z.ZodRawShape>(shape: Shape): z.ZodObject<Shape> {
+  const declared = Object.keys(shape);
+  return z.strictObject(shape, {
+    error: (issue) => {
+      if (issue.code !== "unrecognized_keys") return undefined;
+      return unknownArgumentMessage(issue.keys, declared);
+    },
+  }) as z.ZodObject<Shape>;
+}
+
+/** What a caller reads when they wrote an argument this tool does not declare. */
+function unknownArgumentMessage(unknown: readonly string[], declared: readonly string[]): string {
+  const named = unknown
     .map((key) => {
-      const near = nearestArgument(key, declared);
-      return near ? `'${key}' (did you mean '${near}'?)` : `'${key}'`;
+      const near = nearest(key, declared);
+      return near === undefined ? key : `${key} (did you mean ${near}?)`;
     })
     .join(", ");
-
-  return (
-    `[${INVALID_INPUT}] Unknown ${keys.length > 1 ? "arguments" : "argument"} ${named}. ` +
-    `This tool takes: ${declared.join(", ")}.`
-  );
+  return `${CODE} This tool does not take ${named}. It takes: ${declared.join(", ")}. An argument that is read and dropped produces an answer computed without it, which reads as the answer to the question that was asked.`;
 }
 
 /**
- * The declared name a caller most plausibly meant, when there is one.
- *
- * Three readings, ordered by how much each claims: the same name written
- * differently, a name that opens or closes the other, and a name a couple of
- * typing slips away. Anything further is left unnamed, because a suggestion
- * that misses sends a caller to an argument answering a different question.
+ * How far apart two spellings are, counting insertions, deletions and
+ * substitutions.
  */
-function nearestArgument(key: string, declared: readonly string[]): string | undefined {
-  const flatten = (name: string) => name.toLowerCase().replace(/[^a-z0-9]/g, "");
-  const flat = flatten(key);
-  if (flat.length === 0) return undefined;
-
-  const sameName = declared.find((name) => flatten(name) === flat);
-  if (sameName) return sameName;
-
-  // Either name may be the longer one: a caller can qualify a name this tool
-  // keeps plain, or shorten one it spells out.
-  const overlapping = declared.find((name) => {
-    const other = flatten(name);
-    const [shorter, longer] = other.length < flat.length ? [other, flat] : [flat, other];
-    // Two characters in common say nothing; three start to.
-    return shorter.length >= 3 && (longer.startsWith(shorter) || longer.endsWith(shorter));
-  });
-  if (overlapping) return overlapping;
-
-  let closest: string | undefined;
-  let shortest = Number.POSITIVE_INFINITY;
-  for (const name of declared) {
-    const distance = editDistance(flat, flatten(name));
-    if (distance < shortest) {
-      shortest = distance;
-      closest = name;
+function distance(a: string, b: string): number {
+  let previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= a.length; i += 1) {
+    const current = [i];
+    for (let j = 1; j <= b.length; j += 1) {
+      const substitution = (previous[j - 1] ?? 0) + (a[i - 1] === b[j - 1] ? 0 : 1);
+      const deletion = (previous[j] ?? 0) + 1;
+      const insertion = (current[j - 1] ?? 0) + 1;
+      current[j] = Math.min(substitution, deletion, insertion);
     }
-  }
-
-  // Up to a third of the name may differ. Past that the match is a guess.
-  return shortest <= Math.max(1, Math.floor(flat.length / 3)) ? closest : undefined;
-}
-
-/** Single-character insertions, deletions and substitutions between two words. */
-function editDistance(left: string, right: string): number {
-  let beforePrevious: number[] = [];
-  let previous: number[] = Array.from({ length: right.length + 1 }, (_, index) => index);
-
-  for (let row = 1; row <= left.length; row += 1) {
-    const current: number[] = [row];
-    for (let column = 1; column <= right.length; column += 1) {
-      // Every index here is inside a row this loop has already filled.
-      const substitution = previous[column - 1]! + (left[row - 1] === right[column - 1] ? 0 : 1);
-      let best = Math.min(substitution, previous[column]! + 1, current[column - 1]! + 1);
-      const swapped =
-        row > 1 &&
-        column > 1 &&
-        left[row - 1] === right[column - 2] &&
-        left[row - 2] === right[column - 1];
-      if (swapped) best = Math.min(best, beforePrevious[column - 2]! + 1);
-      current[column] = best;
-    }
-    beforePrevious = previous;
     previous = current;
   }
+  return previous[b.length] ?? Math.max(a.length, b.length);
+}
 
-  return previous[right.length]!;
+/**
+ * The declared argument a near miss was reaching for, or nothing.
+ *
+ * Two edits is the widest miss that still names one argument: it covers a
+ * doubled letter, a missing separator, a plural, and two letters written the
+ * wrong way round, which a count of insertions, deletions and substitutions
+ * scores as two. Beyond it a suggestion sends a caller to an argument answering
+ * a different question, which costs more than no suggestion at all.
+ */
+function nearest(written: string, declared: readonly string[]): string | undefined {
+  let best: { name: string; apart: number } | undefined;
+  for (const name of declared) {
+    const apart = distance(written.toLowerCase(), name.toLowerCase());
+    if (apart > 2) continue;
+    if (best === undefined || apart < best.apart) best = { name, apart };
+  }
+  return best?.name;
 }

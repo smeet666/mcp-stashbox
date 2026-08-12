@@ -1,631 +1,277 @@
 /**
- * The shapes every tool declares it returns.
+ * The contract each tool publishes for what it answers.
  *
- * A record read from a catalogue comes back in one of two shapes: what the
- * catalogue holds, or a marker saying the identifier now addresses something
- * else. Declaring one and returning the other would publish a schema a caller
- * cannot rely on, so the two are declared as a choice and each is described for
- * what it is.
+ * Every tool declares an `outputSchema`, and every key any answer publishes is
+ * declared at the path it is published on. A key published and undeclared is
+ * invisible to a caller reading the contract rather than the prose, and a key
+ * declared and never emitted is a promise nothing keeps: the two lists are the
+ * same list, which is why this file is the one place either is written.
+ *
+ * The descriptions carry the reasons. A field that can be read for something it
+ * is not says what it does not mean, since a schema-driven caller never reads
+ * the sentences the text block carries.
  */
 
 import { z } from "zod";
 
-const dateSchema = z
-  .object({
-    value: z.string().describe("The date exactly as the catalogue publishes it."),
-    precision: z
-      .enum(["day", "month", "year"])
-      .describe(
-        "How much of the date a cataloguer entered. A value recorded to the year carries no month and no day, and reading it as one would claim a precision nobody entered.",
-      ),
-  })
-  .nullable();
+import { ERROR_CODES } from "../errors.js";
+import {
+  fingerprintRow,
+  foldableStatus,
+  identifierField,
+  performerRecord,
+  sceneRecord,
+  sourceId,
+} from "./recordSchemas.js";
 
-const siteLinkSchema = z.object({
-  url: z.string(),
-  site_name: z
-    .string()
-    .nullable()
-    .describe(
-      "The catalogue's own name for that site. Null where it attaches no site to the link, since naming one would assert a site the catalogue declined to identify.",
-    ),
-  site_category: z
-    .string()
-    .nullable()
-    .describe(
-      "The catalogue's own category for that site. Null on a catalogue that publishes no table of sites, since borrowing a neighbour's would sort a link by a taxonomy this catalogue never applied.",
-    ),
-});
+/* ----------------------------------------------------- what a catalogue did */
 
-const imageSchema = z.object({
-  url: z.string().describe("The address of the image. The image itself is never returned."),
-  width: z.number().nullable(),
-  height: z.number().nullable(),
-});
-
-const fingerprintSchema = z.object({
-  algorithm: z.enum(["MD5", "OSHASH", "PHASH"]),
-  hash: z.string(),
-  duration_seconds: z.number().nullable(),
-  submissions: z
-    .number()
-    .nullable()
-    .describe("How many people entered this fingerprint. Null where the catalogue counts none."),
-  reports: z
-    .number()
-    .nullable()
-    .describe(
-      "How many people reported against it. Null on a catalogue that records no reports, which is an unknown contest and never an absence of one.",
-    ),
-  contested: z
-    .boolean()
-    .nullable()
-    .describe(
-      "Whether the reports reach the submissions. Null where the catalogue publishes no report count: a fingerprint nobody has disputed and one on a catalogue that counts no disputes are different things.",
-    ),
-});
-
-const sourceReportSchema = z.object({
-  source: z.string(),
-  name: z.string().optional(),
+/**
+ * What one catalogue did with the question.
+ *
+ * The three states are kept apart because collapsing them is the failure this
+ * server exists to prevent, and the four narrowing fields are four because they
+ * answer four different questions.
+ */
+export const sourceReport = z.object({
+  source: sourceId,
+  name: z.string().optional().describe("The catalogue's own name, as an answer credits it."),
   state: z
     .enum(["answered", "failed", "absent"])
     .describe(
-      "'answered' is a catalogue that looked, and a count of zero there means it found nothing. 'failed' could not answer. 'absent' was never asked. An answer holding rows from some catalogues is no evidence about the others.",
+      "What became of this catalogue: 'answered' looked and said what it holds, even where that is nothing; 'failed' could not answer; 'absent' was never asked. Only 'answered' is evidence about the world.",
     ),
-  count: z.number().optional().describe("Rows this catalogue contributed to this page."),
+  count: z
+    .number()
+    .optional()
+    .describe("Rows this catalogue contributed. Present where it answered, and absent otherwise."),
   records: z
     .number()
     .optional()
     .describe(
-      "Distinct records behind this catalogue's rows, carried where one record can answer more than once: a fingerprint lookup returns a match per hash a scene carries, so two hashes on one scene are two rows and one record.",
+      "Distinct records behind those rows, where one record can answer more than one thing that was asked.",
     ),
   unattributed: z
     .number()
     .optional()
     .describe(
-      "Rows this catalogue answered with while returning none of what was asked about, so which of the things asked reached them is unknown.",
+      "Records it answered with that carry none of what was asked about. Which one reached them is unknown, which is a different fact from a catalogue finding nothing.",
     ),
-  skipped: z.number().optional(),
+  skipped: z
+    .number()
+    .optional()
+    .describe(
+      "Rows it answered with that came back unreadable and were left out. They are missing from the rows and from the counts, and their absence says nothing about what this catalogue holds.",
+    ),
   index_total: z
     .number()
     .optional()
-    .describe("What this catalogue's index holds for the question, the rows returned included."),
-  reason: z.string().optional(),
-  moment: z.string().optional().describe("Which step failed, for a catalogue that failed."),
-  error: z.string().optional(),
+    .describe(
+      "What its index holds for this question, beyond the page returned. Absent on a catalogue publishing no such count.",
+    ),
   fields_searched: z
     .array(z.string())
     .optional()
-    .describe("The fields the text index read. Absent where no text index was consulted."),
+    .describe("The fields its text index read, claimed only where one was consulted."),
   narrowings_not_received: z
     .array(z.string())
     .optional()
     .describe(
-      "Narrowings this catalogue could not receive, which is a limit of the catalogue. A row of its satisfying one of them does so by chance.",
-    ),
-  narrowings_received_in_part: z
-    .array(z.string())
-    .optional()
-    .describe(
-      "Narrowings this catalogue received short: the list named records on more than one catalogue and only its own reached it. A row of its satisfying what survived is no row satisfying the list as written.",
-    ),
-  arguments_with_nothing_to_do: z
-    .array(z.string())
-    .optional()
-    .describe(
-      "Arguments written that this question gave nothing to do. They shaped no request, and a row here neither satisfies nor fails them.",
-    ),
-  algorithms_not_searched: z
-    .array(z.string())
-    .optional()
-    .describe(
-      "Fingerprint algorithms this catalogue's lookup does not search. It was never asked about those hashes, so its answer here is no evidence about them.",
+      "Narrowings this catalogue cannot receive, so the rows here were never narrowed by them. This is the one field that says a catalogue cannot do something.",
     ),
   narrowings_naming_no_record_here: z
     .array(z.string())
     .optional()
     .describe(
-      "Narrowings this catalogue receives, written with identifiers no record of its own carries. Its emptiness is about those identifiers and states nothing about what it indexes.",
+      "Narrowings written with identifiers no record of this catalogue carries. It says only that nothing here was named, and nothing about what this catalogue holds.",
     ),
-});
-
-/**
- * When a record came off a catalogue.
- *
- * An answer served from the in-memory store carries the moment of the read it
- * came from, so a caller can tell a fresh reading from a held one.
- */
-const retrievedAtSchema = z.string().describe("When this record came off the catalogue, ISO 8601.");
-
-const statusSchema = z
-  .enum(["established", "deleted", "merged"])
-  .describe(
-    "'established' is a record the catalogue holds. 'merged' and 'deleted' are markers: the identifier resolves, and what comes back describes the record rather than the thing it once named.",
-  );
-
-/**
- * What an identifier addresses now, where its catalogue names no successor.
- *
- * These catalogues fold a performer into another record and publish which one.
- * A scene, a studio and a tag they withdraw without naming anything in its
- * place, so those are held or withdrawn and never merged. Declaring a third
- * reading there would offer a caller a branch nothing can reach.
- */
-const heldOrWithdrawnSchema = z
-  .enum(["established", "deleted"])
-  .describe(
-    "'established' is a record the catalogue holds. 'deleted' is a marker: the identifier resolves, and what comes back describes the record rather than the thing it once named. No successor is named, since these catalogues publish none for this kind of record.",
-  );
-
-export const sceneSchema = z.object({
-  id: z.string(),
-  source: z.string(),
-  source_url: z.string().describe("The record on the catalogue that answered."),
-  retrieved_at: retrievedAtSchema,
-  status: heldOrWithdrawnSchema,
-  title: z.string().nullable(),
-  details: z.string().nullable(),
-  code: z
-    .string()
-    .nullable()
-    .describe("The studio's own reference, in whatever form it publishes."),
-  director: z.string().nullable().describe("Free text, which can name several people."),
-  duration_seconds: z.number().nullable(),
-  release_date: dateSchema.describe("When the scene was published."),
-  production_date: dateSchema.describe(
-    "When the scene was made, which is a different question from when it was published. Rarely recorded, and never filled in from the release date.",
-  ),
-  studio: z
-    .object({
-      id: z.string(),
-      name: z.string(),
-      parent: z.string().nullable(),
-      status: heldOrWithdrawnSchema,
-    })
-    .nullable(),
-  performers: z.array(
-    z.object({
-      id: z.string(),
-      name: z.string(),
-      credited_as: z
-        .string()
-        .nullable()
-        .describe(
-          "The name printed on this release, where it differs from the performer's own. It travels beside that name and never in place of it.",
-        ),
-      disambiguation: z.string().nullable(),
-      status: statusSchema.describe(
-        "What the credited identifier addresses now. 'merged' and 'deleted' mean it resolves to a marker rather than to the person this credit names.",
-      ),
-    }),
-  ),
-  tags: z.array(
-    z.object({
-      id: z.string(),
-      name: z.string(),
-      category: z.string().nullable(),
-      status: heldOrWithdrawnSchema,
-    }),
-  ),
-  urls: z.array(siteLinkSchema),
-  images: z.array(imageSchema).optional(),
-  fingerprints: z.array(fingerprintSchema).optional(),
-  release_date_unreadable: z
-    .literal(true)
-    .optional()
-    .describe(
-      "Present where the catalogue published a release date this client could not read, which is a date dropped rather than a record carrying none.",
-    ),
-  production_date_unreadable: z
-    .literal(true)
-    .optional()
-    .describe(
-      "Present where the catalogue published a production date this client could not read, which is a date dropped rather than a record carrying none.",
-    ),
-  fingerprints_held: z
-    .number()
-    .optional()
-    .describe("How many the record holds, where the section shows a page of them."),
-  fingerprint_count: z
-    .record(z.string(), z.number())
-    .optional()
-    .describe(
-      "How many fingerprints this record holds per algorithm. It counts what the catalogue holds, never what the list above shows.",
-    ),
-  rows_skipped: z
-    .number()
-    .optional()
-    .describe(
-      "Rows of this record's own lists that came back unreadable and were left out of them.",
-    ),
-  pending_edits_unreadable: z
-    .literal(true)
-    .optional()
-    .describe(
-      "Present where the catalogue publishes open edits and answered them in a shape this client could not read, which leaves the record's revision state unknown rather than settled.",
-    ),
-  pending_edits: z
-    .number()
-    .optional()
-    .describe(
-      "Edits to this record open on the catalogue, where it publishes them. What the record states is under revision.",
-    ),
-  rows_skipped_in: z
+  narrowings_received_in_part: z
     .array(z.string())
     .optional()
-    .describe("Which of this record's lists lost those rows."),
-  images_skipped: z
-    .number()
-    .optional()
-    .describe("Image rows the catalogue answered with that came back unreadable."),
-  fingerprints_skipped: z
-    .number()
-    .optional()
-    .describe("Fingerprint rows the catalogue answered with that came back unreadable."),
-  created: z.string().nullable(),
-  updated: z.string().nullable(),
-  cached: z.boolean().optional().describe("Present when the answer came from the in-memory store."),
-  notes: z.array(z.string()).describe("What qualifies this answer. Also carried in the text."),
-});
-
-/**
- * One shape covering a scene and a marker.
- *
- * A record answers as itself or as a marker saying the identifier now addresses
- * something else, and `status` says which. The fields that survive on both are
- * required; the rest are declared optional and described for the status they
- * belong to.
- */
-export const getSceneOutput = sceneSchema
-  .partial()
-  .extend({
-    id: z.string(),
-    source: z.string(),
-    source_url: z.string(),
-    retrieved_at: retrievedAtSchema,
-    status: heldOrWithdrawnSchema,
-    notes: z.array(z.string()),
-    former_title: z
-      .string()
-      .nullable()
-      .optional()
-      .describe("Present on a marker: the title the record carried."),
-  })
-  .describe(
-    "A scene when 'status' is 'established'. When it is 'deleted' or 'merged' this is a marker: it carries the identifier, the catalogue, the successor and the former title, and no field describing a scene.",
-  );
-
-export const performerSchema = z.object({
-  id: z.string(),
-  source: z.string(),
-  source_url: z.string(),
-  retrieved_at: retrievedAtSchema,
-  status: statusSchema,
-  merged_into: z.string().nullable(),
-  merged_ids: z.array(z.string()),
-  name: z.string().nullable(),
-  disambiguation: z
-    .string()
-    .nullable()
-    .describe("Free text telling two people apart. It reads and never parses."),
-  aliases: z.array(z.string()).describe("Stage names and variant spellings alike."),
-  gender: z.string().nullable(),
-  country: z.string().nullable(),
-  birth_date: dateSchema,
-  death_date: dateSchema,
-  career_start_year: z.number().nullable(),
-  career_end_year: z.number().nullable(),
-  scene_count: z
-    .number()
-    .nullable()
     .describe(
-      "Scenes this catalogue has indexed crediting this performer. A settled record naming a career spanning decades can report zero, which measures the catalogue's coverage and states nothing about a person's work.",
+      "Narrowings that reached this catalogue shorn of the identifiers another catalogue minted, so it narrowed on a fraction of what was written.",
     ),
-  scene_count_means: z
-    .string()
-    .describe(
-      "What the scene count above measures, in words, so the number is never read as a person's work.",
-    ),
-  urls: z.array(siteLinkSchema),
-  appearance: z
-    .object({
-      ethnicity: z.string().nullable(),
-      eye_color: z.string().nullable(),
-      hair_color: z.string().nullable(),
-      height_cm: z.number().nullable(),
-      breast_type: z.string().nullable(),
-      cup_size: z.string().nullable(),
-      band_size: z.number().nullable(),
-      waist_size: z.number().nullable(),
-      hip_size: z.number().nullable(),
-      tattoos: z.array(z.string()).nullable(),
-      piercings: z.array(z.string()).nullable(),
-    })
-    .optional(),
-  images: z.array(imageSchema).optional(),
-  scenes: z
-    .array(
-      z.object({
-        id: z.string(),
-        title: z.string().nullable(),
-        release_date: dateSchema,
-        studio: z.string().nullable(),
-        status: heldOrWithdrawnSchema,
-        source_url: z.string(),
-      }),
-    )
-    .optional(),
-  birth_date_unreadable: z
-    .literal(true)
-    .optional()
-    .describe(
-      "Present where the catalogue published a birth date this client could not read, which is a date dropped rather than a record carrying none.",
-    ),
-  death_date_unreadable: z
-    .literal(true)
-    .optional()
-    .describe(
-      "Present where the catalogue published a death date this client could not read, which is a date dropped rather than a record carrying none.",
-    ),
-  images_skipped: z
-    .number()
-    .optional()
-    .describe("Image rows the catalogue answered with that came back unreadable."),
-  scenes_total: z
-    .number()
-    .optional()
-    .describe("What the catalogue holds behind the one page this section shows."),
-  scenes_unavailable: z
-    .string()
-    .optional()
-    .describe(
-      "Why the section is missing, when it was asked for and is not here: the catalogue could not answer it, or its shape offers no way to ask. Its absence then says nothing about what the catalogue holds.",
-    ),
-  studios: z
-    .array(
-      z.object({
-        id: z.string(),
-        name: z.string(),
-        scene_count: z.number().nullable(),
-        status: heldOrWithdrawnSchema,
-      }),
-    )
-    .optional(),
-  studios_total: z
-    .number()
-    .optional()
-    .describe("How many the record credits, where the section shows a page of them."),
-  rows_skipped: z
-    .number()
-    .optional()
-    .describe(
-      "Rows of this record's own lists that came back unreadable and were left out of them.",
-    ),
-  pending_edits_unreadable: z
-    .literal(true)
-    .optional()
-    .describe(
-      "Present where the catalogue publishes open edits and answered them in a shape this client could not read, which leaves the record's revision state unknown rather than settled.",
-    ),
-  pending_edits: z
-    .number()
-    .optional()
-    .describe(
-      "Edits to this record open on the catalogue, where it publishes them. What the record states is under revision.",
-    ),
-  rows_skipped_in: z
+  arguments_with_nothing_to_do: z
     .array(z.string())
     .optional()
-    .describe("Which of this record's lists lost those rows."),
-  studios_skipped: z
-    .number()
-    .optional()
-    .describe("Studio rows the catalogue answered with that came back unreadable."),
-  scenes_skipped: z
-    .number()
-    .optional()
-    .describe("Scenes the catalogue answered with that came back unreadable and were left out."),
-  studios_unavailable: z
-    .string()
+    .describe(
+      "Arguments this question gave nothing to select on, so they shaped no request at all.",
+    ),
+  algorithms_not_searched: z
+    .array(z.string())
     .optional()
     .describe(
-      "Why the studios section is missing, where it was asked for and could not be read. Its absence then says nothing about what the catalogue holds.",
+      "Fingerprint algorithms this catalogue's lookup does not search, so they were never put to it and its silence is no evidence about them.",
     ),
-  created: z.string().nullable(),
-  updated: z.string().nullable(),
-  cached: z.boolean().optional().describe("Present when the answer came from the in-memory store."),
-  notes: z.array(z.string()),
+  reason: z.string().optional().describe("Why it was not asked, or what went wrong where it was."),
+  moment: z
+    .string()
+    .optional()
+    .describe("Which moment failed, such as the search or the reading of one record."),
+  error: z
+    .enum(ERROR_CODES)
+    .optional()
+    .describe(
+      "The code the failure carries. A failure is a statement about this exchange, never about what the catalogue holds.",
+    ),
 });
 
-/**
- * One shape covering a performer and a marker, for the reason given above.
- */
-export const getPerformerOutput = performerSchema
-  .partial()
-  .extend({
-    id: z.string(),
-    source: z.string(),
-    source_url: z.string(),
-    retrieved_at: retrievedAtSchema,
-    status: statusSchema,
-    notes: z.array(z.string()),
-    merged_into: z
-      .string()
-      .nullable()
-      .optional()
-      .describe("Present on a marker: the identifier that continues this record."),
-    former_name: z
-      .string()
-      .nullable()
-      .optional()
-      .describe("Present on a marker: the name the record carried."),
-    scene_count: z
-      .number()
-      .nullable()
-      .optional()
-      .describe(
-        "Scenes this catalogue has indexed crediting this performer. A settled record naming a career spanning decades can report zero, which measures coverage and states nothing about a person's work. Null on a marker, since the count belongs to the record that continues it.",
-      ),
-  })
+/* ----------------------------------------------- what every answer carries */
+
+const notes = z
+  .array(z.string())
   .describe(
-    "A performer when 'status' is 'established'. When it is 'deleted' or 'merged' this is a marker: it carries the identifier, the catalogue, the successor, the identifiers folded in and the former name, and no field describing a person.",
+    "What the rows do not establish, in sentences: how they are ordered, which catalogues are missing from them, and why an emptiness is empty.",
   );
 
-const sceneRowSchema = z.object({
-  id: z.string(),
-  source: z.string(),
-  title: z.string().nullable(),
-  release_date: dateSchema,
-  duration_seconds: z.number().nullable(),
-  studio: z.string().nullable(),
-  studio_id: z
-    .string()
-    .nullable()
-    .describe("The studio's identifier on that catalogue, which a narrowing takes."),
-  studio_status: heldOrWithdrawnSchema
-    .nullable()
-    .describe("What the studio's identifier addresses now. Null where the row names no studio."),
-  performers: z.array(z.string()),
-  status: statusSchema,
-  created: z
-    .string()
-    .nullable()
-    .optional()
-    .describe("Carried when the rows were sorted on it, so the order can be read on the rows."),
-  updated: z.string().nullable().optional().describe("Carried on the same terms as 'created'."),
-  retrieved_at: retrievedAtSchema,
-  source_url: z.string(),
-});
+const cached = z
+  .boolean()
+  .optional()
+  .describe(
+    "The answer was replayed from this client's store, so no catalogue was asked for it and each is reported as saying what it said when it was first read.",
+  );
 
-const windowSchema = z
+const window = z
   .object({
-    page: z
-      .number()
-      .describe(
-        "The page asked for. A catalogue whose search takes no page is named in 'per_source' as not having received it, and its rows are a first page.",
-      ),
-    limit: z.number(),
-    page_received_by_all: z
-      .literal(false)
-      .optional()
-      .describe(
-        "Present when a catalogue named in 'per_source' could take no page and answered its first, so its rows repeat a first page rather than covering the one asked for.",
-      ),
+    page: z.number().describe("The page asked for."),
+    limit: z.number().describe("How many rows one page was asked to carry."),
   })
   .optional()
   .describe(
-    "The window this answer covers, per catalogue. An emptiness here is an emptiness inside that window.",
+    "The page the rows were asked for. Absent where no catalogue answered, since an emptiness that is a failure is no emptiness inside a window.",
   );
 
-const orderingSchema = z
-  .string()
+const rowsSkipped = z
+  .number()
+  .optional()
   .describe(
-    "How the order was built. The catalogues publish no score in common, so rows interleave and nothing is ranked across them.",
+    "Rows inside the records listed here that could not be read, counted across them. They are missing from what each record shows of its own lists.",
   );
+
+const foldedNarrowings = z
+  .array(
+    z.object({
+      given: identifierField.describe("The identifier as it was written."),
+      successor: identifierField
+        .nullable()
+        .describe("The record it now addresses, null on one the catalogue withdrew."),
+      status: foldableStatus,
+    }),
+  )
+  .optional()
+  .describe(
+    "Identifiers a narrowing was written with that their catalogue has folded. A folded identifier narrows to nothing because the rows moved, so the emptiness is about the identifier.",
+  );
+
+const absentNarrowings = z
+  .array(identifierField)
+  .optional()
+  .describe(
+    "Identifiers whose catalogue holds no record for them, so nothing there answers to them.",
+  );
+
+const uncheckedNarrowings = z
+  .array(identifierField)
+  .optional()
+  .describe(
+    "Identifiers whose record could not be read, so whether they still address what they name is unsettled.",
+  );
+
+const perSource = z
+  .array(sourceReport)
+  .describe("What each catalogue did with the question, one line per catalogue.");
+
+/* -------------------------------------------------------------- the search */
+
+const rowsAnswer = {
+  per_source: perSource,
+  ordering: z
+    .string()
+    .describe(
+      "How the order was built. The catalogues share no score, so rows from several of them are never ranked against each other.",
+    ),
+  result_count: z.number().describe("How many rows this answer carries."),
+  window,
+  rows_skipped: rowsSkipped,
+  folded_narrowings: foldedNarrowings,
+  absent_narrowings: absentNarrowings,
+  unchecked_narrowings: uncheckedNarrowings,
+  cached,
+  notes,
+};
 
 export const searchScenesOutput = z.object({
-  query: z.string().optional(),
-  cached: z.boolean().optional().describe("Present when the answer came from the in-memory store."),
-  results: z.array(sceneRowSchema),
-  result_count: z
-    .number()
-    .describe("Rows returned here. Counts are never added across catalogues."),
-  rows_skipped: z
-    .number()
-    .optional()
+  results: z
+    .array(sceneRecord)
     .describe(
-      "Rows inside the records listed here that could not be read and are left out of what each one shows of its own lists.",
+      "One page of scenes per catalogue asked, gathered into one list. Counts are per catalogue and are never added: one scene held by two of them is a separate record on each.",
     ),
-  ordering: orderingSchema,
-  window: windowSchema,
-  per_source: z.array(sourceReportSchema),
-  notes: z.array(z.string()),
+  ...rowsAnswer,
 });
 
 export const searchPerformersOutput = z.object({
-  query: z.string().optional(),
-  cached: z.boolean().optional().describe("Present when the answer came from the in-memory store."),
-  results: z.array(
-    z.object({
-      id: z.string(),
-      source: z.string(),
-      name: z.string().nullable(),
-      disambiguation: z.string().nullable(),
-      aliases: z.array(z.string()),
-      country: z.string().nullable(),
-      birth_date: dateSchema,
-      career_start_year: z.number().nullable(),
-      career_end_year: z.number().nullable(),
-      scene_count: z
-        .number()
-        .nullable()
-        .describe("Scenes that catalogue has indexed crediting this performer."),
-      status: statusSchema,
-      merged_into: z
-        .string()
-        .optional()
-        .describe("The record this identifier was folded into, carried where it names one."),
-      created: z
-        .string()
-        .nullable()
-        .optional()
-        .describe("Carried when the rows were sorted on it, so the order can be read on the rows."),
-      updated: z.string().nullable().optional().describe("Carried on the same terms as 'created'."),
-      retrieved_at: retrievedAtSchema,
-      source_url: z.string(),
-    }),
-  ),
-  result_count: z.number(),
-  rows_skipped: z
-    .number()
-    .optional()
+  results: z
+    .array(performerRecord)
     .describe(
-      "Rows inside the records listed here that could not be read and are left out of what each one shows of its own lists.",
+      "One page of performers per catalogue asked, gathered into one list. Counts are per catalogue and are never added: one person held by two of them is a separate record on each.",
     ),
-  ordering: orderingSchema,
-  window: windowSchema,
-  per_source: z.array(sourceReportSchema),
-  notes: z.array(z.string()),
+  ...rowsAnswer,
 });
 
+/* ---------------------------------------------------------- the one record */
+
+export const getSceneOutput = sceneRecord.extend({ cached, notes });
+
+export const getPerformerOutput = performerRecord.extend({ cached, notes });
+
+/* ------------------------------------------------------------- the lookup */
+
 export const findByFingerprintOutput = z.object({
-  asked: z.array(z.object({ hash: z.string(), algorithm: z.string() })),
-  matches: z.array(
-    z.object({
-      algorithm: z.enum(["MD5", "OSHASH", "PHASH"]),
-      match_kind: z
-        .enum(["exact_file", "perceptual_similarity"])
-        .describe(
-          "'exact_file' means the same file, byte for byte. 'perceptual_similarity' means images that resemble each other, which covers a re-encode, a crop and a different scene from one shoot, and is no evidence that two files are the same.",
-        ),
-      scene: z.object({
-        id: z.string(),
-        source: z.string(),
-        title: z.string().nullable(),
-        release_date: dateSchema,
-        studio: z.string().nullable(),
-        performers: z.array(z.string()),
-        status: heldOrWithdrawnSchema,
-        retrieved_at: retrievedAtSchema,
-        source_url: z.string(),
+  matches: z
+    .array(
+      z.object({
+        scene: sceneRecord,
+        algorithm: z
+          .enum(["MD5", "OSHASH", "PHASH"])
+          .describe("The algorithm of the hash that reached this record."),
+        match_kind: z
+          .enum(["exact_file", "perceptual_similarity"])
+          .describe(
+            "What the match claims. 'exact_file' is the same bytes. 'perceptual_similarity' covers a re-encode, a crop and another scene from one shoot, and is no evidence that two files are the same.",
+          ),
+        fingerprint: fingerprintRow
+          .nullable()
+          .describe(
+            "The fingerprint the record carries for that hash, null where the record publishes none, so a caller can see which hash reached it.",
+          ),
       }),
-      fingerprint: fingerprintSchema.nullable(),
-    }),
-  ),
-  rows_skipped: z
-    .number()
-    .optional()
+    )
     .describe(
-      "Rows inside the records matched here that could not be read and are left out of what each one shows of its own lists.",
+      "One entry per hash that reached a record, so one record answering two hashes appears twice.",
     ),
-  match_count: z.number().describe("Matches returned: one per scene per fingerprint it carries."),
-  scenes_matched: z.number().describe("Distinct scenes behind those matches."),
+  match_count: z.number().describe("How many matches this answer carries."),
+  scenes_matched: z
+    .number()
+    .describe(
+      "How many distinct records those matches stand on, which is never more than they are.",
+    ),
   unattributed: z
     .number()
     .describe(
-      "Scenes a catalogue answered with while returning none of the fingerprints asked for. Which hash reached them is unknown, which is kept apart from a catalogue that found nothing.",
+      "Records the catalogues answered with while carrying none of the hashes asked. Which hash reached them is unknown, which is a different fact from a catalogue finding nothing.",
     ),
-  per_source: z.array(sourceReportSchema),
-  notes: z.array(z.string()),
+  asked: z
+    .array(
+      z.object({
+        hash: z.string().describe("The hash as it was written."),
+        algorithm: z
+          .enum(["MD5", "OSHASH", "PHASH"])
+          .describe("The algorithm it was said to be computed with."),
+      }),
+    )
+    .describe("The fingerprints put to the catalogues, each named once."),
+  per_source: perSource,
+  rows_skipped: rowsSkipped,
+  cached,
+  notes,
 });

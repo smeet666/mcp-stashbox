@@ -1,164 +1,133 @@
 /**
- * What a value from a catalogue is allowed to become.
+ * Reading what a catalogue published into what this client can state.
  *
- * Every rule here exists because a catalogue publishes something its data does
- * not carry, and repeating it unchanged would turn a gap into a claim.
+ * One rule governs every function here: the server never states anything the
+ * data does not carry. A value that cannot be read is an absence, and it is
+ * returned as `null` so a caller has to face it, and a value that is read keeps
+ * the precision, the sign and the spelling it was published with.
  */
 
 export type DatePrecision = "day" | "month" | "year";
 
 export interface ReadDate {
-  /** The date exactly as published. */
+  /** The text the catalogue published, unchanged. */
   value: string;
   precision: DatePrecision;
 }
 
-const DAY = /^\d{4}-\d{2}-\d{2}$/;
-const MONTH = /^\d{4}-\d{2}$/;
-const YEAR = /^\d{4}$/;
+export type RecordStatus = "established" | "merged" | "deleted";
+
+const YEAR = /^(\d{4})$/;
+const YEAR_MONTH = /^(\d{4})-(\d{2})$/;
+const YEAR_MONTH_DAY = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+/** How many days a month holds, the second entry answered by the year itself. */
+function daysInMonth(year: number, month: number): number {
+  if (month === 2) {
+    const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+    return leap ? 29 : 28;
+  }
+  return [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1] ?? 0;
+}
 
 /**
- * Read a catalogue date.
+ * A date in the three shapes a catalogue stores, carrying the precision it was
+ * entered at. A bare year is a year: rendering it as the first of January would
+ * put a day in front of a reader that nobody entered, so the precision travels
+ * with the value instead of being inferred by whoever prints it.
  *
- * Dates are stored as text and a cataloguer enters what they knew, so a record
- * holds a full day, a month or a bare year. Rendering a bare year as a day would
- * claim a precision nobody entered.
+ * Anything else is an absence. A value shaped like a date that names no day on
+ * a calendar, the 31st of April among them, is a value the catalogue cannot
+ * have meant, and a value written in another order names a date whose year
+ * could only be guessed.
  */
-export function readDate(raw: string | null | undefined): ReadDate | null {
-  if (raw === null || raw === undefined) return null;
-  const value = raw.trim();
-  if (value === "") return null;
-  if (DAY.test(value) && namesARealDay(value)) return { value, precision: "day" };
-  if (MONTH.test(value) && namesARealMonth(value)) return { value, precision: "month" };
+export function readDate(value: string | null | undefined): ReadDate | null {
+  if (typeof value !== "string" || value === "") return null;
+
+  const day = YEAR_MONTH_DAY.exec(value);
+  if (day) {
+    const year = Number(day[1]);
+    const month = Number(day[2]);
+    const date = Number(day[3]);
+    if (month < 1 || month > 12) return null;
+    if (date < 1 || date > daysInMonth(year, month)) return null;
+    return { value, precision: "day" };
+  }
+
+  const month = YEAR_MONTH.exec(value);
+  if (month) {
+    const number = Number(month[2]);
+    if (number < 1 || number > 12) return null;
+    return { value, precision: "month" };
+  }
+
   if (YEAR.test(value)) return { value, precision: "year" };
+
   return null;
 }
 
 /**
- * A date shaped like a date still has to name one.
- *
- * The catalogue stores text, so a record can carry the thirty-first of April or
- * a thirteenth month. Handing either back with a precision would put a day that
- * never happened in front of a reader as a fact.
- */
-function namesARealMonth(value: string): boolean {
-  const month = Number(value.slice(5, 7));
-  return month >= 1 && month <= 12;
-}
-
-function namesARealDay(value: string): boolean {
-  if (!namesARealMonth(value)) return false;
-  const year = Number(value.slice(0, 4));
-  const month = Number(value.slice(5, 7));
-  const day = Number(value.slice(8, 10));
-  if (day < 1) return false;
-  // Day zero of the following month is the last day of this one.
-  return day <= new Date(Date.UTC(year, month, 0)).getUTCDate();
-}
-
-/**
- * A quantity on a scale that cannot hold zero.
- *
- * A merged record publishes a height of zero, which no person has. Reading it as
- * a measurement would state a fact about a body from a field that was emptied.
+ * A quantity that counts something, or the absence it stands for. Zero and the
+ * negatives are absences here: a merged record publishes a height of zero, and
+ * no person is nought centimetres tall, so passing it through would put a
+ * measurement in front of a reader that nobody took.
  */
 export function positiveOrNull(value: number | null | undefined): number | null {
-  if (value === null || value === undefined) return null;
-  if (!Number.isFinite(value) || value <= 0) return null;
-  return value;
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return value > 0 ? value : null;
 }
 
-export type RecordStatus = "established" | "deleted" | "merged";
-
 /**
- * What a record is.
- *
- * A merged record is flagged deleted and carries its successor, so the successor
- * is what separates a record folded into another from one withdrawn outright.
+ * Where a record stands in its catalogue. The merge marker is the deleted flag:
+ * a successor named on a live record leaves the record where it is, and a
+ * deleted record naming a successor is answered with that successor, since
+ * `not_found` would deny a record that exists under another name.
  */
 export function readStatus(
   deleted: boolean | null | undefined,
-  mergedIntoId: string | null | undefined,
+  successor: string | null | undefined,
 ): RecordStatus {
   if (deleted !== true) return "established";
-  return mergedIntoId ? "merged" : "deleted";
+  return typeof successor === "string" && successor !== "" ? "merged" : "deleted";
 }
 
 /**
- * Whether a fingerprint is disputed by the people who entered it.
+ * Whether a fingerprint is disputed, read from how often it was submitted and
+ * how often it was reported.
  *
- * An instance that records no disputes yields null. A match nobody disputed and
- * a match on a catalogue that counts no disputes are different things, and
- * rendering the second as `false` would state an agreement nobody expressed.
+ * An instance that publishes no report count has recorded nothing either way,
+ * so the answer is `null`: reading that silence as `false` would state an
+ * agreement nobody expressed. Contesting takes at least one person contesting,
+ * which is why a fingerprint nobody has touched is uncontested. A count of
+ * reports without a count of submissions is still a contest that was recorded.
  */
 export function readContested(
   submissions: number | null | undefined,
   reports: number | null | undefined,
 ): boolean | null {
-  if (reports === null || reports === undefined) return null;
-  // Contesting takes at least one person contesting. Comparing the two counts
-  // alone calls a fingerprint nobody has touched doubtful, which is a reading of
-  // two zeroes rather than a statement anybody made.
+  if (typeof reports !== "number") return null;
   if (reports <= 0) return false;
-  // A catalogue that reports against a fingerprint without saying how many
-  // vouched for it has still recorded a contest.
-  if (submissions === null || submissions === undefined) return true;
+  if (typeof submissions !== "number") return true;
   return reports >= submissions;
 }
 
-/** The two openings this server writes for a line a reader is meant to trust. */
-const SERVER_OWN_OPENING = /^\s*(Note|Source):/;
+/** A line whose first non-space characters open one of the markers this server writes. */
+const MARKER_LINE = /^ *(?:Note|Source):/;
 
 /**
- * Shift a line of fetched text that opens exactly the way this server opens its
- * own qualifications.
+ * Shifts the lines of published text that open with a marker this server writes
+ * its own lines with.
  *
- * This matches the one spelling the server writes, so published text reading
- * `Notes: a list` or `note the date` is returned as it was published. Text that
- * runs to several lines is guarded by being indented whole, which is what makes
- * a narrow match here safe.
+ * Text a catalogue published reaches a reader inside an answer this server
+ * composes, and a description opening a line with `Note:` would forge a line
+ * the server appears to have written. Two spaces are enough to tell them apart,
+ * and every other byte of the text is left where it was, including the line
+ * count and the blank lines. One spelling is shifted, since the server writes
+ * exactly one.
  */
 export function indentMarkerLines(text: string): string {
   return text
     .split("\n")
-    .map((line) => (SERVER_OWN_OPENING.test(line) ? `  ${line}` : line))
+    .map((line) => (MARKER_LINE.test(line) ? `  ${line}` : line))
     .join("\n");
-}
-
-/**
- * A block of a catalogue's own prose, made unable to forge a line of this
- * server's.
- *
- * Every line is shifted, whatever it says. Recognising the openings this server
- * writes would leave the question of which spellings count, and a block that is
- * indented throughout raises no such question: no line of it can begin where a
- * line of the server's begins.
- */
-export function indentBlock(text: string): string {
-  return text
-    .split("\n")
-    .map((line) => `  ${line}`)
-    .join("\n");
-}
-
-/** A number the catalogue may publish as text, or omit. */
-export function readInteger(value: unknown): number | null {
-  // Every number this reads counts things: records in an index, people who
-  // submitted a hash, seconds of running time. A fraction of one of those
-  // counts nothing, and a magnitude past what integers hold exactly has already
-  // lost the digits that would say what it counted.
-  const whole = (parsed: number) => (Number.isSafeInteger(parsed) ? parsed : null);
-  if (typeof value === "number") return Number.isFinite(value) ? whole(value) : null;
-  if (typeof value === "string" && value.trim() !== "") {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) return whole(parsed);
-  }
-  return null;
-}
-
-/** Text a catalogue publishes, with an empty string read as the absence it is. */
-export function readText(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  return trimmed === "" ? null : value;
 }

@@ -1165,6 +1165,26 @@ describe("every refusal names the argument and carries one of the six codes", ()
     }
   }
 
+  /**
+   * A question the declaration accepts and the server still cannot ask.
+   *
+   * Every probe above is refused where the arguments are declared, which is the
+   * right place for them. The rule below is about the other kind of refusal,
+   * the sentence the server writes once a request is being built, so at least
+   * one probe has to reach it or the rule goes unmeasured.
+   */
+  for (const [tool, argument, value] of [
+    ["get_scene", "id", "javstash:94ef9c17-82c6-48b0-8dcc-063b69231960"],
+    ["get_performer", "id", "javstash:94ef9c17-82c6-48b0-8dcc-063b69231960"],
+  ] as const) {
+    probes.push({
+      tool,
+      name: argument,
+      label: `${tool}.${argument} naming a catalogue no key is held for`,
+      args: { ...VALID_ARGS[tool], [argument]: value },
+    });
+  }
+
   it("submits every argument of every tool, past every bound its declaration names", () => {
     expect(probes.length, "no argument was probed, so this rule is not measured").toBeGreaterThan(
       60,

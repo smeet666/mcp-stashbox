@@ -1,36 +1,45 @@
 /**
- * One error type, carrying a code the caller can branch on.
+ * What can go wrong, in six readings and not one more.
  *
- * The distinction that matters most is between "this catalogue holds no such
- * record" and "the question could not be asked". These catalogues answer a
- * refusal inside an HTTP success, so collapsing the two lets a model report an
- * absence it never established.
+ * A caller branches on the code, so the set is closed on purpose. A seventh
+ * would reach them as prose alone, and the branch they would need for it does
+ * not exist. Every one of the six answers a different question:
+ *
+ * - `not_found`     the catalogue looked and holds no such record
+ * - `invalid_input` the arguments cannot produce a request
+ * - `rate_limited`  the catalogue asked this client to slow down
+ * - `parse_failure` the catalogue answered something this client cannot read
+ * - `network_error` the request did not complete
+ * - `timeout`       the catalogue did not answer in time
+ *
+ * The distinction that matters most is between the first and the rest: only
+ * `not_found` is a statement about the world. The other five are statements
+ * about this exchange, and reading one of them as an absence is the failure
+ * this whole server is built to avoid.
  */
 
 import { ISSUES_URL } from "./version.js";
 
-export type ErrorCode =
-  /** The instance answered, and there is no such record. */
-  | "not_found"
-  /** The arguments cannot produce a request, or the instance refused them. */
-  | "invalid_input"
-  /** The instance asked this client to slow down. */
-  | "rate_limited"
-  /** A response arrived in a shape this client cannot read. */
-  | "parse_failure"
-  /** The request could not be completed. */
-  | "network_error"
-  /** The request was abandoned before an answer arrived. */
-  | "timeout";
+export const ERROR_CODES = [
+  "not_found",
+  "invalid_input",
+  "rate_limited",
+  "parse_failure",
+  "network_error",
+  "timeout",
+] as const;
+
+export type ErrorCode = (typeof ERROR_CODES)[number];
 
 export interface ErrorDetails {
-  /** What the caller can do about it, when there is something. */
+  /** What a caller can do about it, in words they can act on. */
   hint?: string;
-  /** The address that produced the failure, for a bug report. */
+  /** The address that was asked, where naming it helps. */
   url?: string;
-  status?: number;
-  /** Which catalogue produced it, since several answer one question. */
+  /** The catalogue the failure belongs to. */
   instance?: string;
+  /** The status a catalogue answered with. */
+  status?: number;
 }
 
 export class StashboxError extends Error {
@@ -45,26 +54,32 @@ export class StashboxError extends Error {
   }
 }
 
+/** A record the catalogue looked for and does not hold. */
 export const notFound = (message: string, details?: ErrorDetails) =>
   new StashboxError("not_found", message, details);
 
+/** Arguments that cannot produce a request, so nothing was asked. */
 export const invalidInput = (message: string, hint?: string) =>
   new StashboxError("invalid_input", message, hint ? { hint } : {});
 
+/** A catalogue asking for room, which says nothing about what it holds. */
 export const rateLimited = (message: string, details?: ErrorDetails) =>
   new StashboxError("rate_limited", message, {
     hint: "Wait a moment and ask again. This says nothing about whether the record exists.",
     ...details,
   });
 
+/** An answer that arrived and could not be read, which is never an emptiness. */
 export const parseFailure = (message: string, details?: ErrorDetails) =>
   new StashboxError("parse_failure", message, {
-    hint: `The instance may have changed how it answers. Please report this at ${ISSUES_URL} with the arguments you used.`,
+    hint: `The catalogue may have changed how it answers. Please report this at ${ISSUES_URL} with the arguments you used.`,
     ...details,
   });
 
+/** A request that did not complete, so the catalogue said nothing at all. */
 export const networkError = (message: string, details?: ErrorDetails) =>
   new StashboxError("network_error", message, details);
 
+/** A catalogue that did not answer in the time this client waits. */
 export const timeout = (message: string, details?: ErrorDetails) =>
   new StashboxError("timeout", message, details);

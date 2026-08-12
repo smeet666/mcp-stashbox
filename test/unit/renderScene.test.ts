@@ -84,7 +84,6 @@ function scene(over: Partial<SceneRecord> = {}): SceneRecord {
     // Pinned, so no test reads a clock.
     retrievedAt: "2026-08-11T00:00:00.000Z",
     status: "established",
-    mergedInto: null,
     pendingEdits: 0,
     title: "Harbour Lights, Chapter Two",
     details: "An invented synopsis for an invented release.",
@@ -342,7 +341,6 @@ describe("renderScene withdrawn marker", () => {
   function marker(): SceneRecord {
     return scene({
       status: "deleted",
-      mergedInto: null,
       title: "Harbour Lights, Chapter Two",
       details: null,
       code: null,
@@ -536,7 +534,6 @@ describe("renderScene sections asked for and not rendered", () => {
   it("says a section could not be rendered on a merged record", () => {
     const merged = scene({
       status: "merged",
-      mergedInto: "stashdb:9a8b7c6d-5e4f-4302-9182-736455647382",
       details: null,
       code: null,
       director: null,
@@ -563,7 +560,6 @@ describe("renderScene sections asked for and not rendered", () => {
   it("says a section could not be rendered on a withdrawn record", () => {
     const withdrawn = scene({
       status: "deleted",
-      mergedInto: null,
       details: null,
       code: null,
       director: null,

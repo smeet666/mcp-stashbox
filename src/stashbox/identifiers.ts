@@ -1,95 +1,104 @@
 /**
- * Identifiers, and why they carry the name of the catalogue that minted them.
+ * Record identifiers, read and written.
  *
- * Every instance mints UUIDs from its own sequence, so one string can exist on
- * several of them describing different things. Reading a bare identifier is
- * therefore only safe when a single catalogue could have produced it, and a
- * question that several could answer is refused rather than sent somewhere and
- * answered about the wrong record.
+ * A record is named by a catalogue and a uuid, written `instance:uuid`. Every
+ * identifier this server prints is one it would accept back, so a caller can
+ * hand an answer's identifier straight to the next call.
+ *
+ * The rule that shapes the refusals: the server never states anything the data
+ * does not carry. The same uuid exists on several catalogues and means a
+ * different record on each, so an identifier that names none of them is refused
+ * with the reason and the prefixes that would resolve it, and never resolved by
+ * picking a catalogue on the caller's behalf.
  */
 
 import { invalidInput } from "../errors.js";
-import { INSTANCE_IDS, type InstanceId } from "./instances.js";
+import { INSTANCES, instanceById, type InstanceId } from "./instances.js";
 
-export interface NamespacedId {
+export interface ParsedId {
   instance: InstanceId;
   uuid: string;
 }
 
-/**
- * The catalogues mint both version 4 and version 7 identifiers, so the version
- * digit is read as any hexadecimal character.
- */
+/** The five hexadecimal groups, in either case, and nothing around them. */
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/**
+ * Whether a string is a uuid as the catalogues mint them.
+ *
+ * The version digit is left unread: the catalogues hand out version 4 and
+ * version 7 identifiers, and pinning the digit would reject records that exist.
+ */
 export function isUuid(value: string): boolean {
   return UUID.test(value);
 }
 
-export function formatId(instance: InstanceId, uuid: string): string {
-  return `${instance}:${uuid.toLowerCase()}`;
+/** The prefixes a caller can write, in the order the registry declares them. */
+function knownPrefixes(): string {
+  return INSTANCES.map((instance) => instance.id).join(", ");
 }
 
 /**
- * A namespaced identifier, or a refusal naming the argument it was given for.
+ * Reads `instance:uuid`, or a bare uuid when a single catalogue is configured.
  *
- * The argument is named in every refusal: a caller holding several arguments
- * shaped like an identifier is otherwise told which value is wrong and nothing
- * about where they wrote it.
+ * A bare uuid carries no catalogue, so it can be resolved only when there is
+ * one catalogue to resolve it to. With several configured, any of them could
+ * have minted it and choosing one would attach the answer to the wrong record;
+ * with none, the uuid names nothing that could be asked.
+ *
+ * A prefix is measured against the registry alone. Whether a key is held for
+ * the catalogue it names is a separate question, answered where the keys are,
+ * and refusing here would report a spelling problem for a missing key.
  */
-export function parseId(
-  raw: string,
-  configured: readonly InstanceId[],
-  argument = "id",
-): NamespacedId {
-  const value = raw.trim();
-  if (value === "") {
-    throw invalidInput(
-      `An identifier is required for '${argument}'.`,
-      `Write it as <catalogue>:<uuid>, for example ${INSTANCE_IDS[0]}:00000000-0000-0000-0000-000000000000.`,
-    );
-  }
+export function parseId(raw: string, configured: readonly InstanceId[]): ParsedId {
+  const colon = raw.indexOf(":");
 
-  const separator = value.indexOf(":");
-  if (separator === -1) {
-    if (!isUuid(value)) {
+  if (colon >= 0) {
+    const prefix = raw.slice(0, colon);
+    const uuid = raw.slice(colon + 1);
+    const instance = instanceById(prefix);
+    if (!instance) {
       throw invalidInput(
-        `'${raw}', given for '${argument}', is not an identifier this catalogue could have minted.`,
-        "An identifier is a UUID, optionally prefixed with the catalogue that minted it.",
+        `"${prefix}" in the identifier "${raw}" names no catalogue this server reads.`,
+        `Write the identifier as instance:uuid, with one of these prefixes: ${knownPrefixes()}.`,
       );
     }
-    // A bare identifier names no catalogue, so it can only be resolved when a
-    // single one is configured. Choosing for the caller would answer about a
-    // record on a catalogue they did not ask.
-    if (configured.length === 1) return { instance: configured[0]!, uuid: value.toLowerCase() };
-    if (configured.length === 0) {
+    if (!isUuid(uuid)) {
       throw invalidInput(
-        "No catalogue is configured, so a bare identifier names nothing.",
-        "Set an API key for at least one catalogue.",
+        `The identifier "${raw}" carries "${uuid}" where a uuid was expected.`,
+        "A uuid is five hexadecimal groups of 8-4-4-4-12 characters, as it appears in the address of the record.",
       );
     }
+    return { instance: instance.id, uuid: uuid.toLowerCase() };
+  }
+
+  if (!isUuid(raw)) {
     throw invalidInput(
-      `'${raw}' names no catalogue, and ${configured.length} are configured, any of which could have minted it.`,
-      `Write it as <catalogue>:<uuid>, using one of: ${configured.join(", ")}.`,
+      `The identifier "${raw}" is neither instance:uuid nor a uuid.`,
+      "A uuid is five hexadecimal groups of 8-4-4-4-12 characters, as it appears in the address of the record.",
     );
   }
 
-  const prefix = value.slice(0, separator).toLowerCase();
-  const uuid = value.slice(separator + 1).trim();
-
-  const instance = INSTANCE_IDS.find((id) => id === prefix);
-  if (!instance) {
+  const first = configured[0];
+  if (first === undefined) {
     throw invalidInput(
-      `'${prefix}', given for '${argument}', is not a catalogue this server reads.`,
-      `The catalogues are: ${INSTANCE_IDS.join(", ")}.`,
-    );
-  }
-  if (!isUuid(uuid)) {
-    throw invalidInput(
-      `'${uuid}', given for '${argument}', is not a UUID, so no catalogue could have minted it.`,
-      "A record identifier looks like 00000000-0000-0000-0000-000000000000.",
+      `The identifier "${raw}" names no catalogue, and no catalogue is configured to resolve it against.`,
+      "Configure a key for the catalogue holding this record, then ask again.",
     );
   }
 
-  return { instance, uuid: uuid.toLowerCase() };
+  if (configured.length > 1) {
+    const names = configured.join(", ");
+    throw invalidInput(
+      `The identifier "${raw}" is ambiguous: several catalogues are configured (${names}), and any of them could have minted that uuid.`,
+      `Name the catalogue in the identifier, as in ${first}:${raw}.`,
+    );
+  }
+
+  return { instance: first, uuid: raw.toLowerCase() };
+}
+
+/** Writes the identifier a caller can hand back to any route that takes one. */
+export function formatId(instance: InstanceId, uuid: string): string {
+  return `${instance}:${uuid}`;
 }
