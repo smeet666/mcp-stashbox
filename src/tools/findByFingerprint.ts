@@ -180,7 +180,7 @@ export function renderFingerprintMatches(result: FingerprintResult): Rendered {
       `Asked: ${result.asked.map((entry) => `${entry.algorithm} ${entry.hash}`).join(", ")}`,
       ...result.matches.map((match) =>
         joinLines([
-          `\n- ${inline(match.scene.title) ?? "(untitled)"}${match.scene.status === "established" ? "" : match.scene.status === "merged" ? " — merged, so this identifier now addresses the record it was folded into, and this title is the one it carried then" : " — withdrawn, so this identifier states nothing about what it once named, and this title is the one it carried then"}, ${match.algorithm}${match.fingerprint ? ` ${match.fingerprint.hash}` : " (which hash reached it is unknown)"} (${match.matchKind})`,
+          `\n- ${inline(match.scene.title) ?? "(untitled)"}${match.scene.status === "established" ? "" : ", withdrawn, so this identifier states nothing about what it once named, and this title is the one it carried then"}, ${match.algorithm}${match.fingerprint ? ` ${match.fingerprint.hash}` : " (which hash reached it is unknown)"} (${match.matchKind})`,
           `    catalogue: ${match.scene.source}`,
           `    id: ${match.scene.id}`,
           match.scene.releaseDate ? `    released: ${dateText(match.scene.releaseDate)}` : null,

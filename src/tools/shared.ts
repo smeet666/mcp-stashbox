@@ -415,7 +415,7 @@ export function skippedNote(reports: readonly SourceReport[]): string | null {
   const lost = reports.filter((entry) => entry.skipped);
   if (lost.length === 0) return null;
   const named = lost.map((entry) => `${entry.name ?? entry.source}: ${entry.skipped}`).join(", ");
-  return `Rows left out because this client could not read them — ${named}. They are missing from the rows and from the counts here, and their absence says nothing about what those catalogues hold.`;
+  return `Rows left out because this client could not read them: ${named}. They are missing from the rows and from the counts here, and their absence says nothing about what those catalogues hold.`;
 }
 
 /**
@@ -463,7 +463,7 @@ export function indexTotalNote(reports: readonly SourceReport[]): string | null 
   const named = withTotal
     .map((entry) => `${entry.name ?? entry.source}: ${entry.indexTotal}`)
     .join(", ");
-  return `Records each catalogue's index holds for this question, the rows here included — ${named}. These count different corpora and are never added.`;
+  return `Records each catalogue's index holds for this question, the rows here included: ${named}. These count different corpora and are never added.`;
 }
 
 /**

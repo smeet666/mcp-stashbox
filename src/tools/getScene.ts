@@ -54,7 +54,6 @@ export function renderScene(
       source_url: record.sourceUrl,
       retrieved_at: record.retrievedAt,
       status: record.status,
-      merged_into: record.mergedInto,
       former_title: record.title,
       // A marker carries little, so what little it lost is the whole of what
       // this client could not read of it.
@@ -65,11 +64,8 @@ export function renderScene(
       ...(cached ? { cached: true } : {}),
     };
     const text = joinLines([
-      record.status === "merged"
-        ? `This identifier addresses a record ${record.source} has merged into another.`
-        : `This identifier addresses a record ${record.source} has withdrawn.`,
+      `This identifier addresses a record ${record.source} has withdrawn.`,
       line("Former title", inline(record.title)),
-      line("Continues as", record.mergedInto),
       sourceLine(record.sourceUrl),
     ]);
     const unrendered = sections.filter((name) => name !== "basic");
@@ -79,13 +75,9 @@ export function renderScene(
             `${record.rowsSkipped} row(s) of this marker could not be read and are left out of ${(record.rowsSkippedIn ?? []).join(", ")}. What is shown is therefore short of what the catalogue answered with.`,
           ]
         : []),
-      record.status === "merged"
-        ? "This record is a marker. Its emptiness describes the record and states nothing about the scene it once described."
-        : "A withdrawn record states nothing about the scene it once described.",
+      "A withdrawn record states nothing about the scene it once described.",
       ...(unrendered.length
-        ? [
-            `A marker carries no body, so ${unrendered.join(", ")} could not be rendered here.${record.mergedInto ? " Ask for them on the record that continues it." : ""}`,
-          ]
+        ? [`A marker carries no body, so ${unrendered.join(", ")} could not be rendered here.`]
         : []),
       ...(record.mergedInto ? [`Read ${record.mergedInto} for the record that continues it.`] : []),
     ];

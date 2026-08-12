@@ -233,26 +233,33 @@ const SCENES_SECTION_LIMIT = 20;
  * bare one names none, and sending it to every catalogue would answer about a
  * different record on each.
  */
-function readIdentifierArgument(id: string, configured: readonly InstanceId[]): void {
+function readIdentifierArgument(
+  id: string,
+  configured: readonly InstanceId[],
+  argument: string,
+): void {
+  // The argument is named in every refusal. A caller holding three arguments
+  // shaped like identifiers is told which value is wrong and nothing about
+  // where they wrote it, and has to guess which one to fix.
   const separator = id.indexOf(":");
   if (separator === -1) {
     // Naming a catalogue this server holds no key for would send the caller to
     // a second refusal for writing exactly what was suggested.
     throw invalidInput(
-      `'${id}' names no catalogue, so no catalogue can be asked about it.`,
+      `'${id}', given for '${argument}', names no catalogue, so no catalogue can be asked about it.`,
       `Write it as <catalogue>:<uuid>, using one of: ${configured.join(", ")}.`,
     );
   }
   const prefix = id.slice(0, separator);
   if (!INSTANCES.some((entry) => entry.id === prefix)) {
     throw invalidInput(
-      `'${prefix}' is not a catalogue this server reads.`,
+      `'${prefix}', given for '${argument}', is not a catalogue this server reads.`,
       `The catalogues are: ${INSTANCES.map((entry) => entry.id).join(", ")}.`,
     );
   }
   if (!isUuid(id.slice(separator + 1))) {
     throw invalidInput(
-      `'${id.slice(separator + 1)}' is not a UUID, so no catalogue could have minted it.`,
+      `'${id.slice(separator + 1)}', given for '${argument}', is not a UUID, so no catalogue could have minted it.`,
       "A record identifier looks like 00000000-0000-0000-0000-000000000000.",
     );
   }
@@ -471,8 +478,12 @@ export class StashboxClient {
     // An identifier no catalogue could have minted is a question that cannot be
     // asked, so it is refused for the call. Letting it fail per catalogue would
     // report a caller's mistake as five catalogues going wrong.
-    for (const ids of [input.performerIds, input.studioIds, input.tagIds]) {
-      for (const id of ids ?? []) readIdentifierArgument(id, this.configured);
+    for (const [argument, ids] of [
+      ["performer_ids", input.performerIds],
+      ["studio_ids", input.studioIds],
+      ["tag_ids", input.tagIds],
+    ] as const) {
+      for (const id of ids ?? []) readIdentifierArgument(id, this.configured, argument);
     }
 
     // Both paths ask the same question, so both are gated on the same capability.
@@ -587,7 +598,7 @@ export class StashboxClient {
         documents.searchScenesDocument(spec),
         { term: input.query, limit },
       );
-      const searched = rowsOf(spec, data.searchScenes, "searchScenes", "scenes");
+      const searched = rowsOf(spec, data, "searchScenes", "scenes");
       return {
         ...readRows(searched.list, spec, mapScene, now()),
         total: supports(spec, "index_total")
@@ -718,7 +729,7 @@ export class StashboxClient {
       documents.queryScenesDocument(spec),
       { input: filters },
     );
-    const queried = rowsOf(spec, data.queryScenes, "queryScenes", "scenes");
+    const queried = rowsOf(spec, data, "queryScenes", "scenes");
     return {
       ...readRows(queried.list, spec, mapScene, now()),
       // What the catalogue says its index holds for this question, beyond the
@@ -741,8 +752,11 @@ export class StashboxClient {
     const input = withReadableQuery(rawInput);
     // An identifier no catalogue could have minted is a question that cannot be
     // asked, so it is refused for the call rather than per catalogue.
-    for (const id of [input.performedWith, input.studioId]) {
-      if (id !== undefined) readIdentifierArgument(id, this.configured);
+    for (const [argument, id] of [
+      ["performed_with", input.performedWith],
+      ["studio_id", input.studioId],
+    ] as const) {
+      if (id !== undefined) readIdentifierArgument(id, this.configured, argument);
     }
     const capability: Capability = "search_performers";
     const { asked, absent } = this.plan(capability, input.sources);
@@ -853,7 +867,7 @@ export class StashboxClient {
       const data = await this.ask<{
         searchPerformers?: { count?: unknown; performers?: unknown[] };
       }>(spec, documents.searchPerformersDocument(spec), { term: input.query, limit });
-      const searched = rowsOf(spec, data.searchPerformers, "searchPerformers", "performers");
+      const searched = rowsOf(spec, data, "searchPerformers", "performers");
       return {
         ...readRows(searched.list, spec, mapPerformer, now()),
         total: supports(spec, "index_total")
@@ -929,7 +943,7 @@ export class StashboxClient {
       documents.queryPerformersDocument(spec),
       { input: filters },
     );
-    const queried = rowsOf(spec, data.queryPerformers, "queryPerformers", "performers");
+    const queried = rowsOf(spec, data, "queryPerformers", "performers");
     return {
       ...readRows(queried.list, spec, mapPerformer, now()),
       total: supports(spec, "index_total")
@@ -1369,7 +1383,7 @@ function bounded(value: number | undefined, fallback: number, min: number, max: 
  */
 function rowsOf(
   spec: InstanceSpec,
-  container: unknown,
+  answer: unknown,
   query: string,
   listKey: string,
 ): { list: unknown[]; count: unknown } {
@@ -1378,6 +1392,12 @@ function rowsOf(
       hint: `The catalogue was reached and answered. What came back does not carry the rows its schema declares, so this states nothing about what ${spec.name} holds.`,
     });
 
+  // The whole answer, then the container it should carry. A payload that is not
+  // an object at all fails on reading the container out of it, which reaches a
+  // caller as an engine's own words rather than as a catalogue that could not
+  // be read.
+  if (answer === null || typeof answer !== "object" || Array.isArray(answer)) throw unreadable();
+  const container = (answer as Record<string, unknown>)[query];
   if (container === null || typeof container !== "object" || Array.isArray(container)) {
     throw unreadable();
   }

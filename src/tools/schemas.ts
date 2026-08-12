@@ -144,12 +144,26 @@ const statusSchema = z
     "'established' is a record the catalogue holds. 'merged' and 'deleted' are markers: the identifier resolves, and what comes back describes the record rather than the thing it once named.",
   );
 
+/**
+ * What an identifier addresses now, where its catalogue names no successor.
+ *
+ * These catalogues fold a performer into another record and publish which one.
+ * A scene, a studio and a tag they withdraw without naming anything in its
+ * place, so those are held or withdrawn and never merged. Declaring a third
+ * reading there would offer a caller a branch nothing can reach.
+ */
+const heldOrWithdrawnSchema = z
+  .enum(["established", "deleted"])
+  .describe(
+    "'established' is a record the catalogue holds. 'deleted' is a marker: the identifier resolves, and what comes back describes the record rather than the thing it once named. No successor is named, since these catalogues publish none for this kind of record.",
+  );
+
 export const sceneSchema = z.object({
   id: z.string(),
   source: z.string(),
   source_url: z.string().describe("The record on the catalogue that answered."),
   retrieved_at: retrievedAtSchema,
-  status: statusSchema,
+  status: heldOrWithdrawnSchema,
   title: z.string().nullable(),
   details: z.string().nullable(),
   code: z
@@ -167,7 +181,7 @@ export const sceneSchema = z.object({
       id: z.string(),
       name: z.string(),
       parent: z.string().nullable(),
-      status: statusSchema,
+      status: heldOrWithdrawnSchema,
     })
     .nullable(),
   performers: z.array(
@@ -191,7 +205,7 @@ export const sceneSchema = z.object({
       id: z.string(),
       name: z.string(),
       category: z.string().nullable(),
-      status: statusSchema,
+      status: heldOrWithdrawnSchema,
     }),
   ),
   urls: z.array(siteLinkSchema),
@@ -270,13 +284,8 @@ export const getSceneOutput = sceneSchema
     source: z.string(),
     source_url: z.string(),
     retrieved_at: retrievedAtSchema,
-    status: statusSchema,
+    status: heldOrWithdrawnSchema,
     notes: z.array(z.string()),
-    merged_into: z
-      .string()
-      .nullable()
-      .optional()
-      .describe("Present on a marker: the identifier that continues this record."),
     former_title: z
       .string()
       .nullable()
@@ -342,7 +351,7 @@ export const performerSchema = z.object({
         title: z.string().nullable(),
         release_date: dateSchema,
         studio: z.string().nullable(),
-        status: statusSchema,
+        status: heldOrWithdrawnSchema,
         source_url: z.string(),
       }),
     )
@@ -359,6 +368,10 @@ export const performerSchema = z.object({
     .describe(
       "Present where the catalogue published a death date this client could not read, which is a date dropped rather than a record carrying none.",
     ),
+  images_skipped: z
+    .number()
+    .optional()
+    .describe("Image rows the catalogue answered with that came back unreadable."),
   scenes_total: z
     .number()
     .optional()
@@ -375,7 +388,7 @@ export const performerSchema = z.object({
         id: z.string(),
         name: z.string(),
         scene_count: z.number().nullable(),
-        status: statusSchema,
+        status: heldOrWithdrawnSchema,
       }),
     )
     .optional(),
@@ -470,7 +483,7 @@ const sceneRowSchema = z.object({
     .string()
     .nullable()
     .describe("The studio's identifier on that catalogue, which a narrowing takes."),
-  studio_status: statusSchema
+  studio_status: heldOrWithdrawnSchema
     .nullable()
     .describe("What the studio's identifier addresses now. Null where the row names no studio."),
   performers: z.array(z.string()),
@@ -593,7 +606,7 @@ export const findByFingerprintOutput = z.object({
         release_date: dateSchema,
         studio: z.string().nullable(),
         performers: z.array(z.string()),
-        status: statusSchema,
+        status: heldOrWithdrawnSchema,
         retrieved_at: retrievedAtSchema,
         source_url: z.string(),
       }),

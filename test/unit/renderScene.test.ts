@@ -330,13 +330,19 @@ describe("renderScene credited names", () => {
   });
 });
 
-describe("renderScene merged marker", () => {
-  const successor = "stashdb:9a8b7c6d-5e4f-4302-9182-736455647382";
-
+/**
+ * A withdrawn scene, which is the only marker a scene can be.
+ *
+ * Introspecting both catalogues' published schemas shows 'Scene' declares
+ * 'deleted' and no 'merged_into_id', while 'Performer' declares both. A scene
+ * is therefore held or withdrawn, and offering a caller a merged reading of one
+ * would be a branch nothing can reach.
+ */
+describe("renderScene withdrawn marker", () => {
   function marker(): SceneRecord {
     return scene({
-      status: "merged",
-      mergedInto: successor,
+      status: "deleted",
+      mergedInto: null,
       title: "Harbour Lights, Chapter Two",
       details: null,
       code: null,
@@ -351,14 +357,15 @@ describe("renderScene merged marker", () => {
     });
   }
 
-  it("names its successor and its former title as a former title", () => {
+  it("names its former title as a former title, and no successor", () => {
     const { text, structured } = renderScene(marker(), ["basic"]);
 
-    expect(field(structured, "status")).toBe("merged");
-    expect(field(structured, "mergedInto")).toBe(successor);
-    expect(text).toContain(successor);
-    expect(text).toMatch(/merged/i);
+    expect(field(structured, "status")).toBe("deleted");
+    expect(text).toMatch(/withdrawn/i);
     expect(text).toMatch(/former/i);
+    // A successor no catalogue publishes for a scene is one this server would
+    // be inventing.
+    expect(text).not.toMatch(/continues as/i);
   });
 
   it("never presents its emptiness as a fact about the release", () => {
@@ -378,12 +385,13 @@ describe("renderScene merged marker", () => {
     expect(text).not.toMatch(/\b0 seconds\b/i);
   });
 
-  it("carries the successor rather than a record of its own", () => {
+  it("names the sections it could not render rather than rendering them empty", () => {
     const { text } = renderScene(marker(), ["basic", "fingerprints", "images"]);
 
-    // A marker answers with where the record went. Asking for its heavy sections
-    // does not turn it into a scene with content.
-    expect(text).toContain(successor);
+    // A marker carries no body. Asking for its heavy sections does not turn it
+    // into a scene with content, and their absence is stated rather than shown
+    // as a scene holding none.
+    expect(text).toMatch(/could not be rendered/i);
     expect(text).not.toMatch(/^\s*(performers|tags|studio|director)\b/im);
   });
 });

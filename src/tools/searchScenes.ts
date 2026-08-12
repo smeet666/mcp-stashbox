@@ -251,7 +251,7 @@ export function renderSceneRows(
       `# ${result.rows.length} scene(s)${query ? ` for "${query}"` : ""}`,
       ...result.rows.map((row) =>
         joinLines([
-          `\n- ${inline(row.title) ?? "(untitled)"} [${row.source}]${row.status === "established" ? "" : `${row.status === "merged" ? " — merged, so this identifier now addresses the record it was folded into" : " — withdrawn, so this identifier states nothing about what it once named"}`}`,
+          `\n- ${inline(row.title) ?? "(untitled)"} [${row.source}]${row.status === "established" ? "" : ", withdrawn, so this identifier states nothing about what it once named"}`,
           row.releaseDate ? `    released: ${dateText(row.releaseDate)}` : null,
           row.studio ? `    studio: ${inline(row.studio.name)}` : null,
           row.performers.length

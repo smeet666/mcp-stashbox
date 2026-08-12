@@ -30,11 +30,22 @@ export function formatId(instance: InstanceId, uuid: string): string {
   return `${instance}:${uuid.toLowerCase()}`;
 }
 
-export function parseId(raw: string, configured: readonly InstanceId[]): NamespacedId {
+/**
+ * A namespaced identifier, or a refusal naming the argument it was given for.
+ *
+ * The argument is named in every refusal: a caller holding several arguments
+ * shaped like an identifier is otherwise told which value is wrong and nothing
+ * about where they wrote it.
+ */
+export function parseId(
+  raw: string,
+  configured: readonly InstanceId[],
+  argument = "id",
+): NamespacedId {
   const value = raw.trim();
   if (value === "") {
     throw invalidInput(
-      "An identifier is required.",
+      `An identifier is required for '${argument}'.`,
       `Write it as <catalogue>:<uuid>, for example ${INSTANCE_IDS[0]}:00000000-0000-0000-0000-000000000000.`,
     );
   }
@@ -43,7 +54,7 @@ export function parseId(raw: string, configured: readonly InstanceId[]): Namespa
   if (separator === -1) {
     if (!isUuid(value)) {
       throw invalidInput(
-        `'${raw}' is not an identifier this catalogue could have minted.`,
+        `'${raw}', given for '${argument}', is not an identifier this catalogue could have minted.`,
         "An identifier is a UUID, optionally prefixed with the catalogue that minted it.",
       );
     }
@@ -69,13 +80,13 @@ export function parseId(raw: string, configured: readonly InstanceId[]): Namespa
   const instance = INSTANCE_IDS.find((id) => id === prefix);
   if (!instance) {
     throw invalidInput(
-      `'${prefix}' is not a catalogue this server reads.`,
+      `'${prefix}', given for '${argument}', is not a catalogue this server reads.`,
       `The catalogues are: ${INSTANCE_IDS.join(", ")}.`,
     );
   }
   if (!isUuid(uuid)) {
     throw invalidInput(
-      `'${uuid}' is not a UUID, so no catalogue could have minted it.`,
+      `'${uuid}', given for '${argument}', is not a UUID, so no catalogue could have minted it.`,
       "A record identifier looks like 00000000-0000-0000-0000-000000000000.",
     );
   }
