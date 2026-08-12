@@ -12,7 +12,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { StashboxClient } from "../stashbox/client.js";
 import type { FingerprintResult } from "../types.js";
-import { strictInput, sourcesArgument } from "./arguments.js";
+import { strictInput, sourcesArgument, narrowingText } from "./arguments.js";
 import { findByFingerprintOutput } from "./schemas.js";
 import {
   coverageNote,
@@ -73,6 +73,19 @@ export function renderFingerprintMatches(result: FingerprintResult): Rendered {
     );
   }
 
+  // A match prints the record's studio and its cast off lists a mapper can lose
+  // rows from. Counted for a search row and for a full record and not here, the
+  // cast beside a match reads as the cast the catalogue answered with.
+  const damaged = result.matches.reduce(
+    (total, match) => total + (match.scene.rowsSkipped ?? 0),
+    0,
+  );
+  if (damaged) {
+    notes.push(
+      `${damaged} row(s) inside the records matched here could not be read and are left out of what each one shows of its own lists. Read a record for what it says about its own losses.`,
+    );
+  }
+
   const failures = failureNote(result.perSource);
   if (failures) notes.push(failures);
   const folded = foldedCreditsNote(result.matches.map((match) => match.scene));
@@ -94,7 +107,7 @@ export function renderFingerprintMatches(result: FingerprintResult): Rendered {
   // its silence there is no answer about the file.
   const unasked = new Map<string, string[]>();
   for (const entry of result.perSource) {
-    for (const name of entry.narrowingsNotReceived ?? []) {
+    for (const name of entry.algorithmsNotSearched ?? []) {
       unasked.set(name, [...(unasked.get(name) ?? []), entry.name ?? entry.source]);
     }
   }
@@ -146,6 +159,7 @@ export function renderFingerprintMatches(result: FingerprintResult): Rendered {
           }
         : null,
     })),
+    ...(damaged ? { rows_skipped: damaged } : {}),
     match_count: result.matches.length,
     scenes_matched: distinctScenes,
     unattributed: result.unattributed,
@@ -159,7 +173,7 @@ export function renderFingerprintMatches(result: FingerprintResult): Rendered {
       `Asked: ${result.asked.map((entry) => `${entry.algorithm} ${entry.hash}`).join(", ")}`,
       ...result.matches.map((match) =>
         joinLines([
-          `\n- ${inline(match.scene.title) ?? "(untitled)"}${match.scene.status === "established" ? "" : match.scene.status === "merged" ? " — merged, so this identifier now addresses the record it was folded into, and this title is the one it carried then" : " — withdrawn, so this identifier states nothing about what it once named, and this title is the one it carried then"}, ${match.algorithm} (${match.matchKind})`,
+          `\n- ${inline(match.scene.title) ?? "(untitled)"}${match.scene.status === "established" ? "" : match.scene.status === "merged" ? " — merged, so this identifier now addresses the record it was folded into, and this title is the one it carried then" : " — withdrawn, so this identifier states nothing about what it once named, and this title is the one it carried then"}, ${match.algorithm}${match.fingerprint ? ` ${match.fingerprint.hash}` : " (which hash reached it is unknown)"} (${match.matchKind})`,
           `    catalogue: ${match.scene.source}`,
           `    id: ${match.scene.id}`,
           match.scene.releaseDate ? `    released: ${dateText(match.scene.releaseDate)}` : null,
@@ -205,13 +219,30 @@ export function registerFindByFingerprint(server: McpServer, client: StashboxCli
       inputSchema: strictInput({
         fingerprints: z
           .array(
-            z.object({
-              hash: z.string().describe("The fingerprint as the hashing tool produced it."),
-              algorithm: z.enum(ALGORITHMS),
-            }),
+            // Strict at this depth as at the top: a key read and dropped here
+            // produces an answer computed without it, which a caller reads as
+            // the answer to what they wrote.
+            z.strictObject(
+              {
+                hash: narrowingText("The fingerprint as the hashing tool produced it."),
+                algorithm: z.enum(ALGORITHMS),
+              },
+              {
+                error: (issue) =>
+                  issue.code === "unrecognized_keys"
+                    ? `[invalid_input] Unknown ${issue.keys.length > 1 ? "keys" : "key"} ${issue.keys.map((key) => `'${key}'`).join(", ")} inside a fingerprint. A fingerprint carries: hash, algorithm.`
+                    : undefined,
+              },
+            ),
           )
-          .min(1)
-          .max(10)
+          .min(1, {
+            error:
+              "[invalid_input] An empty list names no fingerprint to look up. Give at least one hash and the algorithm that produced it.",
+          })
+          .max(10, {
+            error:
+              "[invalid_input] A file carries one hash per algorithm, so a list this long is an inventory rather than a question about one file. Ask about one file at a time.",
+          })
           .describe(
             "Every fingerprint held for one file. A file carries one hash per algorithm, so a longer list is an inventory rather than a question.",
           ),

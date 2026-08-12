@@ -176,6 +176,12 @@ export function renderPerformer(
       `${record.source} publishes no count of edits open against a record, so whether this one is under revision there is unknown. Nothing here states that what it says is settled.`,
     );
   }
+  if (record.pendingEditsUnreadable) {
+    structured.pending_edits_unreadable = true;
+    notes.push(
+      `${record.source} publishes the edits open against a record and answered them in a shape this client could not read, so whether this one is under revision there is unknown. Nothing here states that what it says is settled.`,
+    );
+  }
   if (record.pendingEdits) {
     structured.pending_edits = record.pendingEdits;
     notes.push(
@@ -187,6 +193,7 @@ export function renderPerformer(
   if (cached) structured.cached = true;
   structured.notes = notes;
 
+  const appearanceEmpty = !record.appearance || appearanceLines(record).length === 0;
   if (sections.includes("appearance") && !record.appearance) {
     // A section asked for and absent from the answer reads as a section nobody
     // asked for. The emptiness is published so the two stay apart.
@@ -203,6 +210,8 @@ export function renderPerformer(
       tattoos: null,
       piercings: null,
     };
+  }
+  if (sections.includes("appearance") && appearanceEmpty) {
     notes.push(
       `${record.source} publishes none of the fields the appearance section holds for this record, so the section is empty rather than unread.`,
     );
@@ -244,6 +253,7 @@ export function renderPerformer(
       id: studio.id,
       name: studio.name,
       scene_count: studio.sceneCount,
+      status: studio.status,
     }));
     if (record.studiosTotal !== undefined) {
       structured.studios_total = record.studiosTotal;
@@ -257,7 +267,7 @@ export function renderPerformer(
   if (sections.includes("scenes") && record.scenesUnavailable) {
     structured.scenes_unavailable = record.scenesUnavailable;
     notes.push(
-      `The scenes section was asked for and could not be read (${record.scenesUnavailable}). Its absence here says nothing about what ${record.source} holds.`,
+      `The scenes section was asked for and is not here: ${record.scenesUnavailable}. Its absence says nothing about what ${record.source} holds.`,
     );
   }
   if (sections.includes("scenes") && record.scenesSkipped) {
@@ -285,7 +295,10 @@ export function renderPerformer(
     }));
   }
 
-  if (record.sceneCount === null && record.status === "established") {
+  // What a catalogue publishes is read from what it declares, never from one
+  // record's null: a supporting catalogue answering a null on one row would
+  // otherwise make the server state a fact about the catalogue.
+  if (record.status === "established" && !sourceOffers(record.source, "scene_count")) {
     notes.push(
       `${record.source} publishes no count of the scenes it indexes for a performer, so this record carries none. That is this catalogue's silence and states nothing about the person's work.`,
     );
@@ -342,7 +355,7 @@ export function renderPerformer(
             .slice(0, STUDIOS_SHOWN)
             .map(
               (studio) =>
-                `  - ${inline(studio.name)}: ${studio.sceneCount === null ? "scenes not counted here" : `${studio.sceneCount} scene(s) indexed`}`,
+                `  - ${inline(studio.name)}${studio.status === "established" ? "" : " (this identifier is withdrawn)"}: ${studio.sceneCount === null ? "scenes not counted here" : `${studio.sceneCount} scene(s) indexed`}`,
             )
             .join("\n")}`
         : null,

@@ -47,6 +47,18 @@ export interface SourceReport {
   records?: number;
   /** Narrowings this catalogue could not receive, each one named. */
   narrowingsNotReceived?: string[];
+  /**
+   * Narrowings this catalogue receives, written with identifiers no record of
+   * its own carries. It could have answered the question; nothing it holds was
+   * named in it, which is a different fact from one it cannot be given.
+   */
+  narrowingsNamingNoRecord?: string[];
+  /**
+   * Fingerprint algorithms this catalogue's lookup does not search. Its silence
+   * about one of those is no answer about the hash, and it is not a narrowing:
+   * nothing a row carries could satisfy or fail it.
+   */
+  algorithmsNotSearched?: string[];
   /** What its index reads, since two catalogues answer a name differently. */
   fieldsSearched?: string[];
 }
@@ -92,12 +104,18 @@ export interface StudioRef {
   id: string;
   name: string;
   parent: string | null;
+  /** What the identifier addresses now, which a withdrawn record changes. */
+  status: RecordStatus;
+  /** Set where the parent named here is a record the catalogue has withdrawn. */
+  parentWithdrawn?: boolean;
 }
 
 export interface TagRow {
   id: string;
   name: string;
   category: string | null;
+  /** What the identifier addresses now, which a withdrawn record changes. */
+  status: RecordStatus;
 }
 
 /**
@@ -117,6 +135,8 @@ export interface SceneRecord {
   status: RecordStatus;
   mergedInto: string | null;
   pendingEdits: number | null;
+  /** The catalogue publishes open edits and answered them unreadably. */
+  pendingEditsUnreadable?: boolean;
   title: string | null;
   details: string | null;
   code: string | null;
@@ -180,6 +200,8 @@ export interface PerformerRecord {
   mergedInto: string | null;
   mergedIds: string[];
   pendingEdits: number | null;
+  /** The catalogue publishes open edits and answered them unreadably. */
+  pendingEditsUnreadable?: boolean;
   name: string | null;
   /** Free text telling two people apart, which reads and never parses. */
   disambiguation: string | null;
@@ -212,7 +234,7 @@ export interface PerformerRecord {
   scenesUnavailable?: string;
   /** Scenes the catalogue answered with that came back unreadable and were left out. */
   scenesSkipped?: number;
-  studios?: { id: string; name: string; sceneCount: number | null }[];
+  studios?: { id: string; name: string; sceneCount: number | null; status: RecordStatus }[];
   /** Why the studios section is missing, where it was asked for and not read. */
   studiosUnavailable?: string;
   /** Studio rows the catalogue answered with that came back unreadable. */
@@ -233,11 +255,26 @@ export interface FingerprintMatch {
   fingerprint: FingerprintRow | null;
 }
 
+/** An identifier a narrowing was written with that its catalogue has folded. */
+export interface FoldedNarrowing {
+  /** The identifier as it was given. */
+  given: string;
+  /** The record it now addresses, null on a withdrawn one. */
+  successor: string | null;
+  status: RecordStatus;
+}
+
 export interface RowsResult<T> {
   rows: T[];
   perSource: SourceReport[];
   /** How the order was built, since no score is shared across catalogues. */
   ordering: string;
+  /**
+   * Identifiers the question was narrowed with that their catalogue has folded.
+   * They narrow to nothing while the catalogue holds everything it ever held,
+   * under the record they were folded into.
+   */
+  foldedNarrowings?: FoldedNarrowing[];
 }
 
 export interface FingerprintResult {

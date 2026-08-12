@@ -551,17 +551,25 @@ describe("the order rows are in", () => {
 
 /* --------------------------------------- 11. a catalogue that received nothing */
 
-describe("a catalogue that could receive none of the narrowings", () => {
-  it("carries them as narrowings not received rather than only in its reason", async () => {
+describe("a catalogue left with no question to answer", () => {
+  it("names the narrowing in a field rather than only in its free-text reason", async () => {
     const outcome = await call(toolOf(registerSearchScenes, SCENE_SEARCH_PAYLOAD), {
       performer_ids: [`tpdb:${UUID_B}`],
     });
 
+    // The list names a record no catalogue but ThePornDB could hold, which is a
+    // fact about the identifiers. A catalogue that cannot be given the
+    // narrowing at all is a fact about the catalogue, and the two are reported
+    // in different fields so a caller does not read one as the other.
     const report = reportFor(outcome.structured, "stashdb");
     expect(
-      field(report, "narrowingsNotReceived"),
-      "the narrowings live only in the free-text reason",
+      field(report, "narrowings_naming_no_record_here"),
+      "the reason a catalogue was left unasked lives only in prose",
     ).toEqual(["performer_ids"]);
+    expect(
+      field(report, "narrowings_not_received"),
+      "a list naming another catalogue's record was reported as a limit of this one",
+    ).toBeUndefined();
   });
 });
 

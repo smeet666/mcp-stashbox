@@ -19,10 +19,13 @@ import {
   windowNote,
   pageWasHonoured,
   indexTotalNote,
+  emptyDespiteReachNote,
   orderingNote,
   pastTheEndNote,
   failureNote,
   skippedNote,
+  sourceOffers,
+  foldedNarrowingNote,
   storedNote,
   narrowingNote,
   dateText,
@@ -53,11 +56,27 @@ export function renderPerformerRows(
   result: RowsResult<PerformerRecord>,
   query: string | null,
   window?: { page: number; limit: number },
-  asked?: { sorted?: boolean; cached?: boolean; sortedOn?: string },
+  asked?: {
+    sorted?: boolean;
+    cached?: boolean;
+    sortedOn?: string;
+    identifiersGiven?: boolean;
+    narrowedOnAnything?: boolean;
+  },
 ): Rendered {
   const sorted = asked?.sorted ?? false;
+  const narrowedOnAnything = asked?.narrowedOnAnything ?? true;
   const cached = asked?.cached ?? false;
-  const stamped = asked?.sortedOn === "created" || asked?.sortedOn === "updated";
+  // The stamps exist so the order can be read on the rows. Carried where the
+  // catalogue refused the sort, they describe an order nothing was put in.
+  const sortReached = result.perSource.some(
+    (entry) => entry.state === "answered" && !(entry.narrowingsNotReceived ?? []).includes("sort"),
+  );
+  const stamped = sortReached && (asked?.sortedOn === "created" || asked?.sortedOn === "updated");
+  const answeringCount = Math.max(
+    1,
+    result.perSource.filter((entry) => entry.state === "answered").length,
+  );
   const notes: string[] = [];
 
   // How the order was built belongs to an answer that has rows to order: a
@@ -106,10 +125,13 @@ export function renderPerformerRows(
   // The count is qualified wherever it appears. Saying so only on a zero would
   // put the caution where a reader already hesitates and drop it where they
   // would read a career total.
+  // Read from what each catalogue declares, never from one row's null: a
+  // supporting catalogue answering a null on one row would otherwise make the
+  // server state a fact about the catalogue out of a fact about a record.
   const silent = [
     ...new Set(
       result.rows
-        .filter((row) => row.sceneCount === null && row.status === "established")
+        .filter((row) => row.status === "established" && !sourceOffers(row.source, "scene_count"))
         .map((row) => row.source),
     ),
   ];
@@ -123,12 +145,36 @@ export function renderPerformerRows(
       "A scene count is what the catalogue naming it has indexed for that performer, and never a career total. A settled record naming a long career can report none, and two catalogues count different corpora.",
     );
   }
+  // A search given nothing to narrow on is a page of the whole index. Read
+  // without that said, its rows look like the answer to a question.
+  if (!narrowedOnAnything && result.rows.length) {
+    notes.push(
+      "Nothing was given to narrow this search, so these rows are a page of each catalogue's whole index, in its own order. They answer no question beyond that.",
+    );
+  }
+  // A catalogue answering past the limit makes the stated window describe a
+  // page the answer does not hold, and a caller paging on it skips rows.
+  const overRunning = window
+    ? result.perSource.filter(
+        (entry) => entry.state === "answered" && (entry.count ?? 0) > window.limit,
+      )
+    : [];
+  if (window && (overRunning.length || result.rows.length > window.limit * answeringCount)) {
+    const named = overRunning.length
+      ? overRunning.map((entry) => entry.name ?? entry.source).join(", ")
+      : "a catalogue";
+    notes.push(
+      `${named} returned more rows than the limit asked for: this answer carries ${result.rows.length} where ${window.limit} per catalogue were asked. Page on what is shown here rather than on that limit.`,
+    );
+  }
   const covered = windowNote(result.perSource, window);
   if (covered) notes.push(covered);
   const narrowings = narrowingNote(result.perSource);
   if (narrowings) notes.push(narrowings);
   const reach = indexTotalNote(result.perSource);
   if (reach) notes.push(reach);
+  const disagreeing = emptyDespiteReachNote(result.perSource, window);
+  if (disagreeing) notes.push(disagreeing);
   const ordering = orderingNote(result.perSource, sorted);
   if (ordering) notes.push(ordering);
   const pastEnd = pastTheEndNote(result.perSource, window);
@@ -141,10 +187,15 @@ export function renderPerformerRows(
       `${damaged} row(s) inside the records listed here could not be read and are left out of what each one shows of its own lists. Read a record for what it says about its own losses.`,
     );
   }
+  const folded = foldedNarrowingNote(result.foldedNarrowings);
+  if (folded) notes.push(folded);
   const lost = skippedNote(result.perSource);
   if (lost) notes.push(lost);
   const failures = failureNote(result.perSource);
   if (failures) notes.push(failures);
+  // A window describes rows a catalogue read. Where every catalogue asked
+  // failed, the emptiness is the failure and not an emptiness inside a window.
+  const answeredAny = result.perSource.some((entry) => entry.state === "answered");
   const nobody = nobodyAskedNote(result.perSource);
   if (nobody) notes.push(nobody);
   const coverage = coverageNote(result.perSource);
@@ -172,7 +223,7 @@ export function renderPerformerRows(
     })),
     result_count: result.rows.length,
     ordering: result.ordering,
-    ...(window && !nobody
+    ...(window && !nobody && answeredAny
       ? {
           window: {
             ...window,
@@ -266,6 +317,15 @@ export function registerSearchPerformers(server: McpServer, client: StashboxClie
           { page: args.page ?? 1, limit: args.limit ?? 10 },
           {
             sorted: Boolean(args.sort),
+            identifiersGiven: Boolean(args.performed_with || args.studio_id),
+            narrowedOnAnything: Boolean(
+              args.query ||
+              args.name ||
+              args.disambiguation ||
+              args.country ||
+              args.performed_with ||
+              args.studio_id,
+            ),
             cached: read.cached,
             ...(args.sort ? { sortedOn: args.sort } : {}),
           },

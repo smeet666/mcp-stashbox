@@ -22,7 +22,6 @@ import {
   quoted,
   sourceLine,
   inline,
-  inlineAll,
   type Rendered,
 } from "./shared.js";
 import { toolError } from "./errorShape.js";
@@ -102,7 +101,14 @@ export function renderScene(
     duration_seconds: record.durationSeconds,
     release_date: record.releaseDate,
     production_date: record.productionDate,
-    studio: record.studio,
+    studio: record.studio
+      ? {
+          id: record.studio.id,
+          name: record.studio.name,
+          parent: record.studio.parent,
+          status: record.studio.status,
+        }
+      : null,
     performers: record.performers.map((entry) => ({
       id: entry.id,
       name: entry.name,
@@ -110,7 +116,12 @@ export function renderScene(
       disambiguation: entry.disambiguation,
       status: entry.status,
     })),
-    tags: record.tags,
+    tags: record.tags.map((tag) => ({
+      id: tag.id,
+      name: tag.name,
+      category: tag.category,
+      status: tag.status,
+    })),
     urls: record.urls.map((link) => ({
       url: link.url,
       site_name: link.siteName,
@@ -136,9 +147,33 @@ export function renderScene(
       `${unnamedLinks} of these ${record.urls.length} links carry no site ${record.source} names, and are shown by their address alone.`,
     );
   }
+  if (record.tags.length && !sourceOffers(record.source, "tag_categories")) {
+    notes.push(
+      `${record.source} publishes no taxonomy sorting the tags a record carries, so no tag here names a category. Nothing was asked of it about how these tags are grouped, and that is no evidence that it groups them under none.`,
+    );
+  }
   if (record.urls.length && !sourceOffers(record.source, "site_categories")) {
     notes.push(
       `${record.source} publishes no table sorting the sites a record links to, so no link here carries a category. Nothing was asked of it about what these addresses point at, and that is no evidence that the catalogue places them in none.`,
+    );
+  }
+  const foldedHere = [
+    ...(record.studio && record.studio.status !== "established"
+      ? [`the studio it names (${record.studio.name})`]
+      : []),
+    ...(record.studio?.parentWithdrawn ? ["the parent of that studio"] : []),
+    ...(record.tags.some((tag) => tag.status !== "established")
+      ? [
+          `the tags ${record.tags
+            .filter((tag) => tag.status !== "established")
+            .map((tag) => tag.name)
+            .join(", ")}`,
+        ]
+      : []),
+  ];
+  if (foldedHere.length) {
+    notes.push(
+      `This record names records its catalogue has withdrawn: ${foldedHere.join("; ")}. Those identifiers resolve to markers, so narrowing a search with one of them matches nothing.`,
     );
   }
   if (record.rowsSkipped) {
@@ -164,6 +199,12 @@ export function renderScene(
   if (!sourceOffers(record.source, "pending_edits")) {
     notes.push(
       `${record.source} publishes no count of edits open against a record, so whether this one is under revision there is unknown. Nothing here states that what it says is settled.`,
+    );
+  }
+  if (record.pendingEditsUnreadable) {
+    structured.pending_edits_unreadable = true;
+    notes.push(
+      `${record.source} publishes the edits open against a record and answered them in a shape this client could not read, so whether this one is under revision there is unknown. Nothing here states that what it says is settled.`,
     );
   }
   if (record.pendingEdits) {
@@ -202,7 +243,7 @@ export function renderScene(
       contested: row.contested,
     }));
     structured.fingerprint_count = record.fingerprintCount ?? {};
-    if (record.fingerprints.some((row) => row.reports === null)) {
+    if (!sourceOffers(record.source, "fingerprint_reports")) {
       notes.push(
         `${record.source} publishes no count of reports against a fingerprint, so whether a fingerprint here is disputed is unknown. A fingerprint nobody has disputed and one on a catalogue that counts no disputes are different things.`,
       );
@@ -261,7 +302,16 @@ export function renderScene(
               .join(", ")
           : null,
       ),
-      line("Tags", record.tags.length ? inlineAll(record.tags.map((tag) => tag.name)) : null),
+      line(
+        "Tags",
+        record.tags.length
+          ? record.tags
+              .map(
+                (tag) => `${inline(tag.name)}${tag.status === "established" ? "" : " (withdrawn)"}`,
+              )
+              .join(", ")
+          : null,
+      ),
       record.details ? `\n${quoted(record.details)}` : null,
       record.urls.length
         ? `\nLinks:\n${record.urls
@@ -278,7 +328,7 @@ export function renderScene(
               (row) =>
                 `  - ${row.algorithm} ${row.hash}, ${row.submissions === null ? "submissions not counted" : `${row.submissions} submission(s)`}, ${
                   row.reports === null ? "reports not counted here" : `${row.reports} report(s)`
-                }${row.contested === null ? "" : row.contested ? ", contested" : ", uncontested"}`,
+                }${row.contested === null ? ", contest unknown" : row.contested ? ", contested" : ", uncontested"}`,
             )
             .join("\n")}`
         : null,
@@ -291,10 +341,18 @@ export function renderScene(
   return { text, structured };
 }
 
-function formatStudio(studio: { name: string; parent: string | null }): string {
+function formatStudio(studio: {
+  name: string;
+  parent: string | null;
+  status: string;
+  parentWithdrawn?: boolean;
+}): string {
   const name = inline(studio.name) ?? "(unnamed studio)";
+  const withdrawn = studio.status === "established" ? "" : " (this identifier is withdrawn)";
   const parent = inline(studio.parent);
-  return parent ? `${name} (part of ${parent})` : name;
+  if (!parent) return `${name}${withdrawn}`;
+  const parentMark = studio.parentWithdrawn ? ", whose identifier is withdrawn" : "";
+  return `${name}${withdrawn} (part of ${parent}${parentMark})`;
 }
 
 export function registerGetScene(server: McpServer, client: StashboxClient): void {

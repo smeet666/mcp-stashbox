@@ -102,7 +102,19 @@ const sourceReportSchema = z.object({
     .array(z.string())
     .optional()
     .describe(
-      "Narrowings this catalogue could not receive. A row of its satisfying one of them does so by chance.",
+      "Narrowings this catalogue could not receive, which is a limit of the catalogue. A row of its satisfying one of them does so by chance.",
+    ),
+  algorithms_not_searched: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "Fingerprint algorithms this catalogue's lookup does not search. It was never asked about those hashes, so its answer here is no evidence about them.",
+    ),
+  narrowings_naming_no_record_here: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "Narrowings this catalogue receives, written with identifiers no record of its own carries. Its emptiness is about those identifiers and states nothing about what it indexes.",
     ),
 });
 
@@ -138,7 +150,14 @@ export const sceneSchema = z.object({
   production_date: dateSchema.describe(
     "When the scene was made, which is a different question from when it was published. Rarely recorded, and never filled in from the release date.",
   ),
-  studio: z.object({ id: z.string(), name: z.string(), parent: z.string().nullable() }).nullable(),
+  studio: z
+    .object({
+      id: z.string(),
+      name: z.string(),
+      parent: z.string().nullable(),
+      status: statusSchema,
+    })
+    .nullable(),
   performers: z.array(
     z.object({
       id: z.string(),
@@ -155,7 +174,14 @@ export const sceneSchema = z.object({
       ),
     }),
   ),
-  tags: z.array(z.object({ id: z.string(), name: z.string(), category: z.string().nullable() })),
+  tags: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      category: z.string().nullable(),
+      status: statusSchema,
+    }),
+  ),
   urls: z.array(siteLinkSchema),
   images: z.array(imageSchema).optional(),
   fingerprints: z.array(fingerprintSchema).optional(),
@@ -181,6 +207,12 @@ export const sceneSchema = z.object({
     .optional()
     .describe(
       "Rows of this record's own lists that came back unreadable and were left out of them.",
+    ),
+  pending_edits_unreadable: z
+    .literal(true)
+    .optional()
+    .describe(
+      "Present where the catalogue publishes open edits and answered them in a shape this client could not read, which leaves the record's revision state unknown rather than settled.",
     ),
   pending_edits: z
     .number()
@@ -314,10 +346,17 @@ export const performerSchema = z.object({
     .string()
     .optional()
     .describe(
-      "Why the section is missing, when it was asked for and could not be read. Its absence then says nothing about what the catalogue holds.",
+      "Why the section is missing, when it was asked for and is not here: the catalogue could not answer it, or its shape offers no way to ask. Its absence then says nothing about what the catalogue holds.",
     ),
   studios: z
-    .array(z.object({ id: z.string(), name: z.string(), scene_count: z.number().nullable() }))
+    .array(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+        scene_count: z.number().nullable(),
+        status: statusSchema,
+      }),
+    )
     .optional(),
   studios_total: z
     .number()
@@ -328,6 +367,12 @@ export const performerSchema = z.object({
     .optional()
     .describe(
       "Rows of this record's own lists that came back unreadable and were left out of them.",
+    ),
+  pending_edits_unreadable: z
+    .literal(true)
+    .optional()
+    .describe(
+      "Present where the catalogue publishes open edits and answered them in a shape this client could not read, which leaves the record's revision state unknown rather than settled.",
     ),
   pending_edits: z
     .number()
@@ -523,6 +568,12 @@ export const findByFingerprintOutput = z.object({
       fingerprint: fingerprintSchema.nullable(),
     }),
   ),
+  rows_skipped: z
+    .number()
+    .optional()
+    .describe(
+      "Rows inside the records matched here that could not be read and are left out of what each one shows of its own lists.",
+    ),
   match_count: z.number().describe("Matches returned: one per scene per fingerprint it carries."),
   scenes_matched: z.number().describe("Distinct scenes behind those matches."),
   unattributed: z

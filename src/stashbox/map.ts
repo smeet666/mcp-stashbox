@@ -53,6 +53,17 @@ function countPendingEdits(raw: unknown): number | null {
     .length;
 }
 
+/**
+ * Whether the catalogue answered with edits this client could not read.
+ *
+ * A catalogue that publishes open edits and answered something unreadable for
+ * them is a third state, apart from a record with none and a catalogue that
+ * counts none. Left unsaid it reads as the first, which calls a record settled.
+ */
+function editsUnreadable(spec: InstanceSpec, raw: unknown): boolean {
+  return supports(spec, "pending_edits") && raw !== undefined && !Array.isArray(raw);
+}
+
 /** A catalogue-minted identifier, kept out of an address unless it is one. */
 function readUuid(value: unknown): string | null {
   const text = readText(value);
@@ -153,10 +164,20 @@ function mapStudio(raw: unknown, spec: InstanceSpec, lost?: { skipped: number })
     if (raw !== undefined && raw !== null && lost) lost.skipped += 1;
     return null;
   }
+  const parent = readText(asRecord(row.parent)?.name);
+  // A parent the catalogue answered with and this client could not read is a
+  // loss. Left silent it is indistinguishable from a studio under no parent.
+  if (row.parent !== undefined && row.parent !== null && parent === null && lost) {
+    lost.skipped += 1;
+  }
   return {
     id: formatId(spec.id, id),
     name,
-    parent: readText(asRecord(row.parent)?.name),
+    parent,
+    // A studio identifier is a live input to a scene search, so what it
+    // addresses now travels with it.
+    status: readStatus(row.deleted === true, null),
+    ...(asRecord(row.parent)?.deleted === true ? { parentWithdrawn: true } : {}),
   };
 }
 
@@ -203,7 +224,14 @@ function mapTags(raw: unknown, spec: InstanceSpec): { rows: TagRow[]; skipped: n
       skipped += 1;
       return [];
     }
-    return [{ id: formatId(spec.id, id), name, category: readText(asRecord(row.category)?.name) }];
+    return [
+      {
+        id: formatId(spec.id, id),
+        name,
+        category: readText(asRecord(row.category)?.name),
+        status: readStatus(row.deleted === true, null),
+      },
+    ];
   });
   return { rows, skipped };
 }
@@ -264,12 +292,16 @@ export function mapScene(
     status,
     mergedInto: null,
     pendingEdits: countPendingEdits(row.edits),
+    ...(editsUnreadable(spec, row.edits) ? { pendingEditsUnreadable: true } : {}),
   };
 
   if (status === "deleted") {
     // A withdrawn record describes itself and nothing else, so nothing it still
-    // carries is offered as a statement about a scene.
-    return {
+    // carries is offered as a statement about a scene. Its fingerprints are the
+    // one exception: a hash states what a file is, never what a scene holds, and
+    // dropping them makes a file the catalogue can still recognise look like a
+    // file it has never seen.
+    const withdrawn: SceneRecord = {
       ...base,
       title: readText(row.title),
       details: null,
@@ -285,6 +317,8 @@ export function mapScene(
       created: null,
       updated: null,
     };
+    attachFingerprints(withdrawn, row, spec);
+    return withdrawn;
   }
 
   const performers = mapAppearances(row.performers, spec);
@@ -330,18 +364,7 @@ export function mapScene(
     updated: readText(row.updated),
   };
 
-  if (row.fingerprints !== undefined) {
-    const { rows: fingerprints, skipped: fingerprintsSkipped } = mapFingerprints(
-      row.fingerprints,
-      spec,
-    );
-    scene.fingerprints = fingerprints;
-    if (fingerprintsSkipped) scene.fingerprintsSkipped = fingerprintsSkipped;
-    scene.fingerprintCount = fingerprints.reduce<Partial<Record<FingerprintAlgorithm, number>>>(
-      (counts, entry) => ({ ...counts, [entry.algorithm]: (counts[entry.algorithm] ?? 0) + 1 }),
-      {},
-    );
-  }
+  attachFingerprints(scene, row, spec);
   if (row.images !== undefined) {
     const { rows: images, skipped: imagesSkipped } = mapImages(row.images);
     scene.images = images;
@@ -349,6 +372,21 @@ export function mapScene(
   }
 
   return scene;
+}
+
+/** The hashes a catalogue holds for a record, with what could not be read counted. */
+function attachFingerprints(scene: SceneRecord, row: Raw, spec: InstanceSpec): void {
+  if (row.fingerprints === undefined) return;
+  const { rows: fingerprints, skipped: fingerprintsSkipped } = mapFingerprints(
+    row.fingerprints,
+    spec,
+  );
+  scene.fingerprints = fingerprints;
+  if (fingerprintsSkipped) scene.fingerprintsSkipped = fingerprintsSkipped;
+  scene.fingerprintCount = fingerprints.reduce<Partial<Record<FingerprintAlgorithm, number>>>(
+    (counts, entry) => ({ ...counts, [entry.algorithm]: (counts[entry.algorithm] ?? 0) + 1 }),
+    {},
+  );
 }
 
 /**
@@ -391,6 +429,7 @@ export function mapPerformer(
     status,
     mergedInto: mergedIntoRaw ? formatId(spec.id, mergedIntoRaw) : null,
     pendingEdits: countPendingEdits(row.edits),
+    ...(editsUnreadable(spec, row.edits) ? { pendingEditsUnreadable: true } : {}),
   };
 
   if (status !== "established") {
@@ -498,7 +537,14 @@ export function mapPerformer(
         unreadable += 1;
         return [];
       }
-      return [{ id: formatId(spec.id, id), name, sceneCount: readInteger(studioRow?.scene_count) }];
+      return [
+        {
+          id: formatId(spec.id, id),
+          name,
+          sceneCount: readInteger(studioRow?.scene_count),
+          status: readStatus(studio?.deleted === true, null),
+        },
+      ];
     });
     if (unreadable) performer.studiosSkipped = unreadable;
   }

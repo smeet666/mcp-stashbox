@@ -57,9 +57,9 @@ const SCENE_BASIC = (dialect: Dialect, edits: string) => `
   code
   director
   deleted
-  studio { id name parent { id name } }
+  studio { id name deleted parent { id name deleted } }
   performers { as performer { id name disambiguation deleted merged_into_id } }
-  tags { id name category { id name } }
+  tags { id name deleted category { id name } }
   ${URLS(dialect)}
   ${edits}
   created
@@ -72,7 +72,7 @@ const SCENE_ROW = (dialect: Dialect) => `
   release_date
   duration
   deleted
-  studio { id name parent { id name } }
+  studio { id name deleted parent { id name deleted } }
   performers { as performer { id name disambiguation deleted merged_into_id } }
   ${URLS(dialect)}
   created
@@ -144,7 +144,7 @@ export function findPerformerDocument(spec: InstanceSpec, sections: PerformerSec
     ${PERFORMER_BASIC(dialect, EDITS(spec))}
     ${sections.appearance ? PERFORMER_APPEARANCE : ""}
     ${sections.images ? IMAGES : ""}
-    ${sections.studios ? "studios { studio { id name } scene_count }" : ""}
+    ${sections.studios ? "studios { studio { id name deleted } scene_count }" : ""}
   }
 }`;
 }

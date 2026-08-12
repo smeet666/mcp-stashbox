@@ -25,10 +25,12 @@ import {
   windowNote,
   pageWasHonoured,
   indexTotalNote,
+  emptyDespiteReachNote,
   orderingNote,
   pastTheEndNote,
   failureNote,
   skippedNote,
+  foldedNarrowingNote,
   foldedCreditsNote,
   storedNote,
   narrowingNote,
@@ -47,6 +49,7 @@ export function renderSceneRows(
   query: string | null,
   window?: { page: number; limit: number },
   asked?: {
+    narrowedOnAnything?: boolean;
     identifiersGiven: boolean;
     match: "all" | "any";
     sorted?: boolean;
@@ -56,14 +59,24 @@ export function renderSceneRows(
   },
 ): Rendered {
   const identifiersGiven = asked?.identifiersGiven ?? false;
+  const narrowedOnAnything = asked?.narrowedOnAnything ?? true;
   const match = asked?.match ?? "all";
   const sorted = asked?.sorted ?? false;
   const cached = asked?.cached ?? false;
-  const stamped = asked?.sortedOn === "created" || asked?.sortedOn === "updated";
+  // The stamps exist so the order can be read on the rows. Carried where the
+  // catalogue refused the sort, they describe an order nothing was put in.
+  const sortReached = result.perSource.some(
+    (entry) => entry.state === "answered" && !(entry.narrowingsNotReceived ?? []).includes("sort"),
+  );
+  const stamped = sortReached && (asked?.sortedOn === "created" || asked?.sortedOn === "updated");
   const bounded = asked?.bounded ?? false;
   // Only what qualifies this answer. The ordering and the per-catalogue counts
   // are in the payload beside the rows they describe, and repeating them on
   // every call is what stops a reader reading the notes that matter.
+  const answeringCount = Math.max(
+    1,
+    result.perSource.filter((entry) => entry.state === "answered").length,
+  );
   const notes: string[] = [];
 
   // How the order was built belongs to an answer that has rows to order: a
@@ -119,12 +132,44 @@ export function renderSceneRows(
       "Some rows carry a date recorded to the month or the year. A catalogue compares those as the first day of the period, so a bound written as a day admits records whose own date names none.",
     );
   }
+  // A search given nothing to narrow on is a page of the whole index. Read
+  // without that said, its rows look like the answer to a question.
+  if (!narrowedOnAnything && result.rows.length) {
+    notes.push(
+      "Nothing was given to narrow this search, so these rows are a page of each catalogue's whole index, in its own order. They answer no question beyond that.",
+    );
+  }
+  // A catalogue answering past the limit makes the stated window describe a
+  // page the answer does not hold, and a caller paging on it skips rows.
+  const overRunning = window
+    ? result.perSource.filter(
+        (entry) => entry.state === "answered" && (entry.count ?? 0) > window.limit,
+      )
+    : [];
+  if (window && (overRunning.length || result.rows.length > window.limit * answeringCount)) {
+    const named = overRunning.length
+      ? overRunning.map((entry) => entry.name ?? entry.source).join(", ")
+      : "a catalogue";
+    notes.push(
+      `${named} returned more rows than the limit asked for: this answer carries ${result.rows.length} where ${window.limit} per catalogue were asked. Page on what is shown here rather than on that limit.`,
+    );
+  }
+  const undated = [
+    ...new Set(result.rows.filter((row) => row.releaseDateUnreadable).map((row) => row.source)),
+  ];
+  if (undated.length) {
+    notes.push(
+      `Some rows from ${undated.join(", ")} carry a release date this client could not read, so none is stated on them. That is a date dropped and never a record carrying none.`,
+    );
+  }
   const covered = windowNote(result.perSource, window);
   if (covered) notes.push(covered);
   const narrowings = narrowingNote(result.perSource);
   if (narrowings) notes.push(narrowings);
   const reach = indexTotalNote(result.perSource);
   if (reach) notes.push(reach);
+  const disagreeing = emptyDespiteReachNote(result.perSource, window);
+  if (disagreeing) notes.push(disagreeing);
   const ordering = orderingNote(result.perSource, sorted);
   if (ordering) notes.push(ordering);
   const pastEnd = pastTheEndNote(result.perSource, window);
@@ -139,10 +184,15 @@ export function renderSceneRows(
   }
   const folded = foldedCreditsNote(result.rows);
   if (folded) notes.push(folded);
+  const foldedNarrowing = foldedNarrowingNote(result.foldedNarrowings);
+  if (foldedNarrowing) notes.push(foldedNarrowing);
   const lost = skippedNote(result.perSource);
   if (lost) notes.push(lost);
   const failures = failureNote(result.perSource);
   if (failures) notes.push(failures);
+  // A window describes rows a catalogue read. Where every catalogue asked
+  // failed, the emptiness is the failure and not an emptiness inside a window.
+  const answeredAny = result.perSource.some((entry) => entry.state === "answered");
   const nobody = nobodyAskedNote(result.perSource);
   if (nobody) notes.push(nobody);
   const coverage = coverageNote(result.perSource);
@@ -167,7 +217,7 @@ export function renderSceneRows(
     })),
     result_count: result.rows.length,
     ordering: result.ordering,
-    ...(window && !nobody
+    ...(window && !nobody && answeredAny
       ? {
           window: {
             ...window,
@@ -238,6 +288,9 @@ export function registerSearchScenes(server: McpServer, client: StashboxClient):
         sources: sourcesArgument(
           "Narrow to named catalogues. Every configured catalogue is asked by default.",
         ).optional(),
+      }).refine((args) => !(args.date_from && args.date_to && args.date_from >= args.date_to), {
+        error:
+          "[invalid_input] 'date_from' names a day at or after 'date_to', so the two bounds enclose no day. A catalogue asked for that interval finds nothing, and the emptiness would read as a catalogue holding none.",
       }),
       outputSchema: searchScenesOutput,
       annotations: {
@@ -270,6 +323,16 @@ export function registerSearchScenes(server: McpServer, client: StashboxClient):
           args.query ?? null,
           { page: args.page ?? 1, limit: args.limit ?? 10 },
           {
+            narrowedOnAnything: Boolean(
+              args.query ||
+              args.title ||
+              args.code ||
+              args.performer_ids ||
+              args.studio_ids ||
+              args.tag_ids ||
+              args.date_from ||
+              args.date_to,
+            ),
             identifiersGiven: Boolean(
               args.performer_ids?.length || args.studio_ids?.length || args.tag_ids?.length,
             ),

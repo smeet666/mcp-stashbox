@@ -18,12 +18,22 @@ import type { SourceReport } from "../../src/types.js";
 type Transport = { request: <T>(spec: unknown, apiKey: string, body: unknown) => Promise<T> };
 
 /**
- * A transport that answers every catalogue with a payload carrying no rows.
- * A catalogue that answers nothing has answered, which is the state whose
- * report the assertions below read.
+ * A transport that answers every catalogue with the shape its schema declares,
+ * carrying no rows. A catalogue that looked and found nothing has answered,
+ * which is the state whose report the assertions below read. A payload without
+ * that shape would be a catalogue this client could not read, which is a
+ * failure and a different report.
  */
 function emptyTransport(): Transport {
-  return { request: async <T>(): Promise<T> => ({}) as T };
+  return {
+    request: async <T>(): Promise<T> =>
+      ({
+        searchScenes: { count: 0, scenes: [] },
+        queryScenes: { count: 0, scenes: [] },
+        searchPerformers: { count: 0, performers: [] },
+        queryPerformers: { count: 0, performers: [] },
+      }) as T,
+  };
 }
 
 function clientWithKeys(): StashboxClient {

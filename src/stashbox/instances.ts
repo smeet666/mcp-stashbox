@@ -21,6 +21,7 @@ export type Capability =
   | "find_by_fingerprint"
   /** Publishes the table sorting the sites its records link to. */
   | "site_categories"
+  | "tag_categories"
   /** Publishes how many people disputed a fingerprint. */
   | "fingerprint_reports"
   /**
@@ -69,6 +70,7 @@ const FULL: readonly Capability[] = [
   "get_performer",
   "find_by_fingerprint",
   "site_categories",
+  "tag_categories",
   "fingerprint_reports",
   "index_total",
   "pending_edits",

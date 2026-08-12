@@ -28,15 +28,22 @@ export function strictInput<Shape extends z.ZodRawShape>(shape: Shape) {
 /**
  * A narrowing written as text, which must carry something to narrow on.
  *
- * An empty string reaches the catalogue as no restriction at all, so the answer
- * that comes back is the whole index handed to a caller who asked for a part of
- * it. Refusing it at the door is the only place the distinction survives.
+ * A value carrying no characters reaches the catalogue as no restriction at
+ * all, so the answer that comes back is the whole index handed to a caller who
+ * asked for a part of it. Refusing it at the door is the only place the
+ * distinction survives, and a value of nothing but spaces carries as little as
+ * one of nothing at all.
  */
 export function narrowingText(description?: string) {
-  const schema = z.string().min(1, {
-    error: `[${INVALID_INPUT}] An empty value narrows nothing, and a catalogue asked with it answers everything it holds. Give the text to narrow on, or leave the argument out.`,
-  });
+  const empty = {
+    error: `[${INVALID_INPUT}] A value carrying no characters narrows nothing, and a catalogue asked with it answers everything it holds. Give the text to narrow on, or leave the argument out.`,
+  };
+  const schema = z.string().min(1, empty).refine(carriesCharacters, empty);
   return description ? schema.describe(description) : schema;
+}
+
+function carriesCharacters(value: string): boolean {
+  return value.trim().length > 0;
 }
 
 /**

@@ -97,10 +97,16 @@ function scene(over: Partial<SceneRecord> = {}): SceneRecord {
       id: "stashdb:2b3c4d5e-6f70-4812-9345-56789abcdef0",
       name: "Northgate Pictures",
       parent: null,
+      status: "established",
     },
     performers: [performer()],
     tags: [
-      { id: "stashdb:3c4d5e6f-7081-4923-8456-6789abcdef01", name: "Coastal", category: "Setting" },
+      {
+        id: "stashdb:3c4d5e6f-7081-4923-8456-6789abcdef01",
+        name: "Coastal",
+        category: "Setting",
+        status: "established",
+      },
     ],
     urls: [
       {

@@ -87,7 +87,7 @@ function scene(source: InstanceId, index: number, title: string, studioName: str
     durationSeconds: 1500,
     releaseDate: { value: "2019-04-12", precision: "day" },
     productionDate: null,
-    studio: { id: `${source}:${id}`, name: studioName, parent: null },
+    studio: { id: `${source}:${id}`, name: studioName, parent: null, status: "established" },
     performers: [
       {
         id: `${source}:${id}`,

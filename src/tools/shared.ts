@@ -8,7 +8,7 @@
 import type { ReadDate } from "../stashbox/normalise.js";
 import { indentBlock, indentMarkerLines } from "../stashbox/normalise.js";
 import { instanceById, instanceName, supports, type Capability } from "../stashbox/instances.js";
-import type { SourceReport } from "../types.js";
+import type { FoldedNarrowing, SourceReport } from "../types.js";
 
 export interface Rendered {
   text: string;
@@ -84,6 +84,26 @@ export function sourceOffers(source: string, capability: Capability): boolean {
 }
 
 /**
+ * The emptiness a folded identifier produces, which is about the identifier.
+ *
+ * A catalogue that merges two records moves the rows to the successor, so the
+ * old identifier narrows to nothing while the catalogue holds everything it
+ * ever held for that person. Read as a count of zero, that emptiness says the
+ * catalogue indexes nothing, which is the opposite of what happened.
+ */
+export function foldedNarrowingNote(folded: readonly FoldedNarrowing[] | undefined): string | null {
+  if (!folded?.length) return null;
+  const named = folded
+    .map((entry) =>
+      entry.successor
+        ? `${entry.given}, which its catalogue merged into ${entry.successor}`
+        : `${entry.given}, which its catalogue has withdrawn`,
+    )
+    .join("; ");
+  return `This search was narrowed with an identifier its catalogue has folded: ${named}. A folded identifier narrows to nothing because the rows moved to the record it was folded into, so this emptiness is about the identifier and never about what the catalogue holds. Ask again with the record named here.`;
+}
+
+/**
  * The people credited on these scenes whose record the catalogue has folded.
  *
  * A row lists a scene's cast by name, and a name is what the catalogue printed
@@ -121,6 +141,12 @@ export function perSourceText(reports: readonly SourceReport[]): string[] {
       const narrowings = report.narrowingsNotReceived?.length
         ? `; did not receive: ${report.narrowingsNotReceived.join(", ")}`
         : "";
+      const unsearched = report.algorithmsNotSearched?.length
+        ? `; does not search ${report.algorithmsNotSearched.join(", ")}`
+        : "";
+      const foreign = report.narrowingsNamingNoRecord?.length
+        ? `; no record of its own is named by the identifiers given for ${report.narrowingsNamingNoRecord.join(", ")}`
+        : "";
       const fields = report.fieldsSearched?.length
         ? `; its index read ${report.fieldsSearched.join(", ")}`
         : "";
@@ -135,7 +161,7 @@ export function perSourceText(reports: readonly SourceReport[]): string[] {
         report.records === undefined || report.records === report.count
           ? ""
           : ` on ${report.records} record(s)`;
-      return `${name}: answered, ${report.count ?? 0} row(s)${behind}${reach}${fields}${narrowings}${why}`;
+      return `${name}: answered, ${report.count ?? 0} row(s)${behind}${reach}${fields}${narrowings}${unsearched}${foreign}${why}`;
     }
     if (report.state === "failed") {
       return `${name}: failed at ${report.moment ?? "an unnamed moment"} (${report.error ?? "error"}): ${inline(report.reason) ?? ""}`.trim();
@@ -174,6 +200,12 @@ export function reportPayload(reports: readonly SourceReport[]): Record<string, 
     ...(entry.narrowingsNotReceived === undefined
       ? {}
       : { narrowings_not_received: entry.narrowingsNotReceived }),
+    ...(entry.narrowingsNamingNoRecord === undefined
+      ? {}
+      : { narrowings_naming_no_record_here: entry.narrowingsNamingNoRecord }),
+    ...(entry.algorithmsNotSearched === undefined
+      ? {}
+      : { algorithms_not_searched: entry.algorithmsNotSearched }),
     ...(entry.skipped === undefined ? {} : { skipped: entry.skipped }),
     ...(entry.unattributed === undefined ? {} : { unattributed: entry.unattributed }),
     ...(entry.records === undefined ? {} : { records: entry.records }),
@@ -201,7 +233,12 @@ export function narrowingNote(reports: readonly SourceReport[]): string | null {
       refused.set(name, [...(refused.get(name) ?? []), who]);
     }
   }
-  if (refused.size === 0 && idle.length === 0) return null;
+  if (
+    refused.size === 0 &&
+    idle.length === 0 &&
+    !reports.some((entry) => entry.narrowingsNamingNoRecord?.length)
+  )
+    return null;
   // Paging and order shape the answer; the rest select rows. Only the second
   // kind is something a row can be said to satisfy.
   const shapes = new Set(["page", "sort", "direction"]);
@@ -219,6 +256,17 @@ export function narrowingNote(reports: readonly SourceReport[]): string | null {
   if (reading.length) {
     lines.push(
       `Asked for and not received: ${say(reading)}. A list of identifiers was read as any one of them, so a row carries one of those asked for and not all.`,
+    );
+  }
+  const nobodysRecord = new Map<string, string[]>();
+  for (const report of reports) {
+    for (const name of report.narrowingsNamingNoRecord ?? []) {
+      nobodysRecord.set(name, [...(nobodysRecord.get(name) ?? []), report.name ?? report.source]);
+    }
+  }
+  if (nobodysRecord.size) {
+    lines.push(
+      `Written with identifiers no record of theirs carries: ${say([...nobodysRecord])}. Those catalogues take that narrowing and hold nothing the identifiers name, so their emptiness is about the identifiers and not about what they index.`,
     );
   }
   if (idle.length) {
@@ -316,6 +364,28 @@ export function storedNote(cached: boolean, readAt?: string | null): string | nu
   return `This answer was replayed from this client's store, so no catalogue was asked for it. What each catalogue is reported as saying is what it said when the answer was first read.${when}`;
 }
 
+/**
+ * A catalogue reporting a reach and returning none of it, on the first page.
+ *
+ * Read together, the two say the index holds records for the question and the
+ * catalogue handed back none of them. Neither number is wrong and the pair is
+ * not an answer, so the answer says it saw the contradiction.
+ */
+export function emptyDespiteReachNote(
+  reports: readonly SourceReport[],
+  window: { page: number; limit: number } | undefined,
+): string | null {
+  if (window && window.page > 1) return null;
+  const contradicting = reports.filter(
+    (entry) => entry.state === "answered" && !entry.count && (entry.indexTotal ?? 0) > 0,
+  );
+  if (contradicting.length === 0) return null;
+  const named = contradicting
+    .map((entry) => `${entry.name ?? entry.source}: ${entry.indexTotal}`)
+    .join(", ");
+  return `These catalogues report holding records for this question and returned none of them on this page: ${named}. What they hold and what they handed back disagree, so this emptiness is not an answer about their index.`;
+}
+
 export function indexTotalNote(reports: readonly SourceReport[]): string | null {
   const withTotal = reports.filter(
     (entry) => entry.state === "answered" && entry.indexTotal !== undefined,
@@ -376,7 +446,11 @@ export function windowNote(
   const named = unpaged.map((entry) => entry.name ?? entry.source).join(", ");
   return window.page === 1
     ? `This answer covers page 1 at ${window.limit} row(s) per catalogue. An emptiness here is an emptiness inside that window.`
-    : `Page ${window.page} was asked for at ${window.limit} row(s) per catalogue, and these catalogues answered their first page instead because their search takes no page: ${named}. Their rows repeat the ones a first page carries.`;
+    : `Page ${window.page} was asked for at ${window.limit} row(s) per catalogue, and these catalogues answered their first page instead because their search takes no page: ${named}.${
+        unpaged.some((entry) => entry.count)
+          ? " Their rows repeat the ones a first page carries."
+          : ""
+      }`;
 }
 
 export function coverageNote(reports: readonly SourceReport[]): string | null {
