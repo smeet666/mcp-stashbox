@@ -124,15 +124,17 @@ export interface SceneRecord {
   releaseDate: ReadDate | null;
   /** When the scene was made, which is a different question from its release. */
   productionDate: ReadDate | null;
+  /** Set where the catalogue published a date this client could not read. */
+  releaseDateUnreadable?: boolean;
+  productionDateUnreadable?: boolean;
   studio: StudioRef | null;
   performers: PerformerAppearance[];
   tags: TagRow[];
   urls: SiteLink[];
-  /**
-   * Rows of this record's own lists that came back unreadable and were left out:
-   * its links, its tags, the performers it credits, the names it is also known by.
-   */
+  /** Rows of this record's own lists that came back unreadable and were left out. */
   rowsSkipped?: number;
+  /** Which of those lists lost rows, so the count can say what it counts. */
+  rowsSkippedIn?: string[];
   images?: ImageRow[];
   /** Image rows the catalogue answered with that came back unreadable. */
   imagesSkipped?: number;
@@ -188,11 +190,10 @@ export interface PerformerRecord {
   careerEndYear: number | null;
   sceneCount: number | null;
   urls: SiteLink[];
-  /**
-   * Rows of this record's own lists that came back unreadable and were left out:
-   * its links, its tags, the performers it credits, the names it is also known by.
-   */
+  /** Rows of this record's own lists that came back unreadable and were left out. */
   rowsSkipped?: number;
+  /** Which of those lists lost rows, so the count can say what it counts. */
+  rowsSkippedIn?: string[];
   appearance?: PerformerAppearanceDetails;
   images?: ImageRow[];
   /** Image rows the catalogue answered with that came back unreadable. */

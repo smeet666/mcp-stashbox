@@ -136,8 +136,25 @@ export function renderScene(
   }
   if (record.rowsSkipped) {
     structured.rows_skipped = record.rowsSkipped;
+    structured.rows_skipped_in = record.rowsSkippedIn ?? [];
     notes.push(
-      `${record.rowsSkipped} row(s) of this record's own lists could not be read and are left out: the links, the tags and the performers it credits. What is shown of those lists is therefore short of what the catalogue answered with.`,
+      `${record.rowsSkipped} row(s) of this record's own lists could not be read and are left out of ${(record.rowsSkippedIn ?? []).join(", ")}. What is shown of those is therefore short of what the catalogue answered with.`,
+    );
+  }
+  for (const [what, flagged] of [
+    ["release date", record.releaseDateUnreadable],
+    ["production date", record.productionDateUnreadable],
+  ] as const) {
+    if (flagged) {
+      notes.push(
+        `${record.source} published a ${what} this client could not read, so none is stated here. That is a date dropped and never a record carrying none.`,
+      );
+    }
+  }
+  if (record.pendingEdits) {
+    structured.pending_edits = record.pendingEdits;
+    notes.push(
+      `${record.pendingEdits} edit(s) to this record are open on ${record.source}, so what it states is under revision there.`,
     );
   }
   const storedHere = storedNote(cached);

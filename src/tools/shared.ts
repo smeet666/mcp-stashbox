@@ -115,6 +115,33 @@ export function perSourceText(reports: readonly SourceReport[]): string[] {
  * A caller who wrote one and reads only the text has to learn it was set aside,
  * and the per-catalogue block is not where a reader looks for that.
  */
+/**
+ * A catalogue's report, in the shape the published schema declares.
+ *
+ * The report is built with the names the code uses and read by callers under
+ * the names the schema states, and the field carrying what a catalogue could
+ * not receive is the one an answer exists to carry.
+ */
+export function reportPayload(reports: readonly SourceReport[]): Record<string, unknown>[] {
+  return reports.map((entry) => ({
+    source: entry.source,
+    ...(entry.name === undefined ? {} : { name: entry.name }),
+    state: entry.state,
+    ...(entry.count === undefined ? {} : { count: entry.count }),
+    ...(entry.indexTotal === undefined ? {} : { index_total: entry.indexTotal }),
+    ...(entry.fieldsSearched === undefined ? {} : { fields_searched: entry.fieldsSearched }),
+    ...(entry.narrowingsNotReceived === undefined
+      ? {}
+      : { narrowings_not_received: entry.narrowingsNotReceived }),
+    ...(entry.skipped === undefined ? {} : { skipped: entry.skipped }),
+    ...(entry.unattributed === undefined ? {} : { unattributed: entry.unattributed }),
+    ...(entry.records === undefined ? {} : { records: entry.records }),
+    ...(entry.reason === undefined ? {} : { reason: entry.reason }),
+    ...(entry.moment === undefined ? {} : { moment: entry.moment }),
+    ...(entry.error === undefined ? {} : { error: entry.error }),
+  }));
+}
+
 export function narrowingNote(reports: readonly SourceReport[]): string | null {
   const refused = new Map<string, string[]>();
   for (const report of reports) {

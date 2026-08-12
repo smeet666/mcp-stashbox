@@ -177,6 +177,25 @@ notes reads the wrong half.
 - The precision of a death date and of a production date went unsaid where the
   precision of their siblings was stated.
 - A marker replayed from the store said so in its prose and not in its payload.
+- Each catalogue's report was published under the names the code uses while the
+  schema declared, and the rest of the payload used, the other. What a catalogue
+  could not receive, and what its index holds, were therefore unreachable by
+  anyone reading the published shape. One key was declared nowhere at all.
+- A fingerprint answer named no folded record in its prose, so the title an
+  identifier carried before it was withdrawn stood as the identification of a file.
+- The two shapes nesting a scene inside another answer declared no status, which
+  is the field saying a match is a marker.
+- The sentence explaining how many rows of a record were too damaged to read
+  named the lists it once counted rather than the lists that lost them.
+- Identifiers a catalogue publishes inside a record were printed without being
+  held to what an identifier is, so the server printed identifiers it refuses to
+  receive.
+- A date a catalogue published and this client could not read was dropped in
+  silence, leaving a record carrying one to read as a record carrying none.
+- Edits open on a record were asked of the catalogue on every read and published
+  nowhere, so a record under revision was never named as one.
+- Rows lost inside the records a search returns reached the prose and not the
+  payload.
 
 ## [0.2.1] - 2026-08-11
 

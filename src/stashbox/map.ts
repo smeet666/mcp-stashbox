@@ -147,7 +147,7 @@ function mapStudio(raw: unknown, spec: InstanceSpec, lost?: { skipped: number })
   const row = asRecord(raw);
   const id = readText(row?.id);
   const name = readText(row?.name);
-  if (!row || !id || !name) {
+  if (!row || !id || !name || !isUuid(id)) {
     // A studio the catalogue answered with and this client could not read is a
     // loss. Returning null silently makes it a scene with no studio.
     if (row !== undefined && row !== null && lost) lost.skipped += 1;
@@ -170,7 +170,7 @@ function mapAppearances(
     const performer = asRecord(row?.performer);
     const id = readText(performer?.id);
     const name = readText(performer?.name);
-    if (!performer || !id || !name) {
+    if (!performer || !id || !name || !isUuid(id)) {
       skipped += 1;
       return [];
     }
@@ -195,7 +195,7 @@ function mapTags(raw: unknown, spec: InstanceSpec): { rows: TagRow[]; skipped: n
     const row = asRecord(entry);
     const id = readText(row?.id);
     const name = readText(row?.name);
-    if (!row || !id || !name) {
+    if (!row || !id || !name || !isUuid(id)) {
       skipped += 1;
       return [];
     }
@@ -293,14 +293,30 @@ export function mapScene(
     director: readText(row.director),
     durationSeconds: positiveOrNull(readInteger(row.duration)),
     releaseDate: readDate(readText(row.release_date)),
+    ...(readText(row.release_date) !== null && readDate(readText(row.release_date)) === null
+      ? { releaseDateUnreadable: true }
+      : {}),
     // When a scene was made is a different question from when it was released,
     // so neither ever stands in for the other.
     productionDate: readDate(readText(row.production_date)),
+    ...(readText(row.production_date) !== null && readDate(readText(row.production_date)) === null
+      ? { productionDateUnreadable: true }
+      : {}),
     studio,
     performers: performers.rows,
     tags: tags.rows,
     urls: urls.rows,
-    ...(lost ? { rowsSkipped: lost } : {}),
+    ...(lost
+      ? {
+          rowsSkipped: lost,
+          rowsSkippedIn: [
+            ...(urls.skipped ? ["its links"] : []),
+            ...(tags.skipped ? ["its tags"] : []),
+            ...(performers.skipped ? ["the performers it credits"] : []),
+            ...(studioLoss.skipped ? ["the studio it names"] : []),
+          ],
+        }
+      : {}),
     created: readText(row.created),
     updated: readText(row.updated),
   };
@@ -410,7 +426,14 @@ export function mapPerformer(
     sceneCount: supports(spec, "scene_count") ? readInteger(row.scene_count) : null,
     urls: performerUrls.rows,
     ...(performerUrls.skipped + aliasesSkipped + mergedIdsSkipped
-      ? { rowsSkipped: performerUrls.skipped + aliasesSkipped + mergedIdsSkipped }
+      ? {
+          rowsSkipped: performerUrls.skipped + aliasesSkipped + mergedIdsSkipped,
+          rowsSkippedIn: [
+            ...(performerUrls.skipped ? ["its links"] : []),
+            ...(aliasesSkipped ? ["the names it is also known by"] : []),
+            ...(mergedIdsSkipped ? ["the identifiers folded into it"] : []),
+          ],
+        }
       : {}),
     created: readText(row.created),
     updated: readText(row.updated),
@@ -433,7 +456,7 @@ export function mapPerformer(
       const studio = asRecord(studioRow?.studio);
       const id = readText(studio?.id);
       const name = readText(studio?.name);
-      if (!id || !name) {
+      if (!id || !name || !isUuid(id)) {
         unreadable += 1;
         return [];
       }

@@ -149,8 +149,15 @@ export function renderPerformer(
   }
   if (record.rowsSkipped) {
     structured.rows_skipped = record.rowsSkipped;
+    structured.rows_skipped_in = record.rowsSkippedIn ?? [];
     notes.push(
-      `${record.rowsSkipped} row(s) of this record's own lists could not be read and are left out: the links and the names it is also known by. What is shown of those lists is therefore short of what the catalogue answered with.`,
+      `${record.rowsSkipped} row(s) of this record's own lists could not be read and are left out of ${(record.rowsSkippedIn ?? []).join(", ")}. What is shown of those is therefore short of what the catalogue answered with.`,
+    );
+  }
+  if (record.pendingEdits) {
+    structured.pending_edits = record.pendingEdits;
+    notes.push(
+      `${record.pendingEdits} edit(s) to this record are open on ${record.source}, so what it states is under revision there.`,
     );
   }
   const storedHere = storedNote(cached);

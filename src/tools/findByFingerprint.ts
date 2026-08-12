@@ -16,6 +16,7 @@ import { strictInput } from "./arguments.js";
 import { findByFingerprintOutput } from "./schemas.js";
 import {
   coverageNote,
+  reportPayload,
   nobodyAskedNote,
   skippedNote,
   failureNote,
@@ -132,7 +133,7 @@ export function renderFingerprintMatches(result: FingerprintResult): Rendered {
     match_count: result.matches.length,
     scenes_matched: new Set(result.matches.map((match) => match.scene.id)).size,
     unattributed: result.unattributed,
-    per_source: result.perSource,
+    per_source: reportPayload(result.perSource),
     notes,
   };
 
@@ -142,7 +143,7 @@ export function renderFingerprintMatches(result: FingerprintResult): Rendered {
       `Asked: ${result.asked.map((entry) => `${entry.algorithm} ${entry.hash}`).join(", ")}`,
       ...result.matches.map((match) =>
         joinLines([
-          `\n- ${inline(match.scene.title) ?? "(untitled)"}, ${match.algorithm} (${match.matchKind})`,
+          `\n- ${inline(match.scene.title) ?? "(untitled)"}${match.scene.status === "established" ? "" : match.scene.status === "merged" ? " — merged, so this identifier now addresses the record it was folded into, and this title is the one it carried then" : " — withdrawn, so this identifier states nothing about what it once named, and this title is the one it carried then"}, ${match.algorithm} (${match.matchKind})`,
           `    catalogue: ${match.scene.source}`,
           `    id: ${match.scene.id}`,
           match.scene.releaseDate ? `    released: ${dateText(match.scene.releaseDate)}` : null,

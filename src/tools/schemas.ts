@@ -74,6 +74,12 @@ const sourceReportSchema = z.object({
       "'answered' is a catalogue that looked, and a count of zero there means it found nothing. 'failed' could not answer. 'absent' was never asked. An answer holding rows from some catalogues is no evidence about the others.",
     ),
   count: z.number().optional().describe("Rows this catalogue contributed to this page."),
+  records: z
+    .number()
+    .optional()
+    .describe(
+      "Distinct scenes behind this catalogue's matches, where one scene answered more than one hash asked and so contributed more than one match.",
+    ),
   unattributed: z.number().optional(),
   skipped: z.number().optional(),
   index_total: z
@@ -156,6 +162,16 @@ export const sceneSchema = z.object({
     .describe(
       "Rows of this record's own lists that came back unreadable and were left out of them.",
     ),
+  pending_edits: z
+    .number()
+    .optional()
+    .describe(
+      "Edits to this record open on the catalogue, where it publishes them. What the record states is under revision.",
+    ),
+  rows_skipped_in: z
+    .array(z.string())
+    .optional()
+    .describe("Which of this record's lists lost those rows."),
   images_skipped: z
     .number()
     .optional()
@@ -280,6 +296,16 @@ export const performerSchema = z.object({
     .describe(
       "Rows of this record's own lists that came back unreadable and were left out of them.",
     ),
+  pending_edits: z
+    .number()
+    .optional()
+    .describe(
+      "Edits to this record open on the catalogue, where it publishes them. What the record states is under revision.",
+    ),
+  rows_skipped_in: z
+    .array(z.string())
+    .optional()
+    .describe("Which of this record's lists lost those rows."),
   studios_skipped: z
     .number()
     .optional()
@@ -422,6 +448,12 @@ export const searchPerformersOutput = z.object({
     }),
   ),
   result_count: z.number(),
+  rows_skipped: z
+    .number()
+    .optional()
+    .describe(
+      "Rows inside the records listed here that could not be read and are left out of what each one shows of its own lists.",
+    ),
   ordering: orderingSchema,
   window: windowSchema,
   per_source: z.array(sourceReportSchema),
@@ -452,6 +484,12 @@ export const findByFingerprintOutput = z.object({
   ),
   match_count: z.number().describe("Matches returned: one per scene per fingerprint it carries."),
   scenes_matched: z.number().describe("Distinct scenes behind those matches."),
+  records: z
+    .number()
+    .optional()
+    .describe(
+      "Distinct scenes behind this catalogue's matches, where one scene answered more than one hash asked and so contributed more than one match.",
+    ),
   unattributed: z
     .number()
     .describe(

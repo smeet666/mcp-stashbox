@@ -14,6 +14,7 @@ import { strictInput } from "./arguments.js";
 import { searchScenesOutput } from "./schemas.js";
 import {
   coverageNote,
+  reportPayload,
   nobodyAskedNote,
   windowNote,
   pageWasHonoured,
@@ -115,8 +116,10 @@ export function renderSceneRows(
   if (ordering) notes.push(ordering);
   const pastEnd = pastTheEndNote(result.perSource, window);
   if (pastEnd) notes.push(pastEnd);
+  let damagedRows = 0;
   const damaged = result.rows.reduce((total, row) => total + (row.rowsSkipped ?? 0), 0);
   if (damaged) {
+    damagedRows = damaged;
     notes.push(
       `${damaged} row(s) inside the records listed here could not be read and are left out of what each one shows of its own lists. Read a record for what it says about its own losses.`,
     );
@@ -157,7 +160,8 @@ export function renderSceneRows(
           },
         }
       : {}),
-    per_source: result.perSource,
+    ...(damagedRows ? { rows_skipped: damagedRows } : {}),
+    per_source: reportPayload(result.perSource),
     ...(cached ? { cached: true } : {}),
     notes,
   };
