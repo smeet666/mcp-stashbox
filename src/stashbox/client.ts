@@ -157,6 +157,11 @@ function orderingText(reports: readonly SourceReport[], sortedOn?: string): stri
     : "interleaved by catalogue, in the order the catalogues were asked; no score is shared across them";
 }
 
+/** How many of a list's identifiers name a record at all, each counted once. */
+function countOwn(ids: readonly string[]): number {
+  return new Set(ids.filter((id) => id.includes(":")).map((id) => id.toLowerCase())).size;
+}
+
 /**
  * Why a catalogue was left with no question to answer.
  *
@@ -441,7 +446,7 @@ export class StashboxClient {
   ) {
     return this.ask<{ findScenesBySceneFingerprints?: unknown[][] }>(
       spec,
-      documents.findByFingerprintDocument(spec.dialect),
+      documents.findByFingerprintDocument(spec),
       // A variable carries an enumeration as a string, which is what lets one
       // document satisfy a catalogue typing this as an enumeration and one
       // typing it as free text.
@@ -522,6 +527,8 @@ export class StashboxClient {
           ...(answer.fields.length ? { fieldsSearched: answer.fields } : {}),
           ...(answer.refused.length ? { narrowingsNotReceived: answer.refused } : {}),
           ...(answer.foreign.length ? { narrowingsNamingNoRecord: answer.foreign } : {}),
+          ...(answer.partial.length ? { narrowingsReceivedInPart: answer.partial } : {}),
+          ...(answer.idle.length ? { argumentsWithNothingToDo: answer.idle } : {}),
           ...(answer.skipped ? { skipped: answer.skipped } : {}),
         });
       } else {
@@ -532,19 +539,29 @@ export class StashboxClient {
     }
 
     const rows = interleave(collected);
-    const folded =
-      rows.length === 0 && input.performerIds?.length
-        ? await this.foldedAmong(input.performerIds)
-        : [];
+    // An emptiness every catalogue's failure produced has its cause already.
+    // Explaining it by a folded identifier would name a reason nobody established.
+    const answered = perSource.some((entry) => entry.state === "answered");
+    const check =
+      rows.length === 0 && answered
+        ? await this.foldedAmong(
+            [...(input.performerIds ?? []), ...(input.studioIds ?? []), ...(input.tagIds ?? [])],
+            asked.map((entry) => entry.id),
+          )
+        : { folded: [], unchecked: [], absent: [] };
     const answer = {
       rows,
       perSource,
       ordering: orderingText(perSource, input.sort),
-      ...(folded.length ? { foldedNarrowings: folded } : {}),
+      ...(check.folded.length ? { foldedNarrowings: check.folded } : {}),
+      ...(check.unchecked.length ? { uncheckedNarrowings: check.unchecked } : {}),
+      ...(check.absent.length ? { absentNarrowings: check.absent } : {}),
     };
     // An answer holding a catalogue that failed is not the answer that was asked
-    // for, so it is returned and never stored.
-    if (!perSource.some((entry) => entry.state === "failed")) this.cache.set(key, answer);
+    // for, so it is returned and never stored. Nor is one whose explanation for
+    // its own emptiness could not be read: it would be replayed unexplained.
+    if (!perSource.some((entry) => entry.state === "failed") && !check.unchecked.length)
+      this.cache.set(key, answer);
     return { data: answer, cached: false, ...(skipped ? { skipped } : {}) };
   }
 
@@ -559,13 +576,15 @@ export class StashboxClient {
     total: number | null;
     refused: string[];
     foreign: string[];
+    partial: string[];
+    idle: string[];
     fields: string[];
     unnarrowed?: boolean;
   }> {
     if (input.query && supports(spec, "search_scenes")) {
       const data = await this.ask<{ searchScenes?: { count?: unknown; scenes?: unknown[] } }>(
         spec,
-        documents.searchScenesDocument(spec.dialect),
+        documents.searchScenesDocument(spec),
         { term: input.query, limit },
       );
       const searched = rowsOf(spec, data.searchScenes, "searchScenes", "scenes");
@@ -584,6 +603,8 @@ export class StashboxClient {
               )),
         ),
         foreign: [],
+        partial: [],
+        idle: [],
         fields: FIELDS_SEARCHED,
       };
     }
@@ -597,6 +618,10 @@ export class StashboxClient {
     const refused: string[] = [];
     // Narrowings this catalogue receives, written with nobody's identifier of its own.
     const foreign: string[] = [];
+    // Narrowings it receives in part, the rest of the list naming other catalogues.
+    const partial: string[] = [];
+    // Arguments written that nothing in this question gave them anything to do.
+    const idleArguments: string[] = [];
     const criteria = takesCriteria(spec);
 
     if (input.title) filters.title = input.title;
@@ -626,8 +651,23 @@ export class StashboxClient {
         foreign.push(name);
         return;
       }
+      // A list naming records on two catalogues reaches each of them shorn of
+      // the others' identifiers. Sent whole it would fail; sent short and
+      // unremarked it answers a narrower question than the one written, and a
+      // row satisfying the part that survived reads as one satisfying all.
+      if (mine.length < countOwn(ids)) partial.push(name);
       filters[field] = { value: mine, modifier: how };
     };
+    // How a list of identifiers reads is a question only a list raises. Read
+    // silently where none was written, it reads as an argument that was applied.
+    if (
+      input.match &&
+      !SCENE_IDENTIFIER_LISTS.some((name) =>
+        hasNarrowing(input as unknown as Record<string, unknown>, name),
+      )
+    ) {
+      idleArguments.push("match");
+    }
     byIdentifier("performer_ids", input.performerIds, "performers", modifier);
     // A scene carries one studio, so asking for every one of several can never
     // be satisfied, and the catalogue refuses the comparison outright. The list
@@ -660,12 +700,22 @@ export class StashboxClient {
         ...foreign,
       ])
     ) {
-      return { rows: [], skipped: 0, total: null, refused, foreign, fields: [], unnarrowed: true };
+      return {
+        rows: [],
+        skipped: 0,
+        total: null,
+        refused,
+        foreign,
+        partial: [],
+        idle: [],
+        fields: [],
+        unnarrowed: true,
+      };
     }
 
     const data = await this.ask<{ queryScenes?: { count?: unknown; scenes?: unknown[] } }>(
       spec,
-      documents.queryScenesDocument(spec.dialect),
+      documents.queryScenesDocument(spec),
       { input: filters },
     );
     const queried = rowsOf(spec, data.queryScenes, "queryScenes", "scenes");
@@ -678,6 +728,8 @@ export class StashboxClient {
         : null,
       refused,
       foreign,
+      partial,
+      idle: idleArguments,
       // A faceted query reads no text index, so it claims none.
       fields: [],
     };
@@ -743,6 +795,8 @@ export class StashboxClient {
           ...(answer.fields.length ? { fieldsSearched: answer.fields } : {}),
           ...(answer.refused.length ? { narrowingsNotReceived: answer.refused } : {}),
           ...(answer.foreign.length ? { narrowingsNamingNoRecord: answer.foreign } : {}),
+          ...(answer.partial.length ? { narrowingsReceivedInPart: answer.partial } : {}),
+          ...(answer.idle.length ? { argumentsWithNothingToDo: answer.idle } : {}),
           ...(answer.skipped ? { skipped: answer.skipped } : {}),
         });
       } else {
@@ -752,17 +806,30 @@ export class StashboxClient {
     }
 
     const rows = interleave(collected);
-    const folded =
-      rows.length === 0 && input.performedWith ? await this.foldedAmong([input.performedWith]) : [];
+    const answered = perSource.some((entry) => entry.state === "answered");
+    const check =
+      rows.length === 0 && answered
+        ? await this.foldedAmong(
+            [
+              ...(input.performedWith ? [input.performedWith] : []),
+              ...(input.studioId ? [input.studioId] : []),
+            ],
+            asked.map((entry) => entry.id),
+          )
+        : { folded: [], unchecked: [], absent: [] };
     const answer = {
       rows,
       perSource,
       ordering: orderingText(perSource, input.sort),
-      ...(folded.length ? { foldedNarrowings: folded } : {}),
+      ...(check.folded.length ? { foldedNarrowings: check.folded } : {}),
+      ...(check.unchecked.length ? { uncheckedNarrowings: check.unchecked } : {}),
+      ...(check.absent.length ? { absentNarrowings: check.absent } : {}),
     };
     // An answer holding a catalogue that failed is not the answer that was asked
-    // for, so it is returned and never stored.
-    if (!perSource.some((entry) => entry.state === "failed")) this.cache.set(key, answer);
+    // for, so it is returned and never stored. Nor is one whose explanation for
+    // its own emptiness could not be read: it would be replayed unexplained.
+    if (!perSource.some((entry) => entry.state === "failed") && !check.unchecked.length)
+      this.cache.set(key, answer);
     return { data: answer, cached: false, ...(skipped ? { skipped } : {}) };
   }
 
@@ -777,6 +844,8 @@ export class StashboxClient {
     total: number | null;
     refused: string[];
     foreign: string[];
+    partial: string[];
+    idle: string[];
     fields: string[];
     unnarrowed?: boolean;
   }> {
@@ -794,6 +863,8 @@ export class StashboxClient {
           hasNarrowing(input as unknown as Record<string, unknown>, name),
         ),
         foreign: [],
+        partial: [],
+        idle: [],
         fields: PERFORMER_FIELDS_SEARCHED,
       };
     }
@@ -815,7 +886,10 @@ export class StashboxClient {
       else refused.push("disambiguation");
     }
     if (input.country) {
-      if (criteria) filters.country = { value: input.country, modifier: "EQUALS" };
+      // The catalogues index the code in capitals, so a legal argument written
+      // in lower case would answer an emptiness that reads as a country nobody
+      // is from.
+      if (criteria) filters.country = { value: input.country.toUpperCase(), modifier: "EQUALS" };
       else refused.push("country");
     }
     if (input.performedWith) {
@@ -837,7 +911,17 @@ export class StashboxClient {
         ...foreign,
       ])
     ) {
-      return { rows: [], skipped: 0, total: null, refused, foreign, fields: [], unnarrowed: true };
+      return {
+        rows: [],
+        skipped: 0,
+        total: null,
+        refused,
+        foreign,
+        partial: [],
+        idle: [],
+        fields: [],
+        unnarrowed: true,
+      };
     }
 
     const data = await this.ask<{ queryPerformers?: { count?: unknown; performers?: unknown[] } }>(
@@ -853,6 +937,8 @@ export class StashboxClient {
         : null,
       refused,
       foreign,
+      partial: [],
+      idle: [],
       fields: [],
     };
   }
@@ -867,26 +953,34 @@ export class StashboxClient {
    * what happened. The check runs only on an empty answer, where the question
    * has already been paid for and the emptiness is what needs explaining.
    */
-  private async foldedAmong(given: readonly string[]): Promise<FoldedNarrowing[]> {
+  private async foldedAmong(
+    given: readonly string[],
+    asked: readonly InstanceId[],
+  ): Promise<{ folded: FoldedNarrowing[]; unchecked: string[]; absent: string[] }> {
     const folded: FoldedNarrowing[] = [];
+    const unchecked: string[] = [];
+    const absent: string[] = [];
     for (const id of new Set(given)) {
-      const instance = id.slice(0, id.indexOf(":"));
-      if (!this.configured.includes(instance as InstanceId)) continue;
+      const instance = id.slice(0, id.indexOf(":")) as InstanceId;
+      // A catalogue the caller scoped out is asked nothing, whatever the reason
+      // would be. Reading one here would spend their key on a catalogue they
+      // excluded and let the answer state a fact it also reports never asking for.
+      if (!asked.includes(instance)) continue;
       try {
         const read = await this.getPerformer(id, ["basic"]);
         if (read.data.status !== "established") {
-          folded.push({
-            given: id,
-            successor: read.data.mergedInto,
-            status: read.data.status,
-          });
+          folded.push({ given: id, successor: read.data.mergedInto, status: read.data.status });
         }
-      } catch {
-        // The identifier could not be read, which explains no emptiness and is
-        // no reason to fail an answer the catalogues already gave.
+      } catch (cause) {
+        // A catalogue holding no such record explains the emptiness as much as
+        // a folded one does, and says so. Anything else is a check that could
+        // not run, which is not a reason to fail an answer the catalogues gave
+        // and is not something to leave unsaid either.
+        if (cause instanceof StashboxError && cause.code === "not_found") absent.push(id);
+        else unchecked.push(id);
       }
     }
-    return folded;
+    return { folded, unchecked, absent };
   }
 
   async getScene(id: string, sections: readonly string[] = ["basic"]): Promise<Read<SceneRecord>> {
@@ -916,7 +1010,12 @@ export class StashboxClient {
     // A catalogue answering a document that names 'findScene' always carries that
     // key. Its absence is a shape this client could not read, and reading it as
     // an absence would state a non-existence nobody established.
-    if (!("findScene" in data)) {
+    if (
+      data === null ||
+      typeof data !== "object" ||
+      Array.isArray(data) ||
+      !("findScene" in data)
+    ) {
       throw parseFailure(
         `${spec.name} answered 'findScene' with a shape this client could not read.`,
         {
@@ -975,7 +1074,12 @@ export class StashboxClient {
     // A catalogue answering a document that names 'findPerformer' always carries that
     // key. Its absence is a shape this client could not read, and reading it as
     // an absence would state a non-existence nobody established.
-    if (!("findPerformer" in data)) {
+    if (
+      data === null ||
+      typeof data !== "object" ||
+      Array.isArray(data) ||
+      !("findPerformer" in data)
+    ) {
       throw parseFailure(
         `${spec.name} answered 'findPerformer' with a shape this client could not read.`,
         {
@@ -1103,6 +1207,7 @@ export class StashboxClient {
           source: spec.id,
           name: spec.name,
           state: "absent",
+          algorithmsNotSearched: [...new Set(outcome.refused)],
           reason: `this catalogue's fingerprint route does not search ${[...new Set(outcome.refused)].join(", ")}`,
         });
         continue;
@@ -1136,13 +1241,31 @@ export class StashboxClient {
         // One record answered under two hashes is answered in two groups. It is
         // one record, and pairing it with its hashes once per group would count
         // a single scene as two matches for each hash it carries.
+        // Every member of that list is a group of records. One that is not is a
+        // shape this client cannot read, and coercing it to nothing publishes
+        // the failure as a catalogue that has never seen the file.
+        if (!groups.every((group) => Array.isArray(group))) {
+          perSource.push(
+            failureReport(
+              spec,
+              parseFailure(
+                `${spec.name} answered 'findScenesBySceneFingerprints' with a group this client could not read.`,
+                {
+                  hint: `The catalogue was reached and answered. One of the groups it returned does not carry the records its schema declares, so this states nothing about whether ${spec.name} holds that file.`,
+                },
+              ),
+              "fingerprint lookup",
+            ),
+          );
+          continue;
+        }
         const seenHere = new Set<string>();
         let found = 0;
         let attributed = 0;
         let contributed = 0;
         let unreadable = 0;
         for (const group of groups) {
-          for (const raw of Array.isArray(group) ? group : []) {
+          for (const raw of group as unknown[]) {
             const scene = mapScene(raw, spec, retrievedAt);
             if (!scene) {
               unreadable += 1;
@@ -1347,10 +1470,19 @@ function narrowingsSurvive(
   return given.length === 0 || given.some((name) => !refused.includes(name));
 }
 
+/**
+ * This catalogue's own identifiers out of a list, each named once.
+ *
+ * A record named twice is one question. Asked as a list every row must carry,
+ * it becomes a question for a record holding the same thing twice, which no
+ * record holds, and the emptiness that comes back reads as a catalogue that
+ * indexes none of it.
+ */
 function uuidsFor(spec: InstanceSpec, ids: readonly string[]): string[] {
-  return ids.flatMap((id) => {
+  const mine = ids.flatMap((id) => {
     const separator = id.indexOf(":");
     if (separator === -1) return [];
     return id.slice(0, separator) === spec.id ? [id.slice(separator + 1)] : [];
   });
+  return [...new Set(mine.map((uuid) => uuid.toLowerCase()))];
 }

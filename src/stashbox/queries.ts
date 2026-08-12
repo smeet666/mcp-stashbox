@@ -17,24 +17,24 @@
  * string and each catalogue reads it in its own type.
  */
 
-import { supports, type Dialect, type InstanceSpec } from "./instances.js";
+import { supports, type InstanceSpec } from "./instances.js";
 
 /**
  * The reimplementation publishes no table sorting the sites a record links to,
  * so asking it for a category fails the whole request.
  */
-const SITE = (dialect: Dialect) =>
-  dialect === "strict" ? "site { name category { name } }" : "site { name }";
+const SITE = (spec: InstanceSpec) =>
+  supports(spec, "site_categories") ? "site { name category { name } }" : "site { name }";
 
-const URLS = (dialect: Dialect) => `urls { url ${SITE(dialect)} }`;
+const URLS = (spec: InstanceSpec) => `urls { url ${SITE(spec)} }`;
 
 const IMAGES = "images { id url width height }";
 
-const FINGERPRINTS = (dialect: Dialect) =>
-  dialect === "strict"
+const FINGERPRINTS = (spec: InstanceSpec) =>
+  supports(spec, "fingerprint_reports")
     ? "fingerprints { algorithm hash duration submissions reports }"
-    : // The reimplementation counts submissions and no reports, so a match from
-      // it carries an unknown contest.
+    : // A catalogue counting no reports against a fingerprint answers a match
+      // whose contest is unknown, and asking it for the field fails the request.
       "fingerprints { algorithm hash duration submissions }";
 
 /**
@@ -47,7 +47,7 @@ const FINGERPRINTS = (dialect: Dialect) =>
  */
 const EDITS = (spec: InstanceSpec) => (supports(spec, "pending_edits") ? "edits { status }" : "");
 
-const SCENE_BASIC = (dialect: Dialect, edits: string) => `
+const SCENE_BASIC = (spec: InstanceSpec, edits: string) => `
   id
   title
   details
@@ -60,13 +60,13 @@ const SCENE_BASIC = (dialect: Dialect, edits: string) => `
   studio { id name deleted parent { id name deleted } }
   performers { as performer { id name disambiguation deleted merged_into_id } }
   tags { id name deleted category { id name } }
-  ${URLS(dialect)}
+  ${URLS(spec)}
   ${edits}
   created
   updated
 `;
 
-const SCENE_ROW = (dialect: Dialect) => `
+const SCENE_ROW = (spec: InstanceSpec) => `
   id
   title
   release_date
@@ -74,12 +74,12 @@ const SCENE_ROW = (dialect: Dialect) => `
   deleted
   studio { id name deleted parent { id name deleted } }
   performers { as performer { id name disambiguation deleted merged_into_id } }
-  ${URLS(dialect)}
+  ${URLS(spec)}
   created
   updated
 `;
 
-const PERFORMER_BASIC = (dialect: Dialect, edits: string) => `
+const PERFORMER_BASIC = (spec: InstanceSpec, edits: string) => `
   id
   name
   disambiguation
@@ -94,7 +94,7 @@ const PERFORMER_BASIC = (dialect: Dialect, edits: string) => `
   deleted
   merged_ids
   merged_into_id
-  ${URLS(dialect)}
+  ${URLS(spec)}
   ${edits}
   created
   updated
@@ -127,21 +127,19 @@ export interface PerformerSections {
 }
 
 export function findSceneDocument(spec: InstanceSpec, sections: SceneSections): string {
-  const dialect = spec.dialect;
   return `query FindScene($id: ID!) {
   findScene(id: $id) {
-    ${SCENE_BASIC(dialect, EDITS(spec))}
-    ${sections.fingerprints ? FINGERPRINTS(dialect) : ""}
+    ${SCENE_BASIC(spec, EDITS(spec))}
+    ${sections.fingerprints ? FINGERPRINTS(spec) : ""}
     ${sections.images ? IMAGES : ""}
   }
 }`;
 }
 
 export function findPerformerDocument(spec: InstanceSpec, sections: PerformerSections): string {
-  const dialect = spec.dialect;
   return `query FindPerformer($id: ID!) {
   findPerformer(id: $id) {
-    ${PERFORMER_BASIC(dialect, EDITS(spec))}
+    ${PERFORMER_BASIC(spec, EDITS(spec))}
     ${sections.appearance ? PERFORMER_APPEARANCE : ""}
     ${sections.images ? IMAGES : ""}
     ${sections.studios ? "studios { studio { id name deleted } scene_count }" : ""}
@@ -150,21 +148,20 @@ export function findPerformerDocument(spec: InstanceSpec, sections: PerformerSec
 }
 
 /** The faceted scene query, which every catalogue answers. */
-export function queryScenesDocument(dialect: Dialect): string {
+export function queryScenesDocument(spec: InstanceSpec): string {
   return `query QueryScenes($input: SceneQueryInput!) {
   queryScenes(input: $input) {
     count
-    scenes { ${SCENE_ROW(dialect)} }
+    scenes { ${SCENE_ROW(spec)} }
   }
 }`;
 }
 
 export function queryPerformersDocument(spec: InstanceSpec): string {
-  const dialect = spec.dialect;
   return `query QueryPerformers($input: PerformerQueryInput!) {
   queryPerformers(input: $input) {
     count
-    performers { ${PERFORMER_BASIC(dialect, EDITS(spec))} }
+    performers { ${PERFORMER_BASIC(spec, EDITS(spec))} }
   }
 }`;
 }
@@ -173,30 +170,29 @@ export function queryPerformersDocument(spec: InstanceSpec): string {
  * The full-text searches, which the published server offers in the plural and
  * the reimplementation does not offer at all.
  */
-export function searchScenesDocument(dialect: Dialect): string {
+export function searchScenesDocument(spec: InstanceSpec): string {
   return `query SearchScenes($term: String!, $limit: Int) {
   searchScenes(term: $term, limit: $limit) {
     count
-    scenes { ${SCENE_ROW(dialect)} }
+    scenes { ${SCENE_ROW(spec)} }
   }
 }`;
 }
 
 export function searchPerformersDocument(spec: InstanceSpec): string {
-  const dialect = spec.dialect;
   return `query SearchPerformers($term: String!, $limit: Int) {
   searchPerformers(term: $term, limit: $limit) {
     count
-    performers { ${PERFORMER_BASIC(dialect, EDITS(spec))} }
+    performers { ${PERFORMER_BASIC(spec, EDITS(spec))} }
   }
 }`;
 }
 
-export function findByFingerprintDocument(dialect: Dialect): string {
+export function findByFingerprintDocument(spec: InstanceSpec): string {
   return `query FindByFingerprint($fingerprints: [[FingerprintQueryInput!]!]!) {
   findScenesBySceneFingerprints(fingerprints: $fingerprints) {
-    ${SCENE_ROW(dialect)}
-    ${FINGERPRINTS(dialect)}
+    ${SCENE_ROW(spec)}
+    ${FINGERPRINTS(spec)}
   }
 }`;
 }

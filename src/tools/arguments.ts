@@ -15,14 +15,36 @@ import { INSTANCE_IDS, type InstanceId } from "../stashbox/instances.js";
 /** The code a caller branches on when the arguments cannot produce a request. */
 const INVALID_INPUT = "invalid_input";
 
-/** Declare a tool's arguments, refusing anything outside the declaration. */
+/**
+ * Declare a tool's arguments, refusing anything outside the declaration.
+ *
+ * Every refusal carries the code, since that is what a caller branches on and
+ * a message that omits it leaves them reading prose to tell an argument they
+ * wrote badly from a catalogue that could not answer.
+ */
 export function strictInput<Shape extends z.ZodRawShape>(shape: Shape) {
   const declared = Object.keys(shape);
 
   return z.strictObject(shape, {
     error: (issue) =>
-      issue.code === "unrecognized_keys" ? unknownArgumentMessage(issue.keys, declared) : undefined,
+      issue.code === "unrecognized_keys"
+        ? unknownArgumentMessage(issue.keys, declared)
+        : issue.message === undefined
+          ? undefined
+          : coded(issue.message),
   });
+}
+
+/**
+ * A refusal in the terms this server refuses on.
+ *
+ * The validator writes its own sentence for a bound, an option outside a set
+ * and an argument left out. Each is an argument that cannot produce a request,
+ * which is the one thing this code names, so it is prefixed rather than
+ * rewritten: the validator's sentence already says which argument and why.
+ */
+function coded(message: string): string {
+  return message.startsWith(`[${INVALID_INPUT}]`) ? message : `[${INVALID_INPUT}] ${message}`;
 }
 
 /**
@@ -53,11 +75,23 @@ function carriesCharacters(value: string): boolean {
  * answers its whole index, which reads as every record satisfying the list.
  */
 export function narrowingList(description?: string) {
-  const schema = z.array(narrowingText()).min(1, {
-    error: `[${INVALID_INPUT}] An empty list names no record to narrow on, and a catalogue asked with it answers everything it holds. Give at least one identifier, or leave the argument out.`,
-  });
+  const schema = z
+    .array(narrowingText())
+    .min(1, {
+      error: `[${INVALID_INPUT}] An empty list names no record to narrow on, and a catalogue asked with it answers everything it holds. Give at least one identifier, or leave the argument out.`,
+    })
+    // A list this long is a question about a record carrying all of them, which
+    // no record carries, and an answer left empty by it is read back one
+    // identifier at a time. The bound keeps the work an answer can trigger to
+    // what the question could ever be about.
+    .max(NARROWING_LIST_LIMIT, {
+      error: `[${INVALID_INPUT}] A list of more than ${NARROWING_LIST_LIMIT} identifiers asks about a record carrying every one of them, which no record carries. Ask about fewer.`,
+    });
   return description ? schema.describe(description) : schema;
 }
+
+/** What a list of identifiers may name, past which the question answers nothing. */
+const NARROWING_LIST_LIMIT = 25;
 
 /**
  * A day, which must be one the calendar has.
@@ -116,10 +150,58 @@ export function countryArgument(description: string) {
  */
 export function sourcesArgument(description: string) {
   return z
-    .array(z.enum(INSTANCE_IDS as unknown as [InstanceId, ...InstanceId[]]))
+    .array(
+      z.enum(INSTANCE_IDS as unknown as [InstanceId, ...InstanceId[]], {
+        error: `[${INVALID_INPUT}] A catalogue is named as one of: ${INSTANCE_IDS.join(", ")}.`,
+      }),
+    )
     .min(1, {
       error: `[${INVALID_INPUT}] An empty list names no catalogue to ask. Name at least one, or leave the argument out to ask every configured catalogue.`,
     })
+    .describe(description);
+}
+
+/**
+ * A whole number inside the bounds this client reads.
+ *
+ * The bound is declared where the argument is, so the refusal carries the code
+ * a caller branches on. Left to the validator, it arrives as prose alone, and a
+ * caller cannot tell an argument they wrote badly from a catalogue that failed.
+ */
+export function boundedInteger(min: number, max: number, description: string) {
+  return z
+    .number({
+      error: `[${INVALID_INPUT}] This argument counts things, so it is written as a whole number between ${min} and ${max}.`,
+    })
+    .int({
+      error: `[${INVALID_INPUT}] This argument counts things, so a fraction of one names nothing. Write a whole number between ${min} and ${max}.`,
+    })
+    .min(min, { error: `[${INVALID_INPUT}] The smallest this argument reads is ${min}.` })
+    .max(max, {
+      error: `[${INVALID_INPUT}] The largest this argument reads is ${max}. Narrow the question to reach further.`,
+    })
+    .describe(description);
+}
+
+/** One of a closed set of readings, refused in the terms this server refuses on. */
+export function optionSet<const T extends readonly [string, ...string[]]>(
+  values: T,
+  description: string,
+) {
+  return z
+    .enum(values, { error: `[${INVALID_INPUT}] This argument reads one of: ${values.join(", ")}.` })
+    .describe(description);
+}
+
+/** An argument a tool cannot be asked without. */
+export function requiredText(description: string) {
+  const empty = {
+    error: `[${INVALID_INPUT}] A value carrying no characters names nothing. Write what to read.`,
+  };
+  return z
+    .string({ error: `[${INVALID_INPUT}] This argument is required, and is written as text.` })
+    .min(1, empty)
+    .refine(carriesCharacters, empty)
     .describe(description);
 }
 

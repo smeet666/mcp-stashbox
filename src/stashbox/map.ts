@@ -154,7 +154,11 @@ function mapFingerprints(
   return { rows, skipped };
 }
 
-function mapStudio(raw: unknown, spec: InstanceSpec, lost?: { skipped: number }): StudioRef | null {
+function mapStudio(
+  raw: unknown,
+  spec: InstanceSpec,
+  lost?: { skipped: number; inParent?: boolean },
+): StudioRef | null {
   const row = asRecord(raw);
   const id = readText(row?.id);
   const name = readText(row?.name);
@@ -169,6 +173,7 @@ function mapStudio(raw: unknown, spec: InstanceSpec, lost?: { skipped: number })
   // loss. Left silent it is indistinguishable from a studio under no parent.
   if (row.parent !== undefined && row.parent !== null && parent === null && lost) {
     lost.skipped += 1;
+    lost.inParent = true;
   }
   return {
     id: formatId(spec.id, id),
@@ -301,8 +306,10 @@ export function mapScene(
     // one exception: a hash states what a file is, never what a scene holds, and
     // dropping them makes a file the catalogue can still recognise look like a
     // file it has never seen.
+    const titleLost = row.title !== undefined && row.title !== null && readText(row.title) === null;
     const withdrawn: SceneRecord = {
       ...base,
+      ...(titleLost ? { rowsSkipped: 1, rowsSkippedIn: ["the title it carried"] } : {}),
       title: readText(row.title),
       details: null,
       code: null,
@@ -324,7 +331,7 @@ export function mapScene(
   const performers = mapAppearances(row.performers, spec);
   const tags = mapTags(row.tags, spec);
   const urls = mapLinks(row.urls);
-  const studioLoss = { skipped: 0 };
+  const studioLoss: { skipped: number; inParent?: boolean } = { skipped: 0 };
   const studio = mapStudio(row.studio, spec, studioLoss);
   const lost = performers.skipped + tags.skipped + urls.skipped + studioLoss.skipped;
 
@@ -356,7 +363,13 @@ export function mapScene(
             ...(urls.skipped ? ["its links"] : []),
             ...(tags.skipped ? ["its tags"] : []),
             ...(performers.skipped ? ["the performers it credits"] : []),
-            ...(studioLoss.skipped ? ["the studio it names"] : []),
+            ...(studioLoss.skipped
+              ? [
+                  studioLoss.inParent
+                    ? "the studio the one it names belongs to"
+                    : "the studio it names",
+                ]
+              : []),
           ],
         }
       : {}),
@@ -409,9 +422,21 @@ export function mapPerformer(
   // this catalogue could have minted. It is handed back as the record to read
   // next, so one that is not an identifier sends a caller to a refusal.
   const successorRaw = readText(row.merged_into_id);
-  const mergedIntoRaw = successorRaw !== null && isUuid(successorRaw) ? successorRaw : null;
-  const successorSkipped = successorRaw !== null && mergedIntoRaw === null ? 1 : 0;
-  const status = readStatus(row.deleted === true, mergedIntoRaw);
+  // A record that continues into itself continues nowhere: offered as the one
+  // to read next, it sends a reader back to the record they are reading.
+  const successorNamed =
+    successorRaw !== null && successorRaw.toLowerCase() !== uuid.toLowerCase()
+      ? successorRaw
+      : null;
+  const mergedIntoRaw = successorNamed !== null && isUuid(successorNamed) ? successorNamed : null;
+  const successorSkipped = successorNamed !== null && mergedIntoRaw === null ? 1 : 0;
+  // A catalogue naming a successor this client could not read has folded the
+  // record. Reading the status without it would publish a withdrawal the
+  // catalogue never stated.
+  const status = readStatus(
+    row.deleted === true,
+    mergedIntoRaw ?? (successorSkipped ? "unreadable" : null),
+  );
   const rawMergedIds = asArray(row.merged_ids);
   // An absorbed identifier is held to what the record's own is held to: a
   // string this catalogue could have minted. Anything else is a row lost.
@@ -433,15 +458,17 @@ export function mapPerformer(
   };
 
   if (status !== "established") {
+    const nameLost = row.name !== undefined && row.name !== null && readText(row.name) === null;
     return {
       ...base,
       mergedIds,
-      ...(mergedIdsSkipped + successorSkipped
+      ...(mergedIdsSkipped + successorSkipped + (nameLost ? 1 : 0)
         ? {
-            rowsSkipped: mergedIdsSkipped + successorSkipped,
+            rowsSkipped: mergedIdsSkipped + successorSkipped + (nameLost ? 1 : 0),
             rowsSkippedIn: [
               ...(mergedIdsSkipped ? ["the identifiers folded into it"] : []),
               ...(successorSkipped ? ["the record it continues as"] : []),
+              ...(nameLost ? ["the name it carried"] : []),
             ],
           }
         : {}),

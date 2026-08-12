@@ -6,7 +6,6 @@
  * rows cannot have. Rows interleave, and the answer says so.
  */
 
-import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { StashboxClient } from "../stashbox/client.js";
 import type { RowsResult, SceneRecord } from "../types.js";
@@ -16,6 +15,8 @@ import {
   narrowingList,
   dayArgument,
   sourcesArgument,
+  boundedInteger,
+  optionSet,
 } from "./arguments.js";
 import { searchScenesOutput } from "./schemas.js";
 import {
@@ -31,6 +32,8 @@ import {
   failureNote,
   skippedNote,
   foldedNarrowingNote,
+  uncheckedNarrowingNote,
+  absentNarrowingNote,
   foldedCreditsNote,
   storedNote,
   narrowingNote,
@@ -103,7 +106,11 @@ export function renderSceneRows(
       entry.count &&
       !(entry.narrowingsNotReceived ?? []).some(
         (name) => name.endsWith("_ids") || name === "match",
-      ),
+      ) &&
+      // A list received short narrowed on part of itself, so a row of that
+      // catalogue's satisfies the part and never the list as it was written.
+      !(entry.narrowingsNamingNoRecord ?? []).length &&
+      !(entry.narrowingsReceivedInPart ?? []).length,
   );
   if (identifiersGiven && filtered) {
     notes.push(
@@ -186,6 +193,10 @@ export function renderSceneRows(
   if (folded) notes.push(folded);
   const foldedNarrowing = foldedNarrowingNote(result.foldedNarrowings);
   if (foldedNarrowing) notes.push(foldedNarrowing);
+  const absentHere = absentNarrowingNote(result.absentNarrowings);
+  if (absentHere) notes.push(absentHere);
+  const unchecked = uncheckedNarrowingNote(result.uncheckedNarrowings);
+  if (unchecked) notes.push(unchecked);
   const lost = skippedNote(result.perSource);
   if (lost) notes.push(lost);
   const failures = failureNote(result.perSource);
@@ -209,6 +220,10 @@ export function renderSceneRows(
       release_date: row.releaseDate,
       duration_seconds: row.durationSeconds,
       studio: row.studio?.name ?? null,
+      // A name alone cannot be fed back into a narrowing, and says nothing
+      // about whether the catalogue still holds the record under it.
+      studio_id: row.studio?.id ?? null,
+      studio_status: row.studio?.status ?? null,
       performers: row.performers.map((entry) => entry.name),
       status: row.status,
       ...(stamped ? { created: row.created, updated: row.updated } : {}),
@@ -269,8 +284,7 @@ export function registerSearchScenes(server: McpServer, client: StashboxClient):
         title: narrowingText().optional(),
         code: narrowingText("The studio's own reference for the scene.").optional(),
         performer_ids: narrowingList("Namespaced performer identifiers.").optional(),
-        match: z
-          .enum(["all", "any"])
+        match: optionSet(["all", "any"], "")
           .optional()
           .describe(
             "How a list of identifiers reads. 'all' returns scenes carrying every one of them and is the default; 'any' returns scenes carrying at least one.",
@@ -281,10 +295,13 @@ export function registerSearchScenes(server: McpServer, client: StashboxClient):
           "Released strictly after this date, as YYYY-MM-DD. A catalogue takes one date comparison at a time, so giving both bounds sends this one and reports the other as not received.",
         ).optional(),
         date_to: dayArgument("Released strictly before this date, as YYYY-MM-DD.").optional(),
-        sort: z.enum(["title", "date", "duration", "created", "updated"]).optional(),
-        direction: z.enum(["asc", "desc"]).optional(),
-        limit: z.number().int().min(1).max(100).optional(),
-        page: z.number().int().min(1).max(10_000).optional(),
+        sort: optionSet(
+          ["title", "date", "duration", "created", "updated"],
+          "Which field each catalogue orders its own rows on.",
+        ).optional(),
+        direction: optionSet(["asc", "desc"], "Which way that order runs.").optional(),
+        limit: boundedInteger(1, 100, "Rows asked of each catalogue.").optional(),
+        page: boundedInteger(1, 10_000, "Which page of those rows.").optional(),
         sources: sourcesArgument(
           "Narrow to named catalogues. Every configured catalogue is asked by default.",
         ).optional(),

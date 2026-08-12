@@ -102,15 +102,18 @@ read first, every time.
 index overlapping corpora and publish no score in common, so rows interleave and
 every answer says how the order was built.
 
-**Nothing states what may be reused.** A record reports the terms it carries, and
-silence is never read as permission.
+**Nothing states what may be reused.** These catalogues publish no terms on a
+record, so no answer carries any, and that silence is never read as permission.
 
 ## The catalogue that answers a smaller surface
 
 Four of these run one published open-source server. ThePornDB reimplements its
-interface from a source of its own. It reads records in full, and it offers no
-full-text search, publishes no table sorting the sites a record links to, and
-counts no disputes over a fingerprint. Each of those is reported on every answer
+interface from a source of its own. It reads records in full, and it answers no
+search at all, neither by words nor by typed arguments, so one of its records is
+reached by a fingerprint or by an identifier already held. It publishes no table
+sorting the sites a record links to, no taxonomy sorting its tags, no count of
+the scenes it indexes for a performer, no count of edits open against a record,
+and it counts no disputes over a fingerprint. Each of those is reported on every answer
 holding its rows. No value is filled in from a neighbour.
 
 ## As a library

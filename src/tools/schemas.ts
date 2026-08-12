@@ -104,6 +104,18 @@ const sourceReportSchema = z.object({
     .describe(
       "Narrowings this catalogue could not receive, which is a limit of the catalogue. A row of its satisfying one of them does so by chance.",
     ),
+  narrowings_received_in_part: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "Narrowings this catalogue received short: the list named records on more than one catalogue and only its own reached it. A row of its satisfying what survived is no row satisfying the list as written.",
+    ),
+  arguments_with_nothing_to_do: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "Arguments written that this question gave nothing to do. They shaped no request, and a row here neither satisfies nor fails them.",
+    ),
   algorithms_not_searched: z
     .array(z.string())
     .optional()
@@ -201,7 +213,12 @@ export const sceneSchema = z.object({
     .number()
     .optional()
     .describe("How many the record holds, where the section shows a page of them."),
-  fingerprint_count: z.record(z.string(), z.number()).optional(),
+  fingerprint_count: z
+    .record(z.string(), z.number())
+    .optional()
+    .describe(
+      "How many fingerprints this record holds per algorithm. It counts what the catalogue holds, never what the list above shows.",
+    ),
   rows_skipped: z
     .number()
     .optional()
@@ -296,7 +313,11 @@ export const performerSchema = z.object({
     .describe(
       "Scenes this catalogue has indexed crediting this performer. A settled record naming a career spanning decades can report zero, which measures the catalogue's coverage and states nothing about a person's work.",
     ),
-  scene_count_means: z.string(),
+  scene_count_means: z
+    .string()
+    .describe(
+      "What the scene count above measures, in words, so the number is never read as a person's work.",
+    ),
   urls: z.array(siteLinkSchema),
   appearance: z
     .object({
@@ -445,6 +466,13 @@ const sceneRowSchema = z.object({
   release_date: dateSchema,
   duration_seconds: z.number().nullable(),
   studio: z.string().nullable(),
+  studio_id: z
+    .string()
+    .nullable()
+    .describe("The studio's identifier on that catalogue, which a narrowing takes."),
+  studio_status: statusSchema
+    .nullable()
+    .describe("What the studio's identifier addresses now. Null where the row names no studio."),
   performers: z.array(z.string()),
   status: statusSchema,
   created: z
@@ -521,6 +549,10 @@ export const searchPerformersOutput = z.object({
         .nullable()
         .describe("Scenes that catalogue has indexed crediting this performer."),
       status: statusSchema,
+      merged_into: z
+        .string()
+        .optional()
+        .describe("The record this identifier was folded into, carried where it names one."),
       created: z
         .string()
         .nullable()

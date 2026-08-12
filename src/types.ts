@@ -54,6 +54,17 @@ export interface SourceReport {
    */
   narrowingsNamingNoRecord?: string[];
   /**
+   * Narrowings this catalogue received short: the list named records on more
+   * than one catalogue, and only its own reached it. A row satisfying what
+   * survived is no row satisfying the list as it was written.
+   */
+  narrowingsReceivedInPart?: string[];
+  /**
+   * Arguments written that this question gave nothing to do. They shaped no
+   * request, and a row here neither satisfies nor fails them.
+   */
+  argumentsWithNothingToDo?: string[];
+  /**
    * Fingerprint algorithms this catalogue's lookup does not search. Its silence
    * about one of those is no answer about the hash, and it is not a narrowing:
    * nothing a row carries could satisfy or fail it.
@@ -275,6 +286,16 @@ export interface RowsResult<T> {
    * under the record they were folded into.
    */
   foldedNarrowings?: FoldedNarrowing[];
+  /**
+   * Identifiers the question was narrowed with whose record could not be read,
+   * so whether they explain this emptiness is unknown.
+   */
+  uncheckedNarrowings?: string[];
+  /**
+   * Identifiers the question was narrowed with that their catalogue holds no
+   * record for, which is why nothing came back for them.
+   */
+  absentNarrowings?: string[];
 }
 
 export interface FingerprintResult {

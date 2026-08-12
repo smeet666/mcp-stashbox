@@ -12,7 +12,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { StashboxClient } from "../stashbox/client.js";
 import type { FingerprintResult } from "../types.js";
-import { strictInput, sourcesArgument, narrowingText } from "./arguments.js";
+import { strictInput, sourcesArgument, narrowingText, optionSet } from "./arguments.js";
 import { findByFingerprintOutput } from "./schemas.js";
 import {
   coverageNote,
@@ -20,6 +20,7 @@ import {
   nobodyAskedNote,
   skippedNote,
   foldedCreditsNote,
+  sourceOffers,
   failureNote,
   dateText,
   joinLines,
@@ -60,11 +61,14 @@ export function renderFingerprintMatches(result: FingerprintResult): Rendered {
   // it apart from a fingerprint nobody has disputed.
   // Keyed on the catalogue that counts no reports. Keying on a missing
   // fingerprint would name a catalogue that does count them.
+  // Read from what each catalogue declares. Keyed on a row's null, one record
+  // answering nothing would make the server state a policy for a catalogue that
+  // does publish report counts.
   const silent = [
     ...new Set(
       result.matches
-        .filter((match) => match.fingerprint !== null && match.fingerprint.reports === null)
-        .map((match) => match.scene.source),
+        .map((match) => match.scene.source)
+        .filter((source) => !sourceOffers(source, "fingerprint_reports")),
     ),
   ];
   if (silent.length > 0) {
@@ -76,13 +80,16 @@ export function renderFingerprintMatches(result: FingerprintResult): Rendered {
   // A match prints the record's studio and its cast off lists a mapper can lose
   // rows from. Counted for a search row and for a full record and not here, the
   // cast beside a match reads as the cast the catalogue answered with.
-  const damaged = result.matches.reduce(
-    (total, match) => total + (match.scene.rowsSkipped ?? 0),
-    0,
-  );
+  // Counted once per record, since a record answering two hashes is two matches.
+  const seenRecords = new Set<string>();
+  const damaged = result.matches.reduce((total, match) => {
+    if (seenRecords.has(match.scene.id)) return total;
+    seenRecords.add(match.scene.id);
+    return total + (match.scene.rowsSkipped ?? 0) + (match.scene.fingerprintsSkipped ?? 0);
+  }, 0);
   if (damaged) {
     notes.push(
-      `${damaged} row(s) inside the records matched here could not be read and are left out of what each one shows of its own lists. Read a record for what it says about its own losses.`,
+      `${damaged} row(s) inside the records matched here could not be read and are left out of what each one shows of its own lists, its fingerprints included. One of those may be the hash asked about, so a record reported here without the fingerprint that reached it may have carried it.`,
     );
   }
 
@@ -225,7 +232,7 @@ export function registerFindByFingerprint(server: McpServer, client: StashboxCli
             z.strictObject(
               {
                 hash: narrowingText("The fingerprint as the hashing tool produced it."),
-                algorithm: z.enum(ALGORITHMS),
+                algorithm: optionSet(ALGORITHMS, "Which hashing tool produced it."),
               },
               {
                 error: (issue) =>

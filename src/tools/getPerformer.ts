@@ -10,7 +10,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { StashboxClient } from "../stashbox/client.js";
 import type { PerformerRecord } from "../types.js";
-import { strictInput } from "./arguments.js";
+import { strictInput, requiredText } from "./arguments.js";
 import { getPerformerOutput } from "./schemas.js";
 import {
   dateText,
@@ -61,6 +61,11 @@ export function renderPerformer(
       merged_into: record.mergedInto,
       merged_ids: record.mergedIds,
       former_name: record.name,
+      // A marker carries little, so what little it lost is the whole of what
+      // this client could not read of it.
+      ...(record.rowsSkipped
+        ? { rows_skipped: record.rowsSkipped, rows_skipped_in: record.rowsSkippedIn ?? [] }
+        : {}),
       scene_count: null,
       notes: [] as string[],
       ...(cached ? { cached: true } : {}),
@@ -79,6 +84,11 @@ export function renderPerformer(
     ]);
     const unrendered = sections.filter((name) => name !== "basic");
     const markerNotes = [
+      ...(record.rowsSkipped
+        ? [
+            `${record.rowsSkipped} row(s) of this marker could not be read and are left out of ${(record.rowsSkippedIn ?? []).join(", ")}. What is shown is therefore short of what the catalogue answered with.`,
+          ]
+        : []),
       record.status === "merged"
         ? "This record is a marker. Its emptiness describes the record and states nothing about the person it once named."
         : "A withdrawn record states nothing about the person it once named.",
@@ -350,26 +360,32 @@ export function renderPerformer(
             )
             .join("\n")}`
         : null,
-      sections.includes("studios") && record.studios
-        ? `\nStudios (${record.studiosTotal === undefined ? "count not published" : `${record.studiosTotal} credited`}, ${Math.min(record.studios.length, STUDIOS_SHOWN)} shown):\n${record.studios
-            .slice(0, STUDIOS_SHOWN)
-            .map(
-              (studio) =>
-                `  - ${inline(studio.name)}${studio.status === "established" ? "" : " (this identifier is withdrawn)"}: ${studio.sceneCount === null ? "scenes not counted here" : `${studio.sceneCount} scene(s) indexed`}`,
-            )
-            .join("\n")}`
-        : null,
-      sections.includes("scenes") && record.scenes
-        ? `\nScenes (${record.scenesTotal === null || record.scenesTotal === undefined ? "count not published" : `${record.scenesTotal} indexed`}, ${record.scenes.length} shown):\n${record.scenes
-            .map(
-              (scene) =>
-                `  - ${inline(scene.title) ?? "(untitled)"}${scene.status === "established" ? "" : scene.status === "merged" ? " (merged into another record)" : " (withdrawn)"}: ${scene.sourceUrl}`,
-            )
-            .join("\n")}`
-        : null,
-      sections.includes("images") && record.images
-        ? `\nImages (${record.images.length}):\n${record.images.map((image) => `  - ${image.url}`).join("\n")}`
-        : null,
+      sections.includes("studios") && record.studios?.length === 0
+        ? "\nStudios: (none credited on this record)"
+        : sections.includes("studios") && record.studios
+          ? `\nStudios (${record.studiosTotal === undefined ? "count not published" : `${record.studiosTotal} credited`}, ${Math.min(record.studios.length, STUDIOS_SHOWN)} shown):\n${record.studios
+              .slice(0, STUDIOS_SHOWN)
+              .map(
+                (studio) =>
+                  `  - ${inline(studio.name)}${studio.status === "established" ? "" : " (this identifier is withdrawn)"}: ${studio.sceneCount === null ? "scenes not counted here" : `${studio.sceneCount} scene(s) indexed`}`,
+              )
+              .join("\n")}`
+          : null,
+      sections.includes("scenes") && record.scenes?.length === 0
+        ? "\nScenes: (none indexed for this record)"
+        : sections.includes("scenes") && record.scenes
+          ? `\nScenes (${record.scenesTotal === null || record.scenesTotal === undefined ? "count not published" : `${record.scenesTotal} indexed`}, ${record.scenes.length} shown):\n${record.scenes
+              .map(
+                (scene) =>
+                  `  - ${inline(scene.title) ?? "(untitled)"}${scene.status === "established" ? "" : scene.status === "merged" ? " (merged into another record)" : " (withdrawn)"}: ${scene.sourceUrl}`,
+              )
+              .join("\n")}`
+          : null,
+      sections.includes("images") && record.images?.length === 0
+        ? "\nImages: (none on this record)"
+        : sections.includes("images") && record.images
+          ? `\nImages (${record.images.length}):\n${record.images.map((image) => `  - ${image.url}`).join("\n")}`
+          : null,
       `\n${sourceLine(record.sourceUrl)}`,
     ]) + notesBlock(notes);
 
@@ -402,9 +418,13 @@ export function registerGetPerformer(server: McpServer, client: StashboxClient):
       description:
         "Read one catalogued performer by its identifier. 'scene_count' counts what that catalogue has indexed: a settled record naming a career spanning decades can report none, and that states the catalogue's coverage, never a career. An identifier folded into another answers as a marker naming its successor.",
       inputSchema: strictInput({
-        id: z.string().describe("Identifier as returned by another tool, such as stashdb:<uuid>."),
+        id: requiredText("Identifier as returned by another tool, such as stashdb:<uuid>."),
         sections: z
-          .array(z.enum(GET_PERFORMER_SECTIONS))
+          .array(
+            z.enum(GET_PERFORMER_SECTIONS, {
+              error: `[invalid_input] A block is named as one of: ${GET_PERFORMER_SECTIONS.join(", ")}.`,
+            }),
+          )
           .min(1, {
             error:
               "[invalid_input] An empty list names no block to load. Leave the argument out for the basic block, or name the blocks you want.",

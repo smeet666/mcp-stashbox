@@ -57,7 +57,7 @@ export function buildInstructions(config: Config): string {
         .map((spec) => spec.name)
         .join(
           ", ",
-        )} answers a smaller surface: it offers no full-text search, publishes no table sorting the sites a record links to, and counts no disputes over a fingerprint, so a match from it carries an unknown contest.`,
+        )} answers a smaller surface: it answers no search at all, neither by words nor by typed arguments, so a record of its own is reached by a fingerprint or by an identifier already held. It publishes no table sorting the sites a record links to, no taxonomy sorting its tags, no count of the scenes it indexes for a performer, no count of edits open against a record, and it counts no disputes over a fingerprint, so a match from it carries an unknown contest.`,
     );
   }
 

@@ -6,11 +6,17 @@
  * says so wherever it prints a count.
  */
 
-import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { StashboxClient } from "../stashbox/client.js";
 import type { PerformerRecord, RowsResult } from "../types.js";
-import { strictInput, narrowingText, countryArgument, sourcesArgument } from "./arguments.js";
+import {
+  strictInput,
+  narrowingText,
+  countryArgument,
+  sourcesArgument,
+  boundedInteger,
+  optionSet,
+} from "./arguments.js";
 import { searchPerformersOutput } from "./schemas.js";
 import {
   coverageNote,
@@ -26,6 +32,8 @@ import {
   skippedNote,
   sourceOffers,
   foldedNarrowingNote,
+  uncheckedNarrowingNote,
+  absentNarrowingNote,
   storedNote,
   narrowingNote,
   dateText,
@@ -189,6 +197,10 @@ export function renderPerformerRows(
   }
   const folded = foldedNarrowingNote(result.foldedNarrowings);
   if (folded) notes.push(folded);
+  const absentHere = absentNarrowingNote(result.absentNarrowings);
+  if (absentHere) notes.push(absentHere);
+  const unchecked = uncheckedNarrowingNote(result.uncheckedNarrowings);
+  if (unchecked) notes.push(unchecked);
   const lost = skippedNote(result.perSource);
   if (lost) notes.push(lost);
   const failures = failureNote(result.perSource);
@@ -217,6 +229,8 @@ export function renderPerformerRows(
       career_end_year: row.careerEndYear,
       scene_count: row.sceneCount,
       status: row.status,
+      // A row told its identifier is dead is handed the one that replaced it.
+      ...(row.mergedInto === null ? {} : { merged_into: row.mergedInto }),
       ...(stamped ? { created: row.created, updated: row.updated } : {}),
       retrieved_at: row.retrievedAt,
       source_url: row.sourceUrl,
@@ -242,7 +256,7 @@ export function renderPerformerRows(
       `# ${result.rows.length} performer(s)${query ? ` for "${query}"` : ""}`,
       ...result.rows.map((row) =>
         joinLines([
-          `\n- ${inline(row.name) ?? "(unnamed)"}${row.disambiguation ? ` (${inline(row.disambiguation)})` : ""} [${row.source}]${row.status === "established" ? "" : `${row.status === "merged" ? " — merged, so this identifier now addresses the record it was folded into" : " — withdrawn, so this identifier states nothing about what it once named"}`}`,
+          `\n- ${inline(row.name) ?? "(unnamed)"}${row.disambiguation ? ` (${inline(row.disambiguation)})` : ""} [${row.source}]${row.status === "established" ? "" : `${row.status === "merged" ? `, merged into ${row.mergedInto ?? "a record this catalogue did not name"}, so this identifier now addresses that one` : ", withdrawn, so this identifier states nothing about what it once named"}`}`,
           row.aliases.length ? `    also credited as: ${inlineAll(row.aliases)}` : null,
           row.birthDate ? `    born: ${dateText(row.birthDate)}` : null,
           row.careerStartYear || row.careerEndYear
@@ -280,10 +294,13 @@ export function registerSearchPerformers(server: McpServer, client: StashboxClie
         country: countryArgument("Two-letter country code, such as 'AU'.").optional(),
         performed_with: narrowingText("Namespaced identifier of another performer.").optional(),
         studio_id: narrowingText("Namespaced studio identifier.").optional(),
-        sort: z.enum(["name", "birthdate", "scene_count", "created", "updated"]).optional(),
-        direction: z.enum(["asc", "desc"]).optional(),
-        limit: z.number().int().min(1).max(100).optional(),
-        page: z.number().int().min(1).max(10_000).optional(),
+        sort: optionSet(
+          ["name", "birthdate", "scene_count", "created", "updated"],
+          "Which field each catalogue orders its own rows on.",
+        ).optional(),
+        direction: optionSet(["asc", "desc"], "Which way that order runs.").optional(),
+        limit: boundedInteger(1, 100, "Rows asked of each catalogue.").optional(),
+        page: boundedInteger(1, 10_000, "Which page of those rows.").optional(),
         sources: sourcesArgument(
           "Narrow to named catalogues. Every configured catalogue is asked by default.",
         ).optional(),

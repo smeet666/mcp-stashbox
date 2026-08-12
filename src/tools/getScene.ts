@@ -9,7 +9,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { StashboxClient } from "../stashbox/client.js";
 import type { SceneRecord } from "../types.js";
-import { strictInput } from "./arguments.js";
+import { strictInput, requiredText } from "./arguments.js";
 import { getSceneOutput } from "./schemas.js";
 import {
   dateText,
@@ -56,6 +56,11 @@ export function renderScene(
       status: record.status,
       merged_into: record.mergedInto,
       former_title: record.title,
+      // A marker carries little, so what little it lost is the whole of what
+      // this client could not read of it.
+      ...(record.rowsSkipped
+        ? { rows_skipped: record.rowsSkipped, rows_skipped_in: record.rowsSkippedIn ?? [] }
+        : {}),
       notes: [] as string[],
       ...(cached ? { cached: true } : {}),
     };
@@ -69,6 +74,11 @@ export function renderScene(
     ]);
     const unrendered = sections.filter((name) => name !== "basic");
     const markerNotes = [
+      ...(record.rowsSkipped
+        ? [
+            `${record.rowsSkipped} row(s) of this marker could not be read and are left out of ${(record.rowsSkippedIn ?? []).join(", ")}. What is shown is therefore short of what the catalogue answered with.`,
+          ]
+        : []),
       record.status === "merged"
         ? "This record is a marker. Its emptiness describes the record and states nothing about the scene it once described."
         : "A withdrawn record states nothing about the scene it once described.",
@@ -300,7 +310,7 @@ export function renderScene(
               )
               .filter((entry): entry is string => entry !== null)
               .join(", ")
-          : null,
+          : "(none credited on this record)",
       ),
       line(
         "Tags",
@@ -310,31 +320,35 @@ export function renderScene(
                 (tag) => `${inline(tag.name)}${tag.status === "established" ? "" : " (withdrawn)"}`,
               )
               .join(", ")
-          : null,
+          : "(none on this record)",
       ),
       record.details ? `\n${quoted(record.details)}` : null,
-      record.urls.length
-        ? `\nLinks:\n${record.urls
+      record.urls.length === 0
+        ? "\nLinks: (none on this record)"
+        : `\nLinks:\n${record.urls
             .map(
               (link) =>
                 `  - ${link.siteName === null ? "(this catalogue names no site)" : inline(link.siteName)}${link.siteCategory ? ` [${inline(link.siteCategory)}]` : ""}: ${link.url}`,
             )
-            .join("\n")}`
-        : null,
-      wantsFingerprints && record.fingerprints
-        ? `\nFingerprints (${record.fingerprints.length} held, ${Math.min(record.fingerprints.length, FINGERPRINTS_SHOWN)} shown):\n${record.fingerprints
-            .slice(0, FINGERPRINTS_SHOWN)
-            .map(
-              (row) =>
-                `  - ${row.algorithm} ${row.hash}, ${row.submissions === null ? "submissions not counted" : `${row.submissions} submission(s)`}, ${
-                  row.reports === null ? "reports not counted here" : `${row.reports} report(s)`
-                }${row.contested === null ? ", contest unknown" : row.contested ? ", contested" : ", uncontested"}`,
-            )
-            .join("\n")}`
-        : null,
-      wantsImages && record.images
-        ? `\nImages (${record.images.length}):\n${record.images.map((image) => `  - ${image.url}`).join("\n")}`
-        : null,
+            .join("\n")}`,
+      wantsFingerprints && record.fingerprints?.length === 0
+        ? "\nFingerprints: (none on this record)"
+        : wantsFingerprints && record.fingerprints
+          ? `\nFingerprints (${record.fingerprints.length} held, ${Math.min(record.fingerprints.length, FINGERPRINTS_SHOWN)} shown):\n${record.fingerprints
+              .slice(0, FINGERPRINTS_SHOWN)
+              .map(
+                (row) =>
+                  `  - ${row.algorithm} ${row.hash}, ${row.submissions === null ? "submissions not counted" : `${row.submissions} submission(s)`}, ${
+                    row.reports === null ? "reports not counted here" : `${row.reports} report(s)`
+                  }${row.contested === null ? ", contest unknown" : row.contested ? ", contested" : ", uncontested"}`,
+              )
+              .join("\n")}`
+          : null,
+      wantsImages && record.images?.length === 0
+        ? "\nImages: (none on this record)"
+        : wantsImages && record.images
+          ? `\nImages (${record.images.length}):\n${record.images.map((image) => `  - ${image.url}`).join("\n")}`
+          : null,
       `\n${sourceLine(record.sourceUrl)}`,
     ]) + notesBlock(notes);
 
@@ -363,9 +377,13 @@ export function registerGetScene(server: McpServer, client: StashboxClient): voi
       description:
         "Read one catalogued scene by its identifier. The identifier names the catalogue that minted it, as returned by search_scenes or find_by_fingerprint. Sections are opt-in because a scene's fingerprints weigh more than everything else it carries.",
       inputSchema: strictInput({
-        id: z.string().describe("Identifier as returned by another tool, such as stashdb:<uuid>."),
+        id: requiredText("Identifier as returned by another tool, such as stashdb:<uuid>."),
         sections: z
-          .array(z.enum(GET_SCENE_SECTIONS))
+          .array(
+            z.enum(GET_SCENE_SECTIONS, {
+              error: `[invalid_input] A block is named as one of: ${GET_SCENE_SECTIONS.join(", ")}.`,
+            }),
+          )
           .min(1, {
             error:
               "[invalid_input] An empty list names no block to load. Leave the argument out for the basic block, or name the blocks you want.",

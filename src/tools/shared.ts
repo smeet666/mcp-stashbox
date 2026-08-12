@@ -91,6 +91,29 @@ export function sourceOffers(source: string, capability: Capability): boolean {
  * ever held for that person. Read as a count of zero, that emptiness says the
  * catalogue indexes nothing, which is the opposite of what happened.
  */
+/**
+ * The check that would have explained an emptiness and could not be made.
+ *
+ * A narrowing identifier that resolves to a folded record explains why nothing
+ * came back. Where that reading failed, the emptiness stands unexplained, and
+ * saying nothing lets it read as an answer about what the catalogue holds.
+ */
+/**
+ * A narrowing identifier its own catalogue holds no record for.
+ *
+ * That emptiness belongs to the identifier: the catalogue was asked about a
+ * record it has never held, and its silence is no measure of what it indexes.
+ */
+export function absentNarrowingNote(absent: readonly string[] | undefined): string | null {
+  if (!absent?.length) return null;
+  return `The catalogue named in these identifiers holds no record for them: ${absent.join(", ")}. Nothing came back because nothing there answers to them, which says nothing about what that catalogue indexes.`;
+}
+
+export function uncheckedNarrowingNote(unchecked: readonly string[] | undefined): string | null {
+  if (!unchecked?.length) return null;
+  return `Whether these identifiers still address the record they name could not be checked: ${unchecked.join(", ")}. An identifier its catalogue has folded narrows to nothing, so this emptiness may be about the identifier rather than about what the catalogue holds.`;
+}
+
 export function foldedNarrowingNote(folded: readonly FoldedNarrowing[] | undefined): string | null {
   if (!folded?.length) return null;
   const named = folded
@@ -144,6 +167,12 @@ export function perSourceText(reports: readonly SourceReport[]): string[] {
       const unsearched = report.algorithmsNotSearched?.length
         ? `; does not search ${report.algorithmsNotSearched.join(", ")}`
         : "";
+      const inPart = report.narrowingsReceivedInPart?.length
+        ? `; received only its own identifiers out of ${report.narrowingsReceivedInPart.join(", ")}`
+        : "";
+      const idleHere = report.argumentsWithNothingToDo?.length
+        ? `; nothing gave ${report.argumentsWithNothingToDo.join(", ")} anything to do`
+        : "";
       const foreign = report.narrowingsNamingNoRecord?.length
         ? `; no record of its own is named by the identifiers given for ${report.narrowingsNamingNoRecord.join(", ")}`
         : "";
@@ -161,7 +190,13 @@ export function perSourceText(reports: readonly SourceReport[]): string[] {
         report.records === undefined || report.records === report.count
           ? ""
           : ` on ${report.records} record(s)`;
-      return `${name}: answered, ${report.count ?? 0} row(s)${behind}${reach}${fields}${narrowings}${unsearched}${foreign}${why}`;
+      // Records a catalogue answered with while carrying none of what was asked
+      // are rows it returned. Left off its line, its count reads as everything
+      // it had to say.
+      const unattributed = report.unattributed
+        ? `, and ${report.unattributed} more record(s) it answered with carrying none of what was asked`
+        : "";
+      return `${name}: answered, ${report.count ?? 0} row(s)${behind}${unattributed}${reach}${fields}${narrowings}${unsearched}${inPart}${idleHere}${foreign}${why}`;
     }
     if (report.state === "failed") {
       return `${name}: failed at ${report.moment ?? "an unnamed moment"} (${report.error ?? "error"}): ${inline(report.reason) ?? ""}`.trim();
@@ -203,6 +238,12 @@ export function reportPayload(reports: readonly SourceReport[]): Record<string, 
     ...(entry.narrowingsNamingNoRecord === undefined
       ? {}
       : { narrowings_naming_no_record_here: entry.narrowingsNamingNoRecord }),
+    ...(entry.narrowingsReceivedInPart === undefined
+      ? {}
+      : { narrowings_received_in_part: entry.narrowingsReceivedInPart }),
+    ...(entry.argumentsWithNothingToDo === undefined
+      ? {}
+      : { arguments_with_nothing_to_do: entry.argumentsWithNothingToDo }),
     ...(entry.algorithmsNotSearched === undefined
       ? {}
       : { algorithms_not_searched: entry.algorithmsNotSearched }),
@@ -236,7 +277,12 @@ export function narrowingNote(reports: readonly SourceReport[]): string | null {
   if (
     refused.size === 0 &&
     idle.length === 0 &&
-    !reports.some((entry) => entry.narrowingsNamingNoRecord?.length)
+    !reports.some(
+      (entry) =>
+        entry.narrowingsNamingNoRecord?.length ||
+        entry.narrowingsReceivedInPart?.length ||
+        entry.argumentsWithNothingToDo?.length,
+    )
   )
     return null;
   // Paging and order shape the answer; the rest select rows. Only the second
@@ -258,11 +304,33 @@ export function narrowingNote(reports: readonly SourceReport[]): string | null {
       `Asked for and not received: ${say(reading)}. A list of identifiers was read as any one of them, so a row carries one of those asked for and not all.`,
     );
   }
+  const shortened = new Map<string, string[]>();
+  for (const report of reports) {
+    for (const name of report.narrowingsReceivedInPart ?? []) {
+      shortened.set(name, [...(shortened.get(name) ?? []), report.name ?? report.source]);
+    }
+  }
+  const idleArguments = new Map<string, string[]>();
+  for (const report of reports) {
+    for (const name of report.argumentsWithNothingToDo ?? []) {
+      idleArguments.set(name, [...(idleArguments.get(name) ?? []), report.name ?? report.source]);
+    }
+  }
   const nobodysRecord = new Map<string, string[]>();
   for (const report of reports) {
     for (const name of report.narrowingsNamingNoRecord ?? []) {
       nobodysRecord.set(name, [...(nobodysRecord.get(name) ?? []), report.name ?? report.source]);
     }
+  }
+  if (shortened.size) {
+    lines.push(
+      `Received in part: ${say([...shortened])}. Each list named records on more than one catalogue, and each catalogue was asked with its own alone, so a row of theirs satisfies the part that reached them and not the list as it was written.`,
+    );
+  }
+  if (idleArguments.size) {
+    lines.push(
+      `Written with nothing to apply to: ${say([...idleArguments])}. Nothing in this question gave them anything to select, so the rows neither satisfy nor fail them.`,
+    );
   }
   if (nobodysRecord.size) {
     lines.push(

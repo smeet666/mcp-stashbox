@@ -143,10 +143,15 @@ export function indentBlock(text: string): string {
 
 /** A number the catalogue may publish as text, or omit. */
 export function readInteger(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
+  // Every number this reads counts things: records in an index, people who
+  // submitted a hash, seconds of running time. A fraction of one of those
+  // counts nothing, and a magnitude past what integers hold exactly has already
+  // lost the digits that would say what it counted.
+  const whole = (parsed: number) => (Number.isSafeInteger(parsed) ? parsed : null);
+  if (typeof value === "number") return Number.isFinite(value) ? whole(value) : null;
   if (typeof value === "string" && value.trim() !== "") {
     const parsed = Number(value);
-    if (Number.isFinite(parsed)) return parsed;
+    if (Number.isFinite(parsed)) return whole(parsed);
   }
   return null;
 }

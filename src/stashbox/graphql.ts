@@ -133,7 +133,9 @@ export function createHttpTransport(options: HttpTransportOptions): Transport {
             });
             if (attempt === maxRetries) throw error;
             lastTransient = error;
-            await backoff(attempt, limiter);
+            // A catalogue naming how long to wait has said what this client owes
+            // it. Asking again sooner is asking it to refuse a second time.
+            await backoff(attempt, limiter, namedDelayMs(response.headers.get("retry-after")));
             continue;
           }
 
@@ -288,7 +290,24 @@ async function readBody(response: Response, spec: InstanceSpec, maxBytes: number
 }
 
 /** Widening waits between attempts, bounded so a retry never looks hung. */
-async function backoff(attempt: number, limiter: RateLimiter): Promise<void> {
-  const wait = Math.min(limiter.currentIntervalMs * 2 ** attempt, 30_000);
-  await sleep(wait);
+async function backoff(attempt: number, limiter: RateLimiter, namedMs?: number): Promise<void> {
+  const widening = Math.min(limiter.currentIntervalMs * 2 ** attempt, 30_000);
+  await sleep(Math.max(widening, namedMs ?? 0));
+}
+
+/**
+ * How long a catalogue asked to be left alone, in milliseconds.
+ *
+ * The header carries either a number of seconds or a date. A value this client
+ * cannot read is no instruction, and waiting on a number read wrongly would be
+ * as rude as not waiting at all.
+ */
+function namedDelayMs(header: string | null): number | undefined {
+  if (header === null) return undefined;
+  const seconds = Number(header.trim());
+  if (Number.isFinite(seconds) && seconds >= 0) return Math.min(seconds * 1000, 300_000);
+  const at = Date.parse(header);
+  if (Number.isNaN(at)) return undefined;
+  const wait = at - Date.now();
+  return wait > 0 ? Math.min(wait, 300_000) : undefined;
 }
