@@ -271,8 +271,12 @@ function readLinks(value: unknown, spec: InstanceSpec, lost: Lost): SiteLink[] {
       // The category is read only where the catalogue keeps the table it comes
       // from, so a null here is that table's absence and never a site nobody
       // sorted.
+      // The table entry the catalogue sorted this site under, which is not the
+      // paragraph the site publishes about itself.
       siteCategory:
-        supports(spec, "site_categories") && site !== undefined ? text(site.description) : null,
+        supports(spec, "site_categories") && site !== undefined
+          ? text(asObject(site.category)?.name)
+          : null,
     });
   }
   return links;
@@ -550,6 +554,7 @@ export function readPerformer(
     ...(appearance === undefined ? {} : { appearance }),
     ...(one.images === undefined ? {} : { images }),
     ...(imagesSkipped === undefined ? {} : { imagesSkipped }),
+    ...(one.studios === undefined ? {} : readStudioTable(one.studios, spec, lost)),
     mergedInto: identify(one.merged_into_id, spec),
     mergedIds: (Array.isArray(one.merged_ids) ? one.merged_ids : [])
       .map((entry) => identify(entry, spec))
@@ -609,6 +614,42 @@ function readAppearance(one: Record<string, unknown>, lost: Lost): Appearance | 
     tattoos: marks(one.tattoos, "tattoos"),
     piercings: marks(one.piercings, "piercings"),
   };
+}
+
+/**
+ * The studios a catalogue credits a performer on, with what it counts on each.
+ *
+ * A line naming no studio of its own can be addressed by nobody, so it is a
+ * loss rather than a name a reader cannot follow.
+ */
+function readStudioTable(
+  value: unknown,
+  spec: InstanceSpec,
+  lost: Lost,
+): { studios: NonNullable<PerformerRecord["studios"]>; studiosSkipped?: number } {
+  if (!Array.isArray(value)) {
+    lost.lost("studios");
+    return { studios: [], studiosSkipped: 1 };
+  }
+  const studios: NonNullable<PerformerRecord["studios"]> = [];
+  let skipped = 0;
+  for (const entry of value) {
+    const line = row(entry);
+    const held = row(line?.studio);
+    const id = held === undefined ? null : identify(held.id, spec);
+    if (id === null) {
+      lost.lost("studios");
+      skipped += 1;
+      continue;
+    }
+    studios.push({
+      id,
+      name: text(held?.name),
+      sceneCount: supports(spec, "scene_count") ? tally(line?.scene_count) : null,
+      status: readStatus(held?.deleted, undefined),
+    });
+  }
+  return { studios, ...(skipped > 0 ? { studiosSkipped: skipped } : {}) };
 }
 
 export function readStudio(

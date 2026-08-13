@@ -484,9 +484,16 @@ function valueLine(name: string, held: CardValue): string | null {
   return `${spelt(name)}: ${value} (${said}${apart})`;
 }
 
-/** A united list, each entry naming every catalogue that published it. */
+/**
+ * A united list, each entry naming every catalogue that published it.
+ *
+ * A list holding nothing states its own zero. Dropped from the prose, it reads
+ * exactly like a block nobody loaded, which is the distinction this server
+ * exists to keep.
+ */
 function unionLine(name: string, entries: readonly CardEntry[]): string | null {
-  if (entries.length === 0) return null;
+  if (entries.length === 0)
+    return `${spelt(name)}: none of the catalogues that answered published any`;
   const each = entries
     .map((entry) => {
       const value = spelled(entry.value);

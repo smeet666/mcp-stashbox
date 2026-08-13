@@ -76,8 +76,18 @@ function routeOn(spec: InstanceSpec, capability: Capability): string {
 const lines = (parts: readonly string[]): string =>
   parts.filter((part) => part !== "").join("\n    ");
 
+/**
+ * The site behind a link, and the category its catalogue placed that site in.
+ *
+ * A site declares a description of its own and a category of its own, and they
+ * are different things: the description is a paragraph about the site, and the
+ * category is the table entry a catalogue sorted it under. Read one for the
+ * other and every link in an answer carries a blurb labelled as a category.
+ */
 function siteSelection(spec: InstanceSpec): string {
-  return supports(spec, "site_categories") ? "site { id name description }" : "site { id name }";
+  return supports(spec, "site_categories")
+    ? "site { id name category { id name } }"
+    : "site { id name }";
 }
 
 /**

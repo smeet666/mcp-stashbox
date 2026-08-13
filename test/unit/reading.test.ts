@@ -349,6 +349,57 @@ describe("every entity is read into a record that names its catalogue", () => {
 
 /* ------------------------------------------------- the link that joins two */
 
+describe("the category a catalogue sorted a site under", () => {
+  it("is the table entry it sorted the site under, not the site's own blurb", () => {
+    // Measured: a site declares a description of its own and a category of its
+    // own. Read one for the other, every link in an answer carries a paragraph
+    // labelled as a category.
+    const read = readScene(
+      {
+        ...SCENE,
+        urls: [
+          {
+            url: "https://example.invalid/a",
+            site: {
+              id: UUID,
+              name: "Wikipedia",
+              description: "Wikipedia is a free online encyclopedia.",
+              category: { id: UUID2, name: "Third-party databases" },
+            },
+          },
+        ],
+      },
+      SD,
+      AT,
+    );
+    expect(read.record?.urls[0]?.siteCategory).toBe("Third-party databases");
+    expect(read.record?.urls[0]?.siteName).toBe("Wikipedia");
+  });
+});
+
+describe("the studios a catalogue credits a performer on", () => {
+  it("are read where the block was asked for, with what it counts on each", () => {
+    const read = readPerformer(
+      {
+        id: UUID2,
+        name: "A",
+        deleted: false,
+        studios: [
+          { scene_count: 12, studio: { id: UUID, name: "Vixen", deleted: false } },
+          { scene_count: 3, studio: { id: "not-a-uuid", name: "Broken" } },
+        ],
+      },
+      SD,
+      AT,
+    );
+    expect(read.record?.studios).toHaveLength(1);
+    expect(read.record?.studios?.[0]).toMatchObject({ name: "Vixen", sceneCount: 12 });
+    // A line naming no studio of its own can be addressed by nobody, so it is
+    // counted rather than dropped.
+    expect(read.record?.studiosSkipped).toBe(1);
+  });
+});
+
 describe("the link a catalogue publishes to the same record elsewhere", () => {
   it("is read as a join, carrying the catalogue and the identifier it names", () => {
     const read = readPerformer(

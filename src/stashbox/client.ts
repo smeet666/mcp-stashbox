@@ -72,6 +72,19 @@ import { RateLimiter } from "./rateLimiter.js";
 
 const ROWS_PER_PAGE = 25;
 
+/**
+ * The lists a caller asks for by naming a section, and the section that carries
+ * each of them.
+ *
+ * A list nobody asked for states no zero: saying the catalogues published none
+ * of something nobody requested is an emptiness this answer never looked for.
+ */
+const BY_SECTION: Record<string, string> = {
+  images: "images",
+  fingerprints: "fingerprints",
+  studios: "studios",
+};
+
 /** The kinds of record, and what each is read and consolidated as. */
 const SHAPES: Record<RecordKind, { scalars: string[]; lists: string[]; perSource: string[] }> = {
   scene: {
@@ -607,7 +620,26 @@ export class StashboxClient {
       if (next.replayed === true) replayed.add(others[at]?.source ?? "");
     }
 
+    // Every catalogue the registry declares leaves here named, as it does on a
+    // search. A card holding only the catalogues that were read cannot tell a
+    // catalogue asked and lacking the record from one nobody asked, and the
+    // reasons for the second are three different facts a caller acts on.
+    for (const spec of INSTANCES) {
+      if (readings.some((one) => one.source === spec.id)) continue;
+      const apiKey = this.#config.keys[spec.id];
+      const reason =
+        apiKey === undefined
+          ? `No key is configured for ${spec.name}, so it was never asked. Set ${spec.envVar} to read it.`
+          : named !== undefined && !named.includes(spec.id)
+            ? `The catalogues named in this call left ${spec.name} out, so it was never asked.`
+            : !supports(spec, ROUTE[kind])
+              ? `${spec.name} answers no ${kind} of its own, so it was never asked.`
+              : `${instanceById(first.reading.source)?.name ?? first.reading.source} publishes no link from this record to one on ${spec.name}, so nothing here reached it. That is a link nobody wrote rather than a record ${spec.name} lacks.`;
+      readings.push({ source: spec.id, state: "absent", reason });
+    }
+
     const shape = SHAPES[kind];
+    const asked = new Set(sections);
     const card = consolidate({
       readings,
       prefer,
@@ -616,7 +648,12 @@ export class StashboxClient {
       // than being put to a vote: two clock readings a fraction apart would
       // otherwise be published as a disagreement and dilute a real one.
       scalars: [...shape.scalars, "mergedInto"],
-      lists: shape.lists,
+      // A list a section carries is published only where that section was
+      // asked for. Stated otherwise, its zero denies something nobody looked
+      // for.
+      lists: shape.lists.filter(
+        (name) => BY_SECTION[name] === undefined || asked.has(BY_SECTION[name]),
+      ),
       perSource: shape.perSource,
     });
     // A loss dropped in silence makes the card a record holding less than the

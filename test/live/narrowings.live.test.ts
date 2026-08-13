@@ -191,11 +191,20 @@ describe.skipIf(!ENABLED)(
       expect(asked, "the link to the other catalogue was not followed").toContain("tpdb");
     }, 90_000);
 
-    it("reads one catalogue alone where the caller named one", async () => {
+    it("reads one catalogue alone where the caller named one, and names the rest", async () => {
       const card = await client.getPerformer("stashdb:155f2559-d1f1-42b1-8cbe-9008542df5ce", {
         sources: ["stashdb"],
       });
-      expect(card.data.held_by.map((one) => one.source)).toEqual(["stashdb"]);
+      // One catalogue was read. Every other one is named with why it was not,
+      // since a card holding only what was read cannot tell a catalogue that
+      // was asked and lacks the record from one nobody asked.
+      expect(card.data.read_from).toEqual(["stashdb"]);
+      const left = card.data.held_by.filter((one) => one.source !== "stashdb");
+      expect(left.length).toBeGreaterThan(0);
+      for (const one of left) {
+        expect(one.state, `${one.source} was neither read nor named as unasked`).toBe("absent");
+        expect(one.reason ?? "").not.toBe("");
+      }
     }, 60_000);
 
     it("reads a studio and a tag on the catalogue that minted the identifier", async () => {

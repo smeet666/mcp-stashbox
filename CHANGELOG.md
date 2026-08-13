@@ -5,6 +5,34 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-08-13
+
+### Fixed
+
+- A link carried the paragraph a site publishes about itself, labelled as the
+  category the catalogue sorted that site under. A site declares both, and they
+  are different things: one performer's answer ran to fifty links each dragging
+  an encyclopedia blurb behind it, and every one of them named a category
+  nobody had recorded.
+- The studios a catalogue credits a performer on were selected in the request
+  and read by nothing, so a block a caller asked for came back empty and the
+  answer said a performer is credited on none.
+- A list holding nothing states its own zero where the block was asked for, and
+  says nothing where it was not. A block that vanishes when it is empty is
+  indistinguishable from one nobody loaded, and a block stating a zero nobody
+  asked for denies something this answer never looked for.
+
+### Changed
+
+- A card names every catalogue in the registry, as a search already did. A card
+  holding only the catalogues that were read cannot tell one that was asked and
+  lacks the record from one nobody asked, and the reasons for the second are
+  four different facts: no key is held, the call named others, the catalogue
+  answers no such route, or the record publishes no link to it.
+- The address a record was read at and the moment it was read travel on the
+  catalogue that answered rather than on the fields, since neither is a reading
+  two catalogues could disagree about.
+
 ## [0.6.0] - 2026-08-13
 
 Nine people put real questions to the server and read the answers as people

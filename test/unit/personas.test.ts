@@ -165,3 +165,54 @@ describe("a hash carrying no information", () => {
     ).rejects.toMatchObject({ code: "invalid_input" });
   });
 });
+
+/* --------------------------------- what became of the catalogues not read */
+
+describe("a card says what became of every catalogue, not only the ones read", () => {
+  it("names a catalogue the record publishes no link to", async () => {
+    const { client } = watching();
+    const card = await client.getCard("performer", `stashdb:${A}`);
+    const named = card.data.held_by.map((one) => one.source);
+    // A card built from one identifier reached one catalogue. A reader cannot
+    // tell "asked and lacks it" from "never asked" unless both are named, and
+    // the tool promises a reading on every catalogue that holds the record.
+    expect(named).toContain("tpdb");
+    expect(named).toContain("fansdb");
+    const tpdb = card.data.held_by.find((one) => one.source === "tpdb");
+    expect(tpdb?.state).toBe("absent");
+    expect(tpdb?.reason ?? "").toMatch(/link|publishes no/i);
+  });
+
+  it("tells that apart from a catalogue no key is held for", async () => {
+    const { client } = watching();
+    const card = await client.getCard("performer", `stashdb:${A}`);
+    const fansdb = card.data.held_by.find((one) => one.source === "fansdb");
+    expect(fansdb?.reason ?? "").toContain("STASHBOX_FANSDB_KEY");
+  });
+});
+
+/* ------------------------------------------ a block asked for that came back empty */
+
+describe("a block a caller asked for", () => {
+  it("states its own zero rather than vanishing from the prose", () => {
+    const card = consolidate({
+      readings: [
+        {
+          source: "stashdb",
+          id: `stashdb:${A}`,
+          state: "answered",
+          record: { name: "A", studios: [] },
+        },
+      ],
+      prefer: ["stashdb"],
+      scalars: ["name"],
+      lists: ["studios"],
+      perSource: [],
+    });
+    const said = renderCard(card, "performer").text;
+    // A block that vanishes when it holds nothing is indistinguishable from
+    // one nobody loaded, which is the distinction this server exists to keep.
+    expect(said).toContain("Studios");
+    expect(said.toLowerCase()).toMatch(/none|no studio/);
+  });
+});
