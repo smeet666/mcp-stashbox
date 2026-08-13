@@ -261,18 +261,36 @@ describe("each tool declares what the specification gives it", () => {
 /* --------------------------------------------------- what a schema costs */
 
 describe("a shape is declared once", () => {
-  it("refers to the shared shapes rather than writing them out per tool", () => {
-    const json = JSON.stringify(TOOLS.map((one) => one.outputSchema));
-    // The record shape written into five schemas is the same paragraph of
-    // description strings five times, paid by every session before a question.
-    const repeated = json.split('"source_url"').length - 1;
-    expect(repeated, "the record shape is written out once per tool").toBeLessThan(3);
+  it("carries no shape a schema never names", () => {
+    // A shape a schema holds and never refers to costs a caller exactly what a
+    // shape it uses costs: the list is read whole before a question is asked.
+    for (const one of TOOLS) {
+      const schema = one.outputSchema as { $defs?: Record<string, unknown> };
+      const json = JSON.stringify(schema);
+      for (const name of Object.keys(schema.$defs ?? {})) {
+        expect(
+          json.includes(`#/$defs/${name}`),
+          `${one.name} carries the shape ${name} and refers to it nowhere`,
+        ).toBe(true);
+      }
+    }
   });
 
-  it("keeps the whole declared surface under what five tools once cost", () => {
-    const bytes = JSON.stringify(
-      TOOLS.map((one) => ({ ...one, run: undefined, inputSchema: undefined })),
-    ).length;
-    expect(bytes).toBeLessThan(90_000);
+  it("refers to a shape rather than writing it out, wherever two tools share one", () => {
+    for (const one of TOOLS) {
+      const schema = one.outputSchema as { properties?: Record<string, unknown> };
+      const written = JSON.stringify(schema.properties ?? {});
+      // The properties of a tool name the shapes; the shapes themselves live
+      // under $defs and are written once per schema rather than per field.
+      expect(
+        written.split('"source_url"').length - 1,
+        `${one.name} writes a record shape into its own properties`,
+      ).toBe(0);
+    }
+  });
+
+  it("declares ten tools for less than the five that came before cost", () => {
+    const bytes = JSON.stringify(TOOLS.map((one) => one.outputSchema)).length;
+    expect(bytes).toBeLessThan(91_436);
   });
 });

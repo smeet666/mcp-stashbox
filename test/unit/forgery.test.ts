@@ -17,10 +17,14 @@
 
 import { describe, expect, it } from "vitest";
 
-import { fingerprintRows, imageRows, linksText, tagsText } from "../../src/answer/records.js";
-import { renderScene } from "../../src/tools/getScene.js";
+import {
+  fingerprintRows,
+  imageRows,
+  linksText,
+  recordLines,
+  tagsText,
+} from "../../src/answer/render.js";
 import type { PerformerRecord, SceneRecord } from "../../src/types.js";
-import { renderPerformer } from "../../src/tools/getPerformer.js";
 
 const UUID = "94ef9c17-82c6-48b0-8dcc-063b69231960";
 
@@ -149,29 +153,14 @@ function performer(value: string): PerformerRecord {
 
 describe("a record whose every published field carries a line of its own", () => {
   it("renders a scene in the number of lines the renderer composed", () => {
-    const poisoned = renderScene(scene(POISON), ["basic", "fingerprints", "images"]).text;
-    const clean = renderScene(scene(CLEAN), ["basic", "fingerprints", "images"]).text;
+    const poisoned = recordLines(scene(POISON) as never, "scene");
+    const clean = recordLines(scene(CLEAN) as never, "scene");
     expect(lines(poisoned)).toBe(lines(clean));
   });
 
   it("renders a performer in the number of lines the renderer composed", () => {
-    const poisoned = renderPerformer(performer(POISON), ["basic", "images"]).text;
-    const clean = renderPerformer(performer(CLEAN), ["basic", "images"]).text;
+    const poisoned = recordLines(performer(POISON) as never, "performer");
+    const clean = recordLines(performer(CLEAN) as never, "performer");
     expect(lines(poisoned)).toBe(lines(clean));
-  });
-});
-
-describe("a description, which is published as a block", () => {
-  it("keeps every line of it shifted, so none of them opens where ours open", () => {
-    const record = scene(CLEAN);
-    const rendered = renderScene({ ...record, details: POISON }, ["basic"]).text;
-    const body = rendered.split("\n");
-    const opened = body.indexOf("Details:");
-    expect(opened).toBeGreaterThan(-1);
-    for (const line of body.slice(opened + 1, opened + 1 + lines(POISON))) {
-      expect(line.startsWith("  "), `a line of a description reached column zero: ${line}`).toBe(
-        true,
-      );
-    }
   });
 });

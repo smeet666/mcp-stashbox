@@ -244,3 +244,52 @@ function nearest(written: string, declared: readonly string[]): string | undefin
   }
   return best?.name;
 }
+
+/* ------------------------------------------------- arguments read together */
+
+/**
+ * The words a caller wrote, refused beside any filter the faceted route takes.
+ *
+ * The two paths combine their terms in opposite ways: a catalogue's text index
+ * reads the words as a union, and the typed filters are an intersection.
+ * Answering one while reporting the other as unreceived hands a caller rows
+ * narrowed by a logic they did not choose, so writing both is refused and the
+ * refusal names them.
+ */
+export function exclusiveQuery<T extends z.ZodObject<z.ZodRawShape>>(
+  schema: T,
+  typed: readonly string[],
+): T {
+  return schema.superRefine((value, ctx) => {
+    const written = value as Record<string, unknown>;
+    if (written.query === undefined) return;
+    const beside = typed.filter((name) => written[name] !== undefined);
+    if (beside.length === 0) return;
+    ctx.addIssue({
+      code: "custom",
+      message: `${CODE} query was written beside ${beside.join(", ")}. A catalogue's own text index reads the words as a union, and the typed arguments narrow as an intersection, so the two answer different questions. Write query on its own, or write the typed arguments without it.`,
+    });
+  }) as unknown as T;
+}
+
+/**
+ * A date and the comparison it is read with, which travel together.
+ *
+ * No catalogue declares a range, so a date carries one comparison. Written
+ * alone, the date would be compared in a way nobody chose, and the comparison
+ * alone would compare against nothing.
+ */
+export function datedTogether<T extends z.ZodObject<z.ZodRawShape>>(schema: T): T {
+  return schema.superRefine((value, ctx) => {
+    const written = value as Record<string, unknown>;
+    const date = written.date !== undefined;
+    const compare = written.date_compare !== undefined;
+    if (date === compare) return;
+    ctx.addIssue({
+      code: "custom",
+      message: date
+        ? `${CODE} date was written without date_compare. These catalogues compare a date against one bound rather than answering a range, so the comparison is written rather than assumed: date_compare takes on, before or after.`
+        : `${CODE} date_compare was written with no date to compare. Write date beside it, or leave both out.`,
+    });
+  }) as unknown as T;
+}
