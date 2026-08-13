@@ -101,29 +101,29 @@ describe("one record is read on the route each catalogue names", () => {
 
 describe("a filter written as free text travels as a criterion", () => {
   it("carries the value and the comparison, rather than the bare string", () => {
-    const input = sceneQueryInput(SD, { code: "START-614", page: 1, limit: 25 });
+    const input = sceneQueryInput(SD, { code: "START-614", page: 1, limit: 25 }).input;
     expect(input.code).toEqual({ value: "START-614", modifier: "EQUALS" });
   });
 
   it("leaves a title as the schema takes it, which is a plain string", () => {
-    const input = sceneQueryInput(SD, { title: "sunset", page: 1, limit: 25 });
+    const input = sceneQueryInput(SD, { title: "sunset", page: 1, limit: 25 }).input;
     expect(input.title).toBe("sunset");
   });
 
   it("writes a country as a criterion on the performer route", () => {
-    const input = performerQueryInput(SD, { country: "AU", page: 1, limit: 25 });
+    const input = performerQueryInput(SD, { country: "AU", page: 1, limit: 25 }).input;
     expect(input.country).toEqual({ value: "AU", modifier: "EQUALS" });
   });
 });
 
 describe("a list of identifiers travels as a criterion naming how it is read", () => {
   it("asks for a row carrying every one of them where all was written", () => {
-    const input = sceneQueryInput(SD, { tagIds: [A, B], match: "all", page: 1, limit: 25 });
+    const input = sceneQueryInput(SD, { tagIds: [A, B], match: "all", page: 1, limit: 25 }).input;
     expect(input.tags).toEqual({ value: [A, B], modifier: "INCLUDES_ALL" });
   });
 
   it("asks for a row carrying one of them where any was written", () => {
-    const input = sceneQueryInput(SD, { tagIds: [A, B], match: "any", page: 1, limit: 25 });
+    const input = sceneQueryInput(SD, { tagIds: [A, B], match: "any", page: 1, limit: 25 }).input;
     expect(input.tags).toEqual({ value: [A, B], modifier: "INCLUDES" });
   });
 
@@ -131,7 +131,7 @@ describe("a list of identifiers travels as a criterion naming how it is read", (
     // A scene carries one studio, so asking for a row carrying two answers
     // nothing at all, whatever the caller meant by it.
     for (const match of ["all", "any"] as const) {
-      const input = sceneQueryInput(SD, { studioIds: [A, B], match, page: 1, limit: 25 });
+      const input = sceneQueryInput(SD, { studioIds: [A, B], match, page: 1, limit: 25 }).input;
       expect(input.studios).toEqual({ value: [A, B], modifier: "INCLUDES" });
     }
   });
@@ -153,7 +153,7 @@ describe("a date carries one comparison, because no catalogue declares a range",
         dateCompare: compare,
         page: 1,
         limit: 25,
-      });
+      }).input;
       expect(input.date).toEqual({ value: "2019-04-12", modifier });
     });
   }
@@ -173,10 +173,10 @@ describe("a date carries one comparison, because no catalogue declares a range",
       "EXCLUDES",
     ];
     const built = [
-      sceneQueryInput(SD, { date: "2019-04-12", dateCompare: "after", page: 1, limit: 25 }),
-      sceneQueryInput(SD, { tagIds: [A], match: "all", page: 1, limit: 25 }),
-      sceneQueryInput(SD, { code: "X", page: 1, limit: 25 }),
-      performerQueryInput(SD, { country: "AU", page: 1, limit: 25 }),
+      sceneQueryInput(SD, { date: "2019-04-12", dateCompare: "after", page: 1, limit: 25 }).input,
+      sceneQueryInput(SD, { tagIds: [A], match: "all", page: 1, limit: 25 }).input,
+      sceneQueryInput(SD, { code: "X", page: 1, limit: 25 }).input,
+      performerQueryInput(SD, { country: "AU", page: 1, limit: 25 }).input,
     ];
     for (const input of built) {
       for (const value of Object.values(input)) {
@@ -192,13 +192,13 @@ describe("a date carries one comparison, because no catalogue declares a range",
 describe("a catalogue that requires an order gets one", () => {
   it("carries a sort and a direction where the route declares them required", () => {
     // Measured: this catalogue refuses a faceted query written without them.
-    const input = performerQueryInput(TP, { name: "angela", page: 1, limit: 25 });
+    const input = performerQueryInput(TP, { name: "angela", page: 1, limit: 25 }).input;
     expect(input.sort).toBeDefined();
     expect(input.direction).toBeDefined();
   });
 
   it("leaves them out of a route that declares them optional", () => {
-    const input = performerQueryInput(SD, { name: "angela", page: 1, limit: 25 });
+    const input = performerQueryInput(SD, { name: "angela", page: 1, limit: 25 }).input;
     expect(input.sort).toBeUndefined();
     expect(input.direction).toBeUndefined();
   });
@@ -211,7 +211,7 @@ describe("a catalogue that requires an order gets one", () => {
         direction: "desc",
         page: 1,
         limit: 25,
-      });
+      }).input;
       expect(input.direction).toBe("DESC");
     }
   });
@@ -221,20 +221,20 @@ describe("a catalogue that requires an order gets one", () => {
 
 describe("a page is asked for the way each route takes it", () => {
   it("names the page and how many rows it holds", () => {
-    const input = sceneQueryInput(SD, { title: "a", page: 3, limit: 10 });
+    const input = sceneQueryInput(SD, { title: "a", page: 3, limit: 10 }).input;
     expect(input).toMatchObject({ page: 3, per_page: 10 });
   });
 
   it("does the same on the other three entities", () => {
-    expect(performerQueryInput(SD, { name: "a", page: 2, limit: 5 })).toMatchObject({
+    expect(performerQueryInput(SD, { name: "a", page: 2, limit: 5 }).input).toMatchObject({
       page: 2,
       per_page: 5,
     });
-    expect(studioQueryInput(SD, { name: "a", page: 2, limit: 5 })).toMatchObject({
+    expect(studioQueryInput(SD, { name: "a", page: 2, limit: 5 }).input).toMatchObject({
       page: 2,
       per_page: 5,
     });
-    expect(tagQueryInput(SD, { name: "a", page: 2, limit: 5 })).toMatchObject({
+    expect(tagQueryInput(SD, { name: "a", page: 2, limit: 5 }).input).toMatchObject({
       page: 2,
       per_page: 5,
     });
@@ -269,14 +269,14 @@ describe("a set of hashes travels as the route declares it", () => {
 
 describe("a request carries nothing the caller did not write", () => {
   it("holds no key for a filter that was left out", () => {
-    const input = sceneQueryInput(SD, { title: "sunset", page: 1, limit: 25 });
+    const input = sceneQueryInput(SD, { title: "sunset", page: 1, limit: 25 }).input;
     for (const name of ["code", "date", "studios", "tags", "performers", "alias"]) {
       expect(input, `${name} was never written and is in the request`).not.toHaveProperty(name);
     }
   });
 
   it("holds no empty list, which would narrow on nothing", () => {
-    const input = sceneQueryInput(SD, { tagIds: [], match: "all", page: 1, limit: 25 });
+    const input = sceneQueryInput(SD, { tagIds: [], match: "all", page: 1, limit: 25 }).input;
     expect(input).not.toHaveProperty("tags");
   });
 

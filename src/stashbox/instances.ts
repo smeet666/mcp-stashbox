@@ -79,6 +79,22 @@ export interface InstanceSpec {
    * makes the request fail validation before a row is ever seen.
    */
   answersWith: Partial<Record<Capability, "list" | "page">>;
+  /**
+   * How a faceted filter has to be written for this catalogue to take it.
+   *
+   * `criteria` wraps a filter in an object carrying a value and a comparison.
+   * `plain` takes the value itself, and declares no comparison at all: a
+   * catalogue reading one shape refuses the other outright, before a row is
+   * ever seen.
+   */
+  filters: "criteria" | "plain";
+  /**
+   * The faceted filters this catalogue's input declares, where it declares
+   * fewer than the reference instance. A filter absent here is one the
+   * catalogue cannot receive, which is a limit of the catalogue and is
+   * reported as one.
+   */
+  facets?: readonly string[];
   /** The day the surface above was read from the catalogue itself. */
   measuredAt: string;
   /**
@@ -135,6 +151,7 @@ export const INSTANCES: readonly InstanceSpec[] = [
     capabilities: Object.keys(READ_ON_STASHDB) as Capability[],
     routes: READ_ON_STASHDB,
     answersWith: SHAPES_ON_STASHDB,
+    filters: "criteria",
     measuredAt: "2026-08-13",
   },
   {
@@ -170,6 +187,19 @@ export const INSTANCES: readonly InstanceSpec[] = [
     // Its two search routes answer with the rows alone, where the reference
     // instance wraps them in a page carrying a count of its own.
     answersWith: { search_scenes: "list", search_performers: "list" },
+    // It reimplements the field names of the reference instance and takes each
+    // of them as the value itself, declaring no comparison anywhere. A request
+    // written as a criterion is refused before a row is seen.
+    filters: "plain",
+    // Its scene input declares no reference of the studio's own, so that
+    // narrowing is one it cannot receive.
+    facets: [
+      "text", "title", "url", "date", "production_date", "studios", "parentStudio",
+      "tags", "performers", "alias", "fingerprints", "page", "per_page", "direction", "sort",
+      "names", "name", "disambiguation", "gender", "birthdate", "deathdate", "birth_year",
+      "age", "ethnicity", "country", "career_start_year", "career_end_year",
+      "performed_with", "studio_id",
+    ],
     measuredAt: "2026-08-13",
     requiresOrder: true,
   },
@@ -182,6 +212,7 @@ export const INSTANCES: readonly InstanceSpec[] = [
     capabilities: Object.keys(READ_ON_STASHDB) as Capability[],
     routes: READ_ON_STASHDB,
     answersWith: SHAPES_ON_STASHDB,
+    filters: "criteria",
     measuredAt: "2026-08-13",
   },
   {
@@ -193,6 +224,7 @@ export const INSTANCES: readonly InstanceSpec[] = [
     capabilities: Object.keys(READ_ON_STASHDB) as Capability[],
     routes: READ_ON_STASHDB,
     answersWith: SHAPES_ON_STASHDB,
+    filters: "criteria",
     measuredAt: "2026-08-13",
   },
   {
@@ -204,6 +236,7 @@ export const INSTANCES: readonly InstanceSpec[] = [
     capabilities: Object.keys(READ_ON_STASHDB) as Capability[],
     routes: READ_ON_STASHDB,
     answersWith: SHAPES_ON_STASHDB,
+    filters: "criteria",
     measuredAt: "2026-08-13",
   },
 ];

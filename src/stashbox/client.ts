@@ -390,19 +390,21 @@ export class StashboxClient {
           const built = searchRequest(spec, kind, words, limit);
           return { ...built, faceted: built.paged };
         }
-        const narrowing = { ...input, page, limit } as never;
-        const built = facetedRequest(
-          spec,
-          kind,
+        // Every identifier a caller wrote names the catalogue that minted it,
+        // so this one receives its own and nothing else. Sending the whole
+        // list would put another catalogue's identifiers to it, and the
+        // refusal that came back would read as a fact about this one.
+        const narrowing = { ...shareOf(input, spec.id), page, limit } as never;
+        const shaped =
           kind === "scenes"
             ? sceneQueryInput(spec, narrowing)
             : kind === "performers"
               ? performerQueryInput(spec, narrowing)
               : kind === "studios"
                 ? studioQueryInput(spec, narrowing)
-                : tagQueryInput(spec, narrowing),
-        );
-        return { ...built, faceted: true };
+                : tagQueryInput(spec, narrowing);
+        const built = facetedRequest(spec, kind, shaped.input as Record<string, unknown>);
+        return { ...built, faceted: true, unreceived: shaped.unreceived };
       },
       reader as never,
     );
@@ -625,6 +627,40 @@ export class StashboxClient {
       cached: false,
     };
   }
+}
+
+/** The identifier arguments a caller writes, and the shape each one travels in. */
+const IDENTIFIER_ARGUMENTS = [
+  "performerIds",
+  "studioIds",
+  "tagIds",
+  "parentStudioId",
+  "performedWith",
+  "studioId",
+  "categoryId",
+] as const;
+
+/**
+ * What one catalogue receives of the identifiers a caller wrote.
+ *
+ * An identifier names the catalogue that minted it, so a list written for all
+ * of them reaches each one shorn of the rest, and the bare uuid is what travels
+ * on the wire. A catalogue handed another's identifier refuses the request, and
+ * the refusal reads as a fact about the catalogue rather than about the list.
+ */
+function shareOf(input: Record<string, unknown>, source: InstanceId): Record<string, unknown> {
+  const held: Record<string, unknown> = { ...input };
+  for (const name of IDENTIFIER_ARGUMENTS) {
+    const written = input[name];
+    if (written === undefined) continue;
+    const all = Array.isArray(written) ? (written as string[]) : [String(written)];
+    const mine = all
+      .filter((one) => one.startsWith(`${source}:`))
+      .map((one) => one.slice(source.length + 1));
+    if (mine.length === 0) delete held[name];
+    else held[name] = Array.isArray(written) ? mine : mine[0];
+  }
+  return held;
 }
 
 /** The catalogues a record is also held at, read off the record itself. */

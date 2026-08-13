@@ -49,6 +49,7 @@ const STASHDB: InstanceSpec = {
   ],
   routes: { get_scene: "findScene" },
   answersWith: {},
+  filters: "criteria" as const,
   measuredAt: "2026-08-13",
 };
 

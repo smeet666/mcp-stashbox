@@ -226,14 +226,17 @@ type Modifier =
   | "INCLUDES"
   | "EXCLUDES";
 
-interface Criterion {
-  value: unknown;
-  modifier: Modifier;
-}
-
-/** Free text a route compares rather than matches, which travels as a criterion. */
-function textCriterion(value: string | undefined): Criterion | undefined {
-  return value === undefined ? undefined : { value, modifier: "EQUALS" };
+/**
+ * Free text a route compares rather than matches.
+ *
+ * One catalogue takes it wrapped in a criterion carrying a comparison, and
+ * another takes the value itself and declares no comparison at all. The shape
+ * is read from the registry, since a request written in the other's shape is
+ * refused before a row is seen.
+ */
+function textCriterion(spec: InstanceSpec, value: string | undefined): unknown {
+  if (value === undefined) return undefined;
+  return spec.filters === "plain" ? value : { value, modifier: "EQUALS" };
 }
 
 /**
@@ -244,10 +247,12 @@ function textCriterion(value: string | undefined): Criterion | undefined {
  * criterion asking for a row carrying none.
  */
 function identifierCriterion(
+  spec: InstanceSpec,
   values: readonly string[] | undefined,
   match: "all" | "any",
-): Criterion | undefined {
+): unknown {
   if (values === undefined || values.length === 0) return undefined;
+  if (spec.filters === "plain") return values.join(",");
   return { value: [...values], modifier: match === "all" ? "INCLUDES_ALL" : "INCLUDES" };
 }
 
@@ -261,16 +266,37 @@ const COMPARISON: Record<DateCompare, Modifier> = {
 };
 
 function dateCriterion(
+  spec: InstanceSpec,
   value: string | undefined,
   compare: DateCompare | undefined,
-): Criterion | undefined {
+): unknown {
   if (value === undefined || compare === undefined) return undefined;
-  return { value, modifier: COMPARISON[compare] };
+  return spec.filters === "plain" ? value : { value, modifier: COMPARISON[compare] };
 }
 
-/** Writes a key only where the caller gave it something to carry. */
-function put(input: Record<string, unknown>, name: string, value: unknown): void {
-  if (value !== undefined) input[name] = value;
+/**
+ * Writes a key where the caller gave it something and the catalogue declares
+ * the field.
+ *
+ * A field a catalogue's own input does not declare is one it cannot receive,
+ * and writing it fails the whole request rather than that one narrowing. The
+ * name is handed back so the answer can say the catalogue received nothing for
+ * it.
+ */
+function put(
+  spec: InstanceSpec,
+  input: Record<string, unknown>,
+  name: string,
+  value: unknown,
+  unreceived: string[],
+  as = name,
+): void {
+  if (value === undefined) return;
+  if (spec.facets !== undefined && !spec.facets.includes(name)) {
+    unreceived.push(as);
+    return;
+  }
+  input[name] = value;
 }
 
 /**
@@ -288,11 +314,23 @@ function ordering(
 ): void {
   const named = sort ?? (spec.requiresOrder ? standing : undefined);
   const way = direction ?? (spec.requiresOrder ? "asc" : undefined);
-  put(input, "sort", named === undefined ? undefined : named.toUpperCase());
-  put(input, "direction", way === undefined ? undefined : way.toUpperCase());
+  if (named !== undefined) input.sort = named.toUpperCase();
+  if (way !== undefined) input.direction = way.toUpperCase();
 }
 
 /* -------------------------------------------------------------- the inputs */
+
+/** A faceted request, with the narrowings the catalogue's own input cannot take. */
+export interface Faceted {
+  input: Record<string, unknown>;
+  unreceived: string[];
+}
+
+/** A whole number, written as the catalogue's input declares it. */
+function numberFilter(spec: InstanceSpec, value: number | undefined): unknown {
+  if (value === undefined) return undefined;
+  return spec.filters === "plain" ? String(value) : value;
+}
 
 export interface SceneNarrowing {
   title?: string;
@@ -311,26 +349,45 @@ export interface SceneNarrowing {
   limit: number;
 }
 
-export function sceneQueryInput(
-  spec: InstanceSpec,
-  narrowing: SceneNarrowing,
-): Record<string, unknown> {
+export function sceneQueryInput(spec: InstanceSpec, narrowing: SceneNarrowing): Faceted {
   const input: Record<string, unknown> = {};
+  const unreceived: string[] = [];
   const match = narrowing.match ?? "all";
-  put(input, "title", narrowing.title);
-  put(input, "alias", narrowing.alias);
-  put(input, "code", textCriterion(narrowing.code));
-  put(input, "date", dateCriterion(narrowing.date, narrowing.dateCompare));
-  put(input, "performers", identifierCriterion(narrowing.performerIds, match));
+  put(spec, input, "title", narrowing.title, unreceived);
+  put(spec, input, "alias", narrowing.alias, unreceived);
+  put(spec, input, "code", textCriterion(spec, narrowing.code), unreceived);
+  put(spec, input, "date", dateCriterion(spec, narrowing.date, narrowing.dateCompare), unreceived);
+  put(
+    spec,
+    input,
+    "performers",
+    identifierCriterion(spec, narrowing.performerIds, match),
+    unreceived,
+    "performer_ids",
+  );
   // A scene carries one studio, so a row carrying two is a row nothing holds,
   // whatever the caller meant by asking for every one of them.
-  put(input, "studios", identifierCriterion(narrowing.studioIds, "any"));
-  put(input, "parentStudio", narrowing.parentStudioId);
-  put(input, "tags", identifierCriterion(narrowing.tagIds, match));
+  put(
+    spec,
+    input,
+    "studios",
+    identifierCriterion(spec, narrowing.studioIds, "any"),
+    unreceived,
+    "studio_ids",
+  );
+  put(spec, input, "parentStudio", narrowing.parentStudioId, unreceived, "parent_studio_id");
+  put(
+    spec,
+    input,
+    "tags",
+    identifierCriterion(spec, narrowing.tagIds, match),
+    unreceived,
+    "tag_ids",
+  );
   ordering(spec, input, narrowing.sort, narrowing.direction, "date");
   input.page = narrowing.page;
   input.per_page = narrowing.limit;
-  return input;
+  return { input, unreceived };
 }
 
 export interface PerformerNarrowing {
@@ -351,26 +408,24 @@ export interface PerformerNarrowing {
   limit: number;
 }
 
-export function performerQueryInput(
-  spec: InstanceSpec,
-  narrowing: PerformerNarrowing,
-): Record<string, unknown> {
+export function performerQueryInput(spec: InstanceSpec, narrowing: PerformerNarrowing): Faceted {
   const input: Record<string, unknown> = {};
-  put(input, "name", narrowing.name);
-  put(input, "alias", narrowing.alias);
-  put(input, "disambiguation", textCriterion(narrowing.disambiguation));
-  put(input, "gender", narrowing.gender);
-  put(input, "country", textCriterion(narrowing.country));
-  put(input, "ethnicity", textCriterion(narrowing.ethnicity));
-  put(input, "birth_year", narrowing.birthYear);
-  put(input, "career_start_year", narrowing.careerStartYear);
-  put(input, "career_end_year", narrowing.careerEndYear);
-  put(input, "performed_with", narrowing.performedWith);
-  put(input, "studio_id", narrowing.studioId);
+  const unreceived: string[] = [];
+  put(spec, input, "name", narrowing.name, unreceived);
+  put(spec, input, "alias", narrowing.alias, unreceived);
+  put(spec, input, "disambiguation", textCriterion(spec, narrowing.disambiguation), unreceived);
+  put(spec, input, "gender", narrowing.gender, unreceived);
+  put(spec, input, "country", textCriterion(spec, narrowing.country), unreceived);
+  put(spec, input, "ethnicity", textCriterion(spec, narrowing.ethnicity), unreceived);
+  put(spec, input, "birth_year", numberFilter(spec, narrowing.birthYear), unreceived);
+  put(spec, input, "career_start_year", numberFilter(spec, narrowing.careerStartYear), unreceived);
+  put(spec, input, "career_end_year", numberFilter(spec, narrowing.careerEndYear), unreceived);
+  put(spec, input, "performed_with", narrowing.performedWith, unreceived);
+  put(spec, input, "studio_id", narrowing.studioId, unreceived);
   ordering(spec, input, narrowing.sort, narrowing.direction, "name");
   input.page = narrowing.page;
   input.per_page = narrowing.limit;
-  return input;
+  return { input, unreceived };
 }
 
 export interface StudioNarrowing {
@@ -383,24 +438,27 @@ export interface StudioNarrowing {
   limit: number;
 }
 
-export function studioQueryInput(
-  spec: InstanceSpec,
-  narrowing: StudioNarrowing,
-): Record<string, unknown> {
+export function studioQueryInput(spec: InstanceSpec, narrowing: StudioNarrowing): Faceted {
   const input: Record<string, unknown> = {};
-  put(input, "name", narrowing.name);
+  const unreceived: string[] = [];
+  put(spec, input, "name", narrowing.name, unreceived);
   put(
+    spec,
     input,
     "parent",
-    narrowing.parentId === undefined
-      ? undefined
-      : { value: narrowing.parentId, modifier: "INCLUDES" },
+    identifierCriterion(
+      spec,
+      narrowing.parentId === undefined ? undefined : [narrowing.parentId],
+      "any",
+    ),
+    unreceived,
+    "parent_id",
   );
-  put(input, "has_parent", narrowing.hasParent);
+  put(spec, input, "has_parent", narrowing.hasParent, unreceived);
   ordering(spec, input, narrowing.sort, narrowing.direction, "name");
   input.page = narrowing.page;
   input.per_page = narrowing.limit;
-  return input;
+  return { input, unreceived };
 }
 
 export interface TagNarrowing {
@@ -412,17 +470,15 @@ export interface TagNarrowing {
   limit: number;
 }
 
-export function tagQueryInput(
-  spec: InstanceSpec,
-  narrowing: TagNarrowing,
-): Record<string, unknown> {
+export function tagQueryInput(spec: InstanceSpec, narrowing: TagNarrowing): Faceted {
   const input: Record<string, unknown> = {};
-  put(input, "name", narrowing.name);
-  put(input, "category_id", narrowing.categoryId);
+  const unreceived: string[] = [];
+  put(spec, input, "name", narrowing.name, unreceived);
+  put(spec, input, "category_id", narrowing.categoryId, unreceived);
   ordering(spec, input, narrowing.sort, narrowing.direction, "name");
   input.page = narrowing.page;
   input.per_page = narrowing.limit;
-  return input;
+  return { input, unreceived };
 }
 
 /* ------------------------------------------------------------ the requests */
