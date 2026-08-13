@@ -151,6 +151,24 @@ function notReceivedOnTheTextPath(plan: Plan): string[] {
   return left;
 }
 
+/**
+ * The blocks a caller asked for that a page of rows carries none of.
+ *
+ * The scenes crediting a performer are read by a scene search of their own, one
+ * per record, so a page of rows would run one search per row to carry them. The
+ * studios are selected where the catalogue publishes the table and nowhere else.
+ * Either one asked for and left unnamed reaches a caller as a record holding
+ * nothing there.
+ */
+function blocksThisRouteNeverAsksFor(spec: InstanceSpec, plan: Plan): string[] {
+  const blocks: string[] = [];
+  if (plan.sections.includes("scenes")) blocks.push("scenes");
+  if (plan.sections.includes("studios") && !supports(spec, "performer_studios")) {
+    blocks.push("studios");
+  }
+  return blocks;
+}
+
 async function askOne(
   ctx: RouteContext,
   ask: Ask,
@@ -158,6 +176,8 @@ async function askOne(
 ): Promise<Contribution<PerformerRecord> | SourceReport> {
   const { spec, apiKey } = ask;
   const report: SourceReport = { source: spec.id, name: spec.name, state: "answered" };
+  const notCarried = blocksThisRouteNeverAsksFor(spec, plan);
+  if (notCarried.length > 0) report.sectionsNotCarried = notCarried;
   let key: string;
   let request: GraphQLRequest;
 

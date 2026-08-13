@@ -86,6 +86,12 @@ export interface SourceReport {
   argumentsWithNothingToDo?: string[];
   /** Fingerprint algorithms its lookup does not search, so it was never asked. */
   algorithmsNotSearched?: string[];
+  /**
+   * Blocks a caller asked each row to carry that this route never asks for. A
+   * block reached by a follow-up read per record is one a page of rows cannot
+   * carry, and its absence is the route rather than a record holding none of it.
+   */
+  sectionsNotCarried?: string[];
   /** The fields its text index read, claimed only where one was consulted. */
   fieldsSearched?: string[];
 }

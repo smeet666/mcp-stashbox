@@ -14,6 +14,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 import { isFolded, markerSuffix } from "../answer/marker.js";
+import { SCENE_COUNT_CAUTION } from "../answer/notes.js";
 import {
   catalogueOf,
   dateText,
@@ -160,13 +161,11 @@ function performerExtras(
     notes.push(
       `${catalogue.name} publishes a count of the scenes crediting a performer and this record carries none, so nothing here counts them.`,
     );
+  } else {
+    notes.push(SCENE_COUNT_CAUTION);
   }
 
-  if (record.imagesSkipped !== undefined && sections.includes("images")) {
-    notes.push(
-      `${record.imagesSkipped} image(s) ${catalogue.name} answered with could not be read and are left out of the block here.`,
-    );
-  }
+  if (sections.includes("images")) notes.push(unread(record.imagesSkipped, "image", catalogue));
 
   if (sections.includes("scenes")) {
     if (record.scenesUnavailable !== undefined) notes.push(record.scenesUnavailable);
@@ -177,23 +176,27 @@ function performerExtras(
           : `${catalogue.name} has indexed ${record.scenesTotal} scene(s) crediting this performer and ${record.scenesShown ?? record.scenes.length} are shown here. That counts what the catalogue indexed and never a person's work.`,
       );
     }
-    if (record.scenesSkipped !== undefined) {
-      notes.push(
-        `${record.scenesSkipped} scene(s) ${catalogue.name} answered with could not be read and are left out of the block here.`,
-      );
-    }
+    notes.push(unread(record.scenesSkipped, "scene", catalogue));
   }
 
   if (sections.includes("studios")) {
     if (record.studiosUnavailable !== undefined) notes.push(record.studiosUnavailable);
-    if (record.studiosSkipped !== undefined) {
-      notes.push(
-        `${record.studiosSkipped} studio(s) ${catalogue.name} answered with could not be read and are left out of the block here.`,
-      );
-    }
+    notes.push(unread(record.studiosSkipped, "studio", catalogue));
   }
 
   return notes;
+}
+
+/**
+ * What a block of this record lost on its way here, said the one way.
+ *
+ * Every block loses rows the same way and owes a reader the same sentence, so
+ * the sentence is written once: a block that phrased its loss differently from
+ * its neighbour would read as a different kind of loss.
+ */
+function unread(count: number | undefined, what: string, catalogue: Catalogue): string | null {
+  if (count === undefined || count === 0) return null;
+  return `${count} ${what}(s) ${catalogue.name} answered with could not be read and are left out of the block here.`;
 }
 
 /**

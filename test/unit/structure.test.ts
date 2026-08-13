@@ -71,7 +71,7 @@ describe("a note never names a field the prose does not print", () => {
     "unattributed",
     "records",
     "result_count",
-    "fingerprints_held",
+    "fingerprints_shown",
     "pending_edits",
   ];
 

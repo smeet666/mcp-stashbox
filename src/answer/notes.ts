@@ -17,8 +17,10 @@
  * has passed is as wrong as one that never fires.
  */
 
+import type { InstanceId } from "../stashbox/instances.js";
 import type { PerformerRecord, RowsResult, SourceReport } from "../types.js";
-import { inlineAll } from "./text.js";
+import { LINKS, TAGS, noTable, nothingRecorded, type Categorised } from "./categories.js";
+import { catalogueOf } from "./records.js";
 
 /** What a rows answer knows about itself, which is all a rule may read. */
 export interface RowsFacts<T> {
@@ -34,6 +36,8 @@ export interface RowsFacts<T> {
     sortedOn?: string;
     bounded: boolean;
     cached: boolean;
+    /** The blocks a caller asked each row to carry, absent where none was named. */
+    sections?: readonly string[];
   };
   /** Rows lost inside the records listed, counted across them. */
   rowsSkipped: number;
@@ -168,9 +172,16 @@ export const countMeaningRule: Rule<unknown> = ({ result }) =>
     ? null
     : "A count reports how many records a catalogue's own index answered with for this question. A thing held by two catalogues is a record on each of them, and each counts it once.";
 
-/** What an index total counts, which is the page under the reader's eyes as well. */
+/**
+ * What an index total counts, which is the page under the reader's eyes as well.
+ *
+ * The sentence describes the rows against the number, so it is owed only where
+ * there are rows: beside an empty page it would place them inside a total they
+ * contribute nothing to, and the note that follows says that same page holds
+ * nothing at all.
+ */
 export const indexTotalRule: Rule<unknown> = ({ result }) =>
-  answering(result.perSource).some((entry) => (entry.indexTotal ?? 0) > 0)
+  result.rows.length > 0 && answering(result.perSource).some((entry) => (entry.indexTotal ?? 0) > 0)
     ? "A catalogue's count of what its index holds for this question has the rows here included, so this page is part of that number."
     : null;
 
@@ -294,22 +305,148 @@ export function storedRule(readAt: string | null): Rule<unknown> {
   };
 }
 
-/** The people credited on these rows whose record the catalogue has folded. */
-export function foldedCreditsRule(
-  namesOf: (result: RowsResult<never>) => readonly { name: string; status: string }[],
-): Rule<never> {
+/**
+ * Why a thing named on these rows carries no category, which two different
+ * silences answer.
+ *
+ * A category left null by a catalogue that publishes the table and one left null
+ * because no table exists are different answers, and a row shows neither. The
+ * rows are read for the list and the registry for the catalogue, so the sentence
+ * is decided by what a catalogue publishes rather than by one row's null.
+ *
+ * It is written once and given the list to read, because a search that answered
+ * this for tags and left it unanswered for links would hand a reader one
+ * uncategorised thing explained and another not.
+ */
+function categoryRule(list: string, kind: Categorised): Rule<unknown> {
   return ({ result }) => {
-    const folded = [
-      ...new Set(
-        namesOf(result)
-          .filter((entry) => entry.status !== "established")
-          .map((entry) => entry.name),
-      ),
-    ];
-    if (folded.length === 0) return null;
-    return `Credited on the rows here and folded on the catalogue that answered: ${inlineAll(folded)}. Each of those credits names a record the catalogue has merged or withdrawn, so what it holds about that person is under another identifier.`;
+    const unpublished: string[] = [];
+    const uncategorised: string[] = [];
+    for (const source of sourcesCarrying(result, list)) {
+      const catalogue = catalogueOf(source);
+      if (!catalogue.publishes(kind.capability)) unpublished.push(catalogue.name);
+      else if (categoriesFrom(result, source, list).some((one) => one === null)) {
+        uncategorised.push(catalogue.name);
+      }
+    }
+    const parts = [
+      unpublished.length === 0 ? null : noTable(unpublished.join(", "), kind),
+      uncategorised.length === 0 ? null : nothingRecorded(uncategorised.join(", "), kind),
+    ].filter((part): part is string => part !== null);
+    return parts.length === 0 ? null : parts.join(" ");
   };
 }
+
+/** Why a tag on these rows carries no category. */
+export const tagCategoryRule = categoryRule("tags", TAGS);
+
+/** Why a link on these rows names no category of site. */
+export const siteCategoryRule = categoryRule("urls", LINKS);
+
+/** A row's own list, which each kind of row spells its own way. */
+interface WithLists {
+  source?: InstanceId;
+  [list: string]: unknown;
+}
+
+/** The catalogues behind rows carrying at least one entry of that list. */
+function sourcesCarrying(result: RowsResult<unknown>, list: string): InstanceId[] {
+  const seen = new Set<InstanceId>();
+  for (const row of result.rows) {
+    const entry = row as WithLists;
+    const carried = entry[list];
+    if (entry.source !== undefined && Array.isArray(carried) && carried.length > 0) {
+      seen.add(entry.source);
+    }
+  }
+  return [...seen];
+}
+
+/** The category each entry of that list names, null included. */
+function categoriesFrom(
+  result: RowsResult<unknown>,
+  source: InstanceId,
+  list: string,
+): (string | null)[] {
+  return result.rows.flatMap((row) => {
+    const entry = row as WithLists;
+    if (entry.source !== source) return [];
+    const carried = entry[list];
+    if (!Array.isArray(carried)) return [];
+    return carried.map((one) => {
+      const held = one as { category?: unknown; siteCategory?: unknown };
+      const category = held.category ?? held.siteCategory ?? null;
+      return typeof category === "string" ? category : null;
+    });
+  });
+}
+
+/**
+ * The precision a date on these rows was entered at.
+ *
+ * A row printing 2019 where the catalogue entered a year alone reads as a
+ * release nobody dated to a day, and a reader takes the first of January from
+ * it. The dates are found by walking each row for a value carrying its own
+ * precision, so a date field added to a record is qualified the day it appears
+ * rather than the day somebody remembers it here.
+ */
+export const datePrecisionRule: Rule<unknown> = ({ result }) => {
+  const short = new Set<string>();
+  for (const row of result.rows) {
+    for (const [key, value] of Object.entries(row as Record<string, unknown>)) {
+      if (value === null || typeof value !== "object") continue;
+      const date = value as { value?: unknown; precision?: unknown };
+      if (typeof date.value !== "string" || typeof date.precision !== "string") continue;
+      if (date.precision !== "day") short.add(`${spelt(key)} entered as a ${date.precision}`);
+    }
+  }
+  if (short.size === 0) return null;
+  return `A date on the rows here is shown at the precision it was entered with: ${[...short].join("; ")}. A month or a day nobody entered is shown nowhere here.`;
+};
+
+/** A field of a record as a sentence names the thing it holds. */
+function spelt(key: string): string {
+  return key.replace(/[A-Z]/g, (letter) => ` ${letter.toLowerCase()}`);
+}
+
+/**
+ * A block a caller asked each row to carry that the route reading them never
+ * asks a catalogue for.
+ *
+ * A block asked for and answered nowhere leaves a caller reading an absent key
+ * as a record holding none of it, which states an emptiness no catalogue was
+ * asked about.
+ */
+export const sectionsNotCarriedRule: Rule<unknown> = ({ result }) => {
+  const parts: string[] = [];
+  for (const entry of result.perSource) {
+    const blocks = entry.sectionsNotCarried ?? [];
+    if (blocks.length === 0) continue;
+    parts.push(`${blocks.join(", ")} at ${entry.name ?? entry.source}`);
+  }
+  if (parts.length === 0) return null;
+  return `A block asked for was never asked for on this route, so no row here carries it and no catalogue was asked about it: ${parts.join("; ")}. Read one record for what it holds there.`;
+};
+
+/**
+ * A block a caller asked for that reaches the payload and no line of the prose.
+ *
+ * A reader of the text block alone sees the row without it and reads a record
+ * carrying none, so the block is named where it went.
+ */
+export const sectionsUnprintedRule: Rule<unknown> = ({ result, asked }) => {
+  if (result.rows.length === 0) return null;
+  const carried = result.perSource.flatMap((entry) => entry.sectionsNotCarried ?? []);
+  const quiet = (asked.sections ?? []).filter(
+    (name) => name !== "basic" && !carried.includes(name),
+  );
+  if (quiet.length === 0) return null;
+  return `These blocks are carried in the payload of this answer and printed nowhere in the rows above: ${quiet.join(", ")}. A row printed without one is no record holding none of it.`;
+};
+
+/** What a scene count reports, which is coverage on the catalogue that published it. */
+export const SCENE_COUNT_CAUTION =
+  "A scene count is what the catalogue naming it has indexed for that record, so it reports that catalogue's coverage and says nothing about a career: a settled record can carry a count of none while naming decades of work.";
 
 /**
  * The words asked for, where no row printed here carries one of them.
@@ -358,9 +495,7 @@ export function unreadableDatesRule<T>(datesOf: (row: T) => readonly string[]): 
  * and a count of thirty are both coverage on the catalogue that published them.
  */
 export const sceneCountRule: Rule<PerformerRecord> = ({ result }) =>
-  result.rows.some((row) => row.sceneCount !== null)
-    ? "A scene count is what the catalogue naming it has indexed for that record, so it reports that catalogue's coverage and says nothing about a career: a settled record can carry a count of none while naming decades of work."
-    : null;
+  result.rows.some((row) => row.sceneCount !== null) ? SCENE_COUNT_CAUTION : null;
 
 /**
  * Run an ordered list of rules over one answer.

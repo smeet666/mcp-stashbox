@@ -109,6 +109,12 @@ export const sourceReport = z.object({
     .describe(
       "Fingerprint algorithms this catalogue's lookup does not search, so they were never put to it and its silence is no evidence about them.",
     ),
+  sections_not_carried: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "Blocks asked for that this route never asks a catalogue for, so no row carries one and its absence is the route rather than a record holding none of it.",
+    ),
   reason: z.string().optional().describe("Why it was not asked, or what went wrong where it was."),
   moment: z
     .string()

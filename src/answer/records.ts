@@ -33,6 +33,7 @@ import {
   markerSectionsNote,
   markerSuffix,
 } from "./marker.js";
+import { LINKS, TAGS, noTable, nothingRecorded, type Categorised } from "./categories.js";
 import { inline } from "./text.js";
 
 /* ------------------------------------------------------- the catalogue */
@@ -127,8 +128,42 @@ export function tagsText(tags: readonly TagRow[]): string {
 
 /* ------------------------------------------------------------ the payload */
 
-function datePayload(date: ReadDate | null): Record<string, string> | null {
+export function datePayload(date: ReadDate | null): Record<string, string> | null {
   return date === null ? null : { value: date.value, precision: date.precision };
+}
+
+/**
+ * A studio as every answer naming one publishes it.
+ *
+ * A studio is named by a scene read on its own and by a scene a hash reached,
+ * and the two publish one shape: a caller reading a studio out of either answer
+ * reads the same fields, and a mark added here reaches both.
+ */
+export function studioPayload(studio: SceneRecord["studio"]): Record<string, unknown> | null {
+  if (studio === null) return null;
+  return {
+    id: studio.id,
+    name: studio.name,
+    parent: studio.parent,
+    status: studio.status,
+    ...(studio.parentWithdrawn === true ? { parent_withdrawn: true } : {}),
+  };
+}
+
+/**
+ * The cast a scene credits, each with what its own identifier addresses now.
+ *
+ * A credit whose record the catalogue has folded is held under another
+ * identifier, so the status travels wherever the cast does.
+ */
+export function creditsPayload(credits: SceneRecord["performers"]): Record<string, unknown>[] {
+  return credits.map((credit) => ({
+    id: credit.id,
+    name: credit.name,
+    credited_as: credit.creditedAs,
+    disambiguation: credit.disambiguation,
+    status: credit.status,
+  }));
 }
 
 function linksPayload(links: readonly SiteLink[]): Record<string, unknown>[] {
@@ -181,23 +216,8 @@ export function scenePayload(
     production_date: datePayload(record.productionDate),
     ...(record.releaseDateUnreadable === true ? { release_date_unreadable: true } : {}),
     ...(record.productionDateUnreadable === true ? { production_date_unreadable: true } : {}),
-    studio:
-      record.studio === null
-        ? null
-        : {
-            id: record.studio.id,
-            name: record.studio.name,
-            parent: record.studio.parent,
-            status: record.studio.status,
-            ...(record.studio.parentWithdrawn === true ? { parent_withdrawn: true } : {}),
-          },
-    performers: record.performers.map((credit) => ({
-      id: credit.id,
-      name: credit.name,
-      credited_as: credit.creditedAs,
-      disambiguation: credit.disambiguation,
-      status: credit.status,
-    })),
+    studio: studioPayload(record.studio),
+    performers: creditsPayload(record.performers),
     tags: record.tags.map((tag) => ({
       id: tag.id,
       name: tag.name,
@@ -226,7 +246,7 @@ export function scenePayload(
             : {}),
           ...(record.fingerprintCount === undefined
             ? {}
-            : { fingerprints_held: record.fingerprintCount }),
+            : { fingerprints_shown: record.fingerprintCount }),
         }
       : {}),
     created: record.created,
@@ -308,7 +328,7 @@ export function performerPayload(
                 })),
                 ...(record.studiosTotal === undefined
                   ? {}
-                  : { studios_total: record.studiosTotal }),
+                  : { studios_answered_with: record.studiosTotal }),
               }),
           ...(record.studiosSkipped ? { studios_skipped: record.studiosSkipped } : {}),
           ...(record.studiosUnavailable === undefined
@@ -445,24 +465,38 @@ function editNote(facts: RecordFacts): string | null {
 
 /** Why a link carries no category, which two different silences answer. */
 function siteCategoryNote(facts: RecordFacts): string | null {
-  if (facts.links.length === 0) return null;
-  const { catalogue } = facts;
-  if (!catalogue.publishes("site_categories")) {
-    return `${catalogue.name} publishes no table sorting the sites a record links to, so no link here carries a category, and none of them is a site it placed outside every category.`;
-  }
-  if (!facts.links.some((link) => link.siteCategory === null)) return null;
-  return `${catalogue.name} publishes a table sorting the sites a record links to, and a link here carries no category, which is a category nobody recorded for that site.`;
+  return categoryNote(
+    facts,
+    LINKS,
+    facts.links.map((link) => link.siteCategory),
+  );
 }
 
 /** Why a tag carries no category, which two different silences answer. */
 function tagCategoryNote(facts: RecordFacts): string | null {
-  if (facts.tags.length === 0) return null;
+  return categoryNote(
+    facts,
+    TAGS,
+    facts.tags.map((tag) => tag.category),
+  );
+}
+
+/**
+ * The one answer to a category nobody recorded, given the list that carries it.
+ *
+ * A page of rows answers this same question about these same lists, and the two
+ * read the sentences from one place: a record and a row that worded it
+ * differently would read as two different findings about one silence.
+ */
+function categoryNote(
+  facts: RecordFacts,
+  kind: Categorised,
+  categories: readonly (string | null)[],
+): string | null {
+  if (categories.length === 0) return null;
   const { catalogue } = facts;
-  if (!catalogue.publishes("tag_categories")) {
-    return `${catalogue.name} publishes no taxonomy sorting the tags a record carries, so no tag here carries a category, and none of them is a tag it left uncategorised.`;
-  }
-  if (!facts.tags.some((tag) => tag.category === null)) return null;
-  return `${catalogue.name} publishes a taxonomy sorting the tags a record carries, and a tag here carries no category, which is a category nobody recorded for that tag.`;
+  if (!catalogue.publishes(kind.capability)) return noTable(catalogue.name, kind);
+  return categories.some((one) => one === null) ? nothingRecorded(catalogue.name, kind) : null;
 }
 
 /* ------------------------------------------------- records named inside one */
@@ -534,8 +568,10 @@ function foldedNamesNote(facts: RecordFacts): string | null {
   for (const object of nested(facts.payload, true)) {
     const status = object.status;
     if (typeof status !== "string" || status === "established") continue;
+    // Any name at all is enough. A short one names a record as surely as a long
+    // one, and dropping it leaves that record printed without its mark.
     const name = [object.title, object.name].find(
-      (value): value is string => typeof value === "string" && value.trim().length > 2,
+      (value): value is string => typeof value === "string" && value.trim().length > 0,
     );
     if (name === undefined) continue;
     marked.set(name, `${name}${markerSuffix(status as RecordStatus)}`);

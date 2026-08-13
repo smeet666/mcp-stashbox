@@ -5,6 +5,60 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-08-13
+
+The qualifications a record carried when it was read on its own now travel with
+it when it comes back on a page of rows, and two counters are renamed to say what
+they count. Nothing here changes what a catalogue is asked; every change is about
+what an answer states beside the rows.
+
+### Changed
+
+- `fingerprints_held` is now `fingerprints_shown`. It counts the fingerprints
+  published in the answer, and a hash the catalogue answered with that this
+  client could not read is counted in `fingerprints_skipped` and in neither of
+  the per-algorithm numbers. Under the old name a record whose rows were partly
+  unreadable reported holding fewer hashes than it holds.
+- `studios_total` on a performer is now `studios_answered_with`. The table comes
+  back whole, so nothing stands behind it, and the number counts the rows the
+  catalogue answered with, those left out and counted in `studios_skipped`
+  included.
+- A per-catalogue report can carry `sections_not_carried`, naming the blocks a
+  caller asked for that the route never asks that catalogue for.
+
+### Added
+
+- The searches say why a tag or a link on their rows carries no category, which
+  a record read on its own already said. A catalogue keeping no such table and
+  one that kept the table and recorded nothing are different answers, and the
+  sentences are now written in one place, so a record and a row word the silence
+  identically.
+- The searches state the precision a date on their rows was entered at, so a row
+  showing 2019 is not read as a release somebody dated to the first of January.
+- `search_performers` names `scenes` as a block it never asks a catalogue for.
+  The scenes crediting a performer are read by a search of their own, one per
+  record, so a page of rows carries none: the block was accepted, answered
+  nowhere and explained nowhere.
+- `get_performer` states what a scene count measures wherever it prints one,
+  which `search_performers` already stated on its rows.
+- The instructions name a catalogue whose fingerprint route searches no
+  perceptual hash, which is measured in the registry and was said nowhere.
+- Blocks a caller asked for that reach the payload and no line of the prose are
+  named, so a client showing the text alone knows where the rest of the answer
+  is.
+
+### Fixed
+
+- A count of what a catalogue's index holds no longer states that the rows here
+  are part of it when the page carries no row, where the note that follows says
+  that page holds nothing at all.
+- A `window` is published only where a catalogue that answered received the page
+  it names. A route that reads words alone takes no page, and the window
+  described a paging nobody performed.
+- A folded record named inside an answer is marked whatever the length of its
+  name. A name of one or two characters was printed unmarked, so a caller read a
+  record the catalogue no longer holds as itself.
+
 ## [0.3.1] - 2026-08-12
 
 Six routes of 0.3.0 reached no catalogue. The documents were written from the

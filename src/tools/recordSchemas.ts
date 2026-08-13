@@ -230,15 +230,15 @@ export const sceneRecord = z.object({
     .number()
     .optional()
     .describe("Fingerprints the catalogue answered with that this client could not read."),
-  fingerprints_held: z
+  fingerprints_shown: z
     .object({
-      MD5: z.number().optional().describe("How many exact-file hashes of that kind it holds."),
-      OSHASH: z.number().optional().describe("How many exact-file hashes of that kind it holds."),
-      PHASH: z.number().optional().describe("How many perceptual hashes it holds."),
+      MD5: z.number().optional().describe("How many exact-file hashes of that kind are shown."),
+      OSHASH: z.number().optional().describe("How many exact-file hashes of that kind are shown."),
+      PHASH: z.number().optional().describe("How many perceptual hashes are shown."),
     })
     .optional()
     .describe(
-      "How many hashes the record holds per algorithm, which counts what it holds and never what is shown here.",
+      "How many hashes are shown here per algorithm. A hash the catalogue answered with that this client could not read is counted in fingerprints_skipped and in none of these, so what the record holds is the two together.",
     ),
   created: z
     .string()
@@ -364,7 +364,12 @@ export const performerRecord = z.object({
     .array(performerStudio)
     .optional()
     .describe("The studios this catalogue credits the performer on, asked for as a block."),
-  studios_total: z.number().optional().describe("How many the catalogue holds behind this list."),
+  studios_answered_with: z
+    .number()
+    .optional()
+    .describe(
+      "How many rows the catalogue answered this table with, the ones counted in studios_skipped included. The whole table comes back at once, so nothing stands behind it.",
+    ),
   studios_skipped: z
     .number()
     .optional()

@@ -64,6 +64,10 @@ export function instructionsFor(configured: readonly InstanceSpec[]): string {
     "count of the reports against a fingerprint, so a match from it carries an unknown contest",
   );
   lacking("index_total", "count of what its index holds beyond the page returned");
+  lacking(
+    "perceptual_lookup",
+    "fingerprint route that searches perceptual hashes, so a PHASH is never put to it and its silence about one is no evidence",
+  );
   lacking("pending_edits", "count of the edits open against a record");
   lacking("scene_count", "count of the scenes it indexes for a performer");
   lacking("performer_studios", "table of the studios a performer is credited on");

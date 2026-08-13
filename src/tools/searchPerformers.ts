@@ -15,7 +15,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
-import { ROWS_PER_PAGE, rowsFacts, rowsNotes } from "../answer/rows.js";
+import { ROWS_PER_PAGE, rowsFacts, rowsNotes, windowFor } from "../answer/rows.js";
 import {
   queryUncarriedRule,
   sceneCountRule,
@@ -67,6 +67,8 @@ export interface PerformerAsked {
   narrowed?: boolean;
   /** When a replayed answer was first read. */
   readAt?: string | null;
+  /** The blocks the caller asked each row to carry. */
+  sections?: readonly string[];
 }
 
 interface Window {
@@ -99,6 +101,7 @@ export function renderPerformerRows(
       ...(asked?.sortedOn === undefined ? {} : { sortedOn: asked.sortedOn }),
       bounded: asked?.bounded ?? false,
       cached: asked?.cached ?? false,
+      ...(asked?.sections === undefined ? {} : { sections: asked.sections }),
     },
     window,
   );
@@ -277,20 +280,18 @@ export function registerSearchPerformers(server: McpServer, client: StashboxClie
         });
 
         const identifiersGiven = args.performed_with !== undefined || args.studio_id !== undefined;
-        // A window states a page a catalogue paged through. Where every
-        // catalogue asked failed, the emptiness is the failure's and sits
-        // inside no window at all.
-        const answered = read.data.perSource.some((report) => report.state === "answered");
+
         const rendered = renderPerformerRows(
           read.data,
           args.query ?? null,
-          answered ? { page: args.page ?? 1, limit: args.limit ?? ROWS_PER_PAGE } : undefined,
+          windowFor(read.data.perSource, args.page ?? 1, args.limit ?? ROWS_PER_PAGE),
           {
             sorted: args.sort === "created" || args.sort === "updated",
             ...(args.sort === undefined ? {} : { sortedOn: args.sort }),
             identifiersGiven,
             bounded: args.limit !== undefined,
             cached: read.cached,
+            ...(args.sections === undefined ? {} : { sections: args.sections }),
             narrowed:
               args.query !== undefined ||
               args.name !== undefined ||

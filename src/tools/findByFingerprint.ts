@@ -34,6 +34,7 @@ import {
   type Rule,
   type RowsFacts,
 } from "../answer/notes.js";
+import { creditsPayload, datePayload, studioPayload } from "../answer/records.js";
 import { reportBlock, reportPayload } from "../answer/report.js";
 import { inline, joinLines, notesBlock, section, type Rendered } from "../answer/text.js";
 import type { FindByFingerprintInput, StashboxClient } from "../stashbox/client.js";
@@ -144,7 +145,6 @@ function matchLines(match: FingerprintMatch): string[] {
  * its fingerprints included: one of the rows lost may be the hash asked about.
  */
 function scenePayload(scene: SceneRecord): Record<string, unknown> {
-  const studio = scene.studio;
   return {
     id: scene.id,
     source: scene.source,
@@ -154,27 +154,10 @@ function scenePayload(scene: SceneRecord): Record<string, unknown> {
     title: scene.title,
     code: scene.code,
     duration_seconds: scene.durationSeconds,
-    release_date: scene.releaseDate,
+    release_date: datePayload(scene.releaseDate),
     ...(scene.releaseDateUnreadable === true ? { release_date_unreadable: true } : {}),
-    studio:
-      studio === null
-        ? null
-        : {
-            id: studio.id,
-            name: studio.name,
-            parent: studio.parent,
-            status: studio.status,
-            ...(studio.parentWithdrawn === true ? { parent_withdrawn: true } : {}),
-          },
-    // The cast the record credits, each with what its own identifier addresses
-    // now: one the catalogue has folded is held under another identifier.
-    performers: scene.performers.map((entry) => ({
-      id: entry.id,
-      name: entry.name,
-      credited_as: entry.creditedAs,
-      disambiguation: entry.disambiguation,
-      status: entry.status,
-    })),
+    studio: studioPayload(scene.studio),
+    performers: creditsPayload(scene.performers),
     ...(scene.rowsSkipped === undefined ? {} : { rows_skipped: scene.rowsSkipped }),
     ...(scene.rowsSkippedIn === undefined ? {} : { rows_skipped_in: scene.rowsSkippedIn }),
   };

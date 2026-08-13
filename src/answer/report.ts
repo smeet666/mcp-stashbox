@@ -16,32 +16,40 @@ import { instanceById } from "../stashbox/instances.js";
 import type { SourceReport } from "../types.js";
 import { inline } from "./text.js";
 
-/** Every field of a report, under the name the published schema declares. */
+/**
+ * Every field of a report, under the name the published schema declares.
+ *
+ * The pairs are listed once, in the order a reader meets them, and a field a
+ * report does not carry is left out rather than published as a null: a null
+ * there would state a catalogue that took no narrowing away, which is a
+ * different answer from one nothing was recorded about.
+ */
 export function reportPayload(reports: readonly SourceReport[]): Record<string, unknown>[] {
-  return reports.map((entry) => ({
-    source: entry.source,
-    ...maybe("name", entry.name),
-    state: entry.state,
-    ...maybe("count", entry.count),
-    ...maybe("records", entry.records),
-    ...maybe("unattributed", entry.unattributed),
-    ...maybe("skipped", entry.skipped),
-    ...maybe("index_total", entry.indexTotal),
-    ...maybe("fields_searched", entry.fieldsSearched),
-    ...maybe("narrowings_not_received", entry.narrowingsNotReceived),
-    ...maybe("narrowings_outside_this_route", entry.narrowingsOutsideThisRoute),
-    ...maybe("narrowings_naming_no_record_here", entry.narrowingsNamingNoRecord),
-    ...maybe("narrowings_received_in_part", entry.narrowingsReceivedInPart),
-    ...maybe("arguments_with_nothing_to_do", entry.argumentsWithNothingToDo),
-    ...maybe("algorithms_not_searched", entry.algorithmsNotSearched),
-    ...maybe("reason", entry.reason),
-    ...maybe("moment", entry.moment),
-    ...maybe("error", entry.error),
-  }));
-}
-
-function maybe<T>(name: string, value: T | undefined): Record<string, T> | Record<string, never> {
-  return value === undefined ? {} : { [name]: value };
+  return reports.map((entry) => {
+    const payload: Record<string, unknown> = { source: entry.source };
+    const put = (name: string, value: unknown) => {
+      if (value !== undefined) payload[name] = value;
+    };
+    put("name", entry.name);
+    payload.state = entry.state;
+    put("count", entry.count);
+    put("records", entry.records);
+    put("unattributed", entry.unattributed);
+    put("skipped", entry.skipped);
+    put("index_total", entry.indexTotal);
+    put("fields_searched", entry.fieldsSearched);
+    put("narrowings_not_received", entry.narrowingsNotReceived);
+    put("narrowings_outside_this_route", entry.narrowingsOutsideThisRoute);
+    put("narrowings_naming_no_record_here", entry.narrowingsNamingNoRecord);
+    put("narrowings_received_in_part", entry.narrowingsReceivedInPart);
+    put("arguments_with_nothing_to_do", entry.argumentsWithNothingToDo);
+    put("algorithms_not_searched", entry.algorithmsNotSearched);
+    put("sections_not_carried", entry.sectionsNotCarried);
+    put("reason", entry.reason);
+    put("moment", entry.moment);
+    put("error", entry.error);
+    return payload;
+  });
 }
 
 /**
@@ -83,6 +91,9 @@ export function reportLines(reports: readonly SourceReport[]): string[] {
         : "",
       report.algorithmsNotSearched?.length
         ? `; does not search ${report.algorithmsNotSearched.join(", ")}`
+        : "",
+      report.sectionsNotCarried?.length
+        ? `; this route asks it for none of ${report.sectionsNotCarried.join(", ")}`
         : "",
       report.narrowingsReceivedInPart?.length
         ? `; received only its own identifiers out of ${report.narrowingsReceivedInPart.join(", ")}`

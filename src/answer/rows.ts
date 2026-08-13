@@ -14,12 +14,13 @@
  * the two that change what the rows mean.
  */
 
-import type { PerformerRecord, RowsResult, SceneRecord } from "../types.js";
+import type { PerformerRecord, RowsResult, SceneRecord, SourceReport } from "../types.js";
 import {
   absentNarrowingRule,
   countMeaningRule,
   countsNeverAddedRule,
   coverageRule,
+  datePrecisionRule,
   emptyPageRule,
   failureRule,
   foldedNarrowingRule,
@@ -31,8 +32,12 @@ import {
   overLimitRule,
   rowsSkippedRule,
   runRules,
+  sectionsNotCarriedRule,
+  sectionsUnprintedRule,
+  siteCategoryRule,
   skippedRule,
   storedRule,
+  tagCategoryRule,
   uncheckedNarrowingRule,
   unnarrowedRule,
   type Rule,
@@ -68,7 +73,13 @@ export function rowsRules<T>(what: string, readAt: string | null): Rule<T>[] {
     foldedNarrowingRule,
     absentNarrowingRule,
     uncheckedNarrowingRule,
+    // What the fields of a row do and do not establish.
+    datePrecisionRule,
+    tagCategoryRule,
+    siteCategoryRule,
     // What is missing from the rows that are here.
+    sectionsNotCarriedRule,
+    sectionsUnprintedRule,
     rowsSkippedRule,
     skippedRule,
     // Which catalogues are missing from the answer entirely.
@@ -78,6 +89,28 @@ export function rowsRules<T>(what: string, readAt: string | null): Rule<T>[] {
     // Where the answer came from, which qualifies everything above it.
     storedRule(readAt),
   ] as Rule<T>[];
+}
+
+/**
+ * The page an answer was read through, where a catalogue paged through one.
+ *
+ * A window states which page of a catalogue's own order the rows come from.
+ * Where the question reached nobody, or where every catalogue that answered was
+ * never given the page, the rows are each catalogue's own first page, and a
+ * window naming another would describe a paging nobody performed.
+ */
+export function windowFor(
+  reports: readonly SourceReport[],
+  page: number,
+  limit: number,
+): { page: number; limit: number } | undefined {
+  const paged = reports.filter(
+    (entry) =>
+      entry.state === "answered" &&
+      !(entry.narrowingsNotReceived ?? []).includes("page") &&
+      !(entry.narrowingsOutsideThisRoute ?? []).includes("page"),
+  );
+  return paged.length === 0 ? undefined : { page, limit };
 }
 
 /** The shared facts of a rows answer, gathered once from the result. */
