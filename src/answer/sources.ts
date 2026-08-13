@@ -1,11 +1,10 @@
 /**
- * The registry, published as data rather than as prose.
+ * The registry, published as data.
  *
- * What a catalogue answers used to live in the sentences this server said about
- * itself, and one of those sentences was false for several versions: it told
- * every caller that a catalogue answered no search at all, and that catalogue
- * answers two. Prose cannot be put to a catalogue. A table can, and the live
- * suite does exactly that with what this file publishes.
+ * A claim about a catalogue held in prose is a claim nothing can check: no
+ * suite can put a sentence to a catalogue and see whether it holds. A table
+ * can, and the live suite walks exactly what this file publishes, asking each
+ * catalogue every question the table says it answers.
  *
  * Two facts stay apart here, because a caller acts on one of them and can do
  * nothing about the other. **A missing key is the operator's to fix.** **A route
