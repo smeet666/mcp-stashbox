@@ -216,8 +216,10 @@ describe("what an identifier addresses now", () => {
   });
 
   it("reads a performer folded into another as merged, naming the successor", () => {
+    // The catalogue's own flag decides: a record it still holds as itself is
+    // held, and a successor named beside that changes nothing about it.
     const read = readPerformer(
-      { id: UUID2, name: "A", deleted: false, merged_into_id: UUID, merged_ids: [] },
+      { id: UUID2, name: "A", deleted: true, merged_into_id: UUID, merged_ids: [] },
       SD,
       AT,
     );

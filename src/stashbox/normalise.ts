@@ -83,10 +83,7 @@ export function positiveOrNull(value: number | null | undefined): number | null 
  * deleted record naming a successor is answered with that successor, since
  * `not_found` would deny a record that exists under another name.
  */
-export function readStatus(
-  deleted: boolean | null | undefined,
-  successor: string | null | undefined,
-): RecordStatus {
+export function readStatus(deleted: unknown, successor: unknown): RecordStatus {
   if (deleted !== true) return "established";
   return typeof successor === "string" && successor !== "" ? "merged" : "deleted";
 }
