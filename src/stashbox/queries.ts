@@ -22,7 +22,14 @@
  * has no column for fails the whole request rather than the one field.
  */
 
-import { routeFor, supports, type Capability, type InstanceSpec } from "./instances.js";
+import { invalidInput } from "../errors.js";
+import {
+  answersWith,
+  routeFor,
+  supports,
+  type Capability,
+  type InstanceSpec,
+} from "./instances.js";
 
 /** A request as the transport takes one, with the route it was built for. */
 export interface Request {
@@ -53,8 +60,13 @@ function routeOn(spec: InstanceSpec, capability: Capability): string {
   const route = routeFor(spec, capability);
   if (route === undefined || !supports(spec, capability)) {
     // Building a request for a route a catalogue does not answer would send it
-    // one, and the refusal would come back as a fact about the catalogue.
-    throw new Error(`${spec.name} was not measured answering ${capability}`);
+    // one, and the refusal would come back as a fact about the catalogue. The
+    // layer above chooses which catalogues a question reaches, so this is the
+    // backstop for a question that got past it.
+    throw invalidInput(
+      `${spec.name} was not measured answering ${capability}, so this client asks it nothing on that route and its silence is no evidence about it.`,
+      `Ask ${capability} of a catalogue get_sources names as answering it.`,
+    );
   }
   return route;
 }
@@ -68,8 +80,24 @@ function siteSelection(spec: InstanceSpec): string {
   return supports(spec, "site_categories") ? "site { id name description }" : "site { id name }";
 }
 
-function editsSelection(spec: InstanceSpec): string {
-  return supports(spec, "pending_edits") ? "edits { id }" : "";
+/**
+ * The edits open against a record, selected where they can be.
+ *
+ * Two facts have to hold at once. The catalogue publishes a count of open
+ * edits, which the registry says; and the kind of record declares the field at
+ * all. Measured on 2026-08-13: a scene, a performer and a tag each declare it,
+ * and a studio declares none, so asking a studio for it fails the whole
+ * request rather than the one field.
+ */
+const CARRIES_EDITS: Record<RecordKind, boolean> = {
+  scene: true,
+  performer: true,
+  tag: true,
+  studio: false,
+};
+
+function editsSelection(spec: InstanceSpec, kind: RecordKind): string {
+  return supports(spec, "pending_edits") && CARRIES_EDITS[kind] ? "edits { id }" : "";
 }
 
 const SCENE_BASIC = [
@@ -113,7 +141,7 @@ function sceneSelection(spec: InstanceSpec, sections: readonly SceneSection[]): 
     ...SCENE_BASIC,
     `tags { id name deleted ${tagCategory} }`,
     `urls { url ${siteSelection(spec)} }`,
-    editsSelection(spec),
+    editsSelection(spec, "scene"),
     sections.includes("images") ? IMAGES : "",
     sections.includes("fingerprints") ? fingerprintSelection(spec) : "",
   ]);
@@ -143,7 +171,7 @@ function performerSelection(spec: InstanceSpec, sections: readonly PerformerSect
     "updated",
     supports(spec, "scene_count") ? "scene_count" : "",
     `urls { url ${siteSelection(spec)} }`,
-    editsSelection(spec),
+    editsSelection(spec, "performer"),
     sections.includes("appearance") ? lines(APPEARANCE) : "",
     sections.includes("images") ? IMAGES : "",
     sections.includes("studios") && supports(spec, "performer_studios")
@@ -160,7 +188,7 @@ function studioSelection(spec: InstanceSpec): string {
     "deleted",
     "parent { id name deleted }",
     `urls { url ${siteSelection(spec)} }`,
-    editsSelection(spec),
+    editsSelection(spec, "studio"),
     IMAGES,
   ]);
 }
@@ -173,7 +201,7 @@ function tagSelection(spec: InstanceSpec): string {
     "aliases",
     "deleted",
     supports(spec, "tag_categories") ? "category { id name group description }" : "",
-    editsSelection(spec),
+    editsSelection(spec, "tag"),
   ]);
 }
 
@@ -413,14 +441,24 @@ export function searchRequest(
   term: string,
   limit: number,
   sections: readonly string[] = ["basic"],
-): Request {
+): Request & { paged: boolean } {
   const operation = routeOn(spec, SEARCHES[kind]);
   const record: RecordKind = kind.slice(0, -1) as RecordKind;
+  // One catalogue wraps the rows of a text search in a page carrying a count
+  // of its own, and another answers the rows alone. Reading either as the
+  // other makes the request fail validation before a row is ever seen, so the
+  // shape is read from the registry rather than assumed.
+  const paged = answersWith(spec, SEARCHES[kind]) === "page";
+  const count = paged && supports(spec, "index_total") ? "count\n    " : "";
+  const rows = paged
+    ? `${count}${ROWS_UNDER[kind]} {\n      ${selectionFor(spec, record, sections)}\n    }`
+    : selectionFor(spec, record, sections);
   return {
     operation,
+    paged,
     query: `query Search($term: String!, $limit: Int) {
   ${operation}(term: $term, limit: $limit) {
-    ${selectionFor(spec, record, sections)}
+    ${rows}
   }
 }`,
     variables: { term, limit },

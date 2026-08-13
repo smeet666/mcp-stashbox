@@ -163,13 +163,30 @@ describe("the em dash stays in the attribution line", () => {
 });
 
 describe("every error this server raises carries one of the six codes", () => {
+  it("opens every issue the validator is given with a code a caller branches on", () => {
+    // A message the validator writes on its own arrives without one, so every
+    // issue this server adds carries the code in the words a caller reads.
+    for (const found of ALL.matchAll(/addIssue\(\{[\s\S]{0,400}?\}\)/g)) {
+      expect(
+        found[0].includes("${CODE}") || /\[[a-z_]+\]/.test(found[0]),
+        `an issue reaches a caller with no code: ${found[0].slice(0, 80)}`,
+      ).toBe(true);
+    }
+  });
+
   it("constructs no error outside the declared taxonomy", () => {
     // Six and not one more. A seventh would be a state a caller has no branch
     // for, and would reach them as prose alone.
     const constructors = [
       ...ALL.matchAll(/new StashboxError\(\s*"([a-z_]+)"/g),
       ...ALL.matchAll(/\bcode:\s*"([a-z_]+)"/g),
-    ].map((match) => match[1]);
+    ]
+      .map((match) => match[1])
+      // The validator has a vocabulary of its own for the kind of issue it
+      // raises, which is not this server's taxonomy. What a caller reads from
+      // one is held to the six codes by the case below, and by the whole of
+      // the refusal suite.
+      .filter((code) => code !== "custom");
     const allowed = new Set([
       "not_found",
       "invalid_input",

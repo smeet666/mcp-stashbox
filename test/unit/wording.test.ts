@@ -14,11 +14,8 @@
 
 import { describe, expect, it } from "vitest";
 
-import { catalogues, identifiers, severalOf } from "../../src/tools/arguments.js";
+import { catalogues, severalOf } from "../../src/tools/arguments.js";
 import { blockLoss } from "../../src/answer/render.js";
-
-const UUID = "94ef9c17-82c6-48b0-8dcc-063b69231960";
-const RETRIEVED_AT = "2026-08-11T00:00:00.000Z";
 
 /** The messages of a refusal, or a failure saying the input was accepted. */
 function refusal(schema: { safeParse: (value: unknown) => unknown }, input: unknown): string {

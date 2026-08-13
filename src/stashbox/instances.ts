@@ -70,6 +70,15 @@ export interface InstanceSpec {
   capabilities: readonly Capability[];
   /** The route each capability was measured on, in that catalogue's own spelling. */
   routes: Partial<Record<Capability, string>>;
+  /**
+   * What a text search route was measured answering with.
+   *
+   * A `page` carries the rows under a key of its own beside a count of what the
+   * index holds; a `list` is the rows and nothing else. Two catalogues answer
+   * one capability in the two different shapes, so reading either as the other
+   * makes the request fail validation before a row is ever seen.
+   */
+  answersWith: Partial<Record<Capability, "list" | "page">>;
   /** The day the surface above was read from the catalogue itself. */
   measuredAt: string;
   /**
@@ -108,6 +117,14 @@ const READ_ON_STASHDB: Partial<Record<Capability, string>> = {
   performer_studios: "findPerformer.studios",
 };
 
+/** What each search route of the reference instance was measured answering with. */
+const SHAPES_ON_STASHDB: Partial<Record<Capability, "list" | "page">> = {
+  search_scenes: "page",
+  search_performers: "page",
+  search_studios: "list",
+  search_tags: "list",
+};
+
 export const INSTANCES: readonly InstanceSpec[] = [
   {
     id: "stashdb",
@@ -117,6 +134,7 @@ export const INSTANCES: readonly InstanceSpec[] = [
     envVar: "STASHBOX_STASHDB_KEY",
     capabilities: Object.keys(READ_ON_STASHDB) as Capability[],
     routes: READ_ON_STASHDB,
+    answersWith: SHAPES_ON_STASHDB,
     measuredAt: "2026-08-13",
   },
   {
@@ -149,6 +167,9 @@ export const INSTANCES: readonly InstanceSpec[] = [
       get_tag: "findTag",
       find_by_fingerprint: "findScenesBySceneFingerprints",
     },
+    // Its two search routes answer with the rows alone, where the reference
+    // instance wraps them in a page carrying a count of its own.
+    answersWith: { search_scenes: "list", search_performers: "list" },
     measuredAt: "2026-08-13",
     requiresOrder: true,
   },
@@ -160,6 +181,7 @@ export const INSTANCES: readonly InstanceSpec[] = [
     envVar: "STASHBOX_FANSDB_KEY",
     capabilities: Object.keys(READ_ON_STASHDB) as Capability[],
     routes: READ_ON_STASHDB,
+    answersWith: SHAPES_ON_STASHDB,
     measuredAt: "2026-08-13",
   },
   {
@@ -170,6 +192,7 @@ export const INSTANCES: readonly InstanceSpec[] = [
     envVar: "STASHBOX_PMV_KEY",
     capabilities: Object.keys(READ_ON_STASHDB) as Capability[],
     routes: READ_ON_STASHDB,
+    answersWith: SHAPES_ON_STASHDB,
     measuredAt: "2026-08-13",
   },
   {
@@ -180,6 +203,7 @@ export const INSTANCES: readonly InstanceSpec[] = [
     envVar: "STASHBOX_JAVSTASH_KEY",
     capabilities: Object.keys(READ_ON_STASHDB) as Capability[],
     routes: READ_ON_STASHDB,
+    answersWith: SHAPES_ON_STASHDB,
     measuredAt: "2026-08-13",
   },
 ];
@@ -204,6 +228,11 @@ export function instanceById(id: string): InstanceSpec | undefined {
  */
 export function supports(spec: InstanceSpec, capability: Capability): boolean {
   return spec.capabilities.includes(capability);
+}
+
+/** What a catalogue's text search answers with, which two of them shape differently. */
+export function answersWith(spec: InstanceSpec, capability: Capability): "list" | "page" {
+  return spec.answersWith[capability] ?? "list";
 }
 
 /** The route a catalogue answers a capability on, in its own spelling. */

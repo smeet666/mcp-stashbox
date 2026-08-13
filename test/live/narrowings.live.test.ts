@@ -162,7 +162,9 @@ describe.skipIf(!ENABLED)("live: the fingerprint route reaches a catalogue", () 
       "basic",
       "fingerprints",
     ]);
-    const print = scene.data.fingerprints?.[0];
+    const carried = scene.data.fields.fingerprints;
+    const print = (Array.isArray(carried) ? carried[0]?.value : undefined) as
+      { hash: string; algorithm: "MD5" | "OSHASH" | "PHASH" } | undefined;
     expect(print, "the record carried no fingerprint, so this case measures nothing").toBeDefined();
     if (!print) return;
 

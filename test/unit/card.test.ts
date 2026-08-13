@@ -27,6 +27,7 @@
 import { describe, expect, it } from "vitest";
 
 import { consolidate, type Reading } from "../../src/answer/card.js";
+import type { CardEntry, CardValue } from "../../src/types.js";
 
 /** The order the registry declares, which is the preference unless one is written. */
 const REGISTRY_ORDER = ["stashdb", "tpdb", "fansdb", "pmv", "javstash"] as const;
@@ -74,7 +75,7 @@ function card(readings: Reading[], prefer: readonly string[] = REGISTRY_ORDER) {
 describe("a value carries the catalogues that said it", () => {
   it("names both where both said the same thing", () => {
     const held = card([STASHDB, TPDB]);
-    expect(held.fields.birthDate).toEqual({
+    expect(held.fields.birthDate as CardValue).toEqual({
       value: "1985-03-04",
       agreed_by: ["stashdb", "tpdb"],
     });
@@ -83,13 +84,13 @@ describe("a value carries the catalogues that said it", () => {
   it("names one where one published it and the other carried nothing", () => {
     const quiet = answered("tpdb", UUID_B, { ...TPDB.record, country: null });
     const held = card([STASHDB, quiet]);
-    expect(held.fields.country).toEqual({ value: "AU", agreed_by: ["stashdb"] });
+    expect(held.fields.country as CardValue).toEqual({ value: "AU", agreed_by: ["stashdb"] });
   });
 
   it("carries the reading nobody preferred beside the one that won", () => {
     const other = answered("tpdb", UUID_B, { ...TPDB.record, country: "US" });
     const held = card([STASHDB, other]);
-    expect(held.fields.country).toEqual({
+    expect(held.fields.country as CardValue).toEqual({
       value: "AU",
       agreed_by: ["stashdb"],
       disagreed: [{ source: "tpdb", value: "US" }],
@@ -99,7 +100,7 @@ describe("a value carries the catalogues that said it", () => {
   it("lets the preference be written, and then the other reading wins", () => {
     const other = answered("tpdb", UUID_B, { ...TPDB.record, country: "US" });
     const held = card([STASHDB, other], ["tpdb", "stashdb"]);
-    expect(held.fields.country).toEqual({
+    expect(held.fields.country as CardValue).toEqual({
       value: "US",
       agreed_by: ["tpdb"],
       disagreed: [{ source: "stashdb", value: "AU" }],
@@ -114,7 +115,10 @@ describe("a value carries the catalogues that said it", () => {
   it("publishes a field no catalogue carried as null rather than dropping it", () => {
     const a = answered("stashdb", UUID_A, { ...STASHDB.record, country: null });
     const b = answered("tpdb", UUID_B, { ...TPDB.record, country: null });
-    expect(card([a, b]).fields.country).toEqual({ value: null, agreed_by: ["stashdb", "tpdb"] });
+    expect(card([a, b]).fields.country as CardValue).toEqual({
+      value: null,
+      agreed_by: ["stashdb", "tpdb"],
+    });
   });
 });
 
@@ -123,7 +127,7 @@ describe("a value carries the catalogues that said it", () => {
 describe("a list is united, never chosen", () => {
   it("holds every entry either catalogue published, once", () => {
     const held = card([STASHDB, TPDB]);
-    expect(held.fields.aliases.map((entry) => entry.value).sort()).toEqual([
+    expect((held.fields.aliases as CardEntry[]).map((entry) => entry.value).sort()).toEqual([
       "Angela Exposed",
       "Angelia White",
       "Angie",
@@ -134,7 +138,7 @@ describe("a list is united, never chosen", () => {
   it("names every catalogue that published an entry", () => {
     const held = card([STASHDB, TPDB]);
     const by = (value: string) =>
-      held.fields.aliases.find((entry) => entry.value === value)?.published_by;
+      (held.fields.aliases as CardEntry[]).find((entry) => entry.value === value)?.published_by;
     expect(by("Angie")).toEqual(["stashdb", "tpdb"]);
     expect(by("Aussie Angela")).toEqual(["stashdb"]);
     expect(by("Angelia White")).toEqual(["tpdb"]);
@@ -142,7 +146,7 @@ describe("a list is united, never chosen", () => {
 
   it("keeps the order of the preferred catalogue, then what the others add", () => {
     const held = card([STASHDB, TPDB]);
-    expect(held.fields.aliases.map((entry) => entry.value)).toEqual([
+    expect((held.fields.aliases as CardEntry[]).map((entry) => entry.value)).toEqual([
       "Angela Exposed",
       "Angie",
       "Aussie Angela",
@@ -163,7 +167,7 @@ describe("a count is never merged", () => {
 
   it("never adds two counts into one, whatever the two hold", () => {
     const other = answered("tpdb", UUID_B, { ...TPDB.record, sceneCount: 812 });
-    const counts = card([STASHDB, other]).counts.sceneCount;
+    const counts = card([STASHDB, other]).counts.sceneCount ?? [];
     expect(counts).toEqual([
       { source: "stashdb", value: 1041 },
       { source: "tpdb", value: 812 },
@@ -193,15 +197,15 @@ describe("every catalogue asked is named with what became of it", () => {
     };
     const held = card([STASHDB, broken]);
     expect(held.held_by[1]).toMatchObject({ source: "tpdb", state: "failed", error: "timeout" });
-    expect(held.fields.birthDate.agreed_by).toEqual(["stashdb"]);
+    expect((held.fields.birthDate as CardValue).agreed_by).toEqual(["stashdb"]);
     expect(held.notes.join(" ")).toContain("could not answer");
   });
 
   it("says so where the catalogue the preference names is the one that failed", () => {
     const broken: Reading = { source: "stashdb", id: `stashdb:${UUID_A}`, state: "failed" };
     const held = card([broken, TPDB]);
-    expect(held.fields.country.value).toBe("AU");
-    expect(held.fields.country.agreed_by).toEqual(["tpdb"]);
+    expect((held.fields.country as CardValue).value).toBe("AU");
+    expect((held.fields.country as CardValue).agreed_by).toEqual(["tpdb"]);
     // A fallback nobody announced reads as the preferred catalogue's own answer.
     expect(held.notes.join(" ")).toContain("stashdb");
   });
@@ -219,7 +223,10 @@ describe("every catalogue asked is named with what became of it", () => {
 
   it("answers with a card from one reading, claiming nothing about the rest", () => {
     const held = card([STASHDB]);
-    expect(held.fields.birthDate).toEqual({ value: "1985-03-04", agreed_by: ["stashdb"] });
+    expect(held.fields.birthDate as CardValue).toEqual({
+      value: "1985-03-04",
+      agreed_by: ["stashdb"],
+    });
     expect(held.held_by).toHaveLength(1);
     expect(held.notes.join(" ")).not.toContain("agree");
   });

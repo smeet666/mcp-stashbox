@@ -62,6 +62,24 @@ export function arrayUnder(
 }
 
 /**
+ * The rows a route answers with at the top of a payload.
+ *
+ * A key the answer does not carry, or one holding anything other than a list,
+ * is an answer this client cannot read. Reading either as an empty page would
+ * state that a catalogue looked and found nothing, which it never said.
+ */
+export function rowsUnder(
+  payload: unknown,
+  key: string,
+  spec: InstanceSpec,
+  moment: string,
+): unknown[] {
+  const body = asObject(payload);
+  if (body === undefined) throw unreadable(spec, moment);
+  return arrayUnder(body, key, spec, moment);
+}
+
+/**
  * One record, or the absence of one.
  *
  * A key the answer does not carry is a record this client could not read. The

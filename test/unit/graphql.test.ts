@@ -47,7 +47,9 @@ const STASHDB: InstanceSpec = {
     "site_categories",
     "fingerprint_reports",
   ],
-  dialect: "strict",
+  routes: { get_scene: "findScene" },
+  answersWith: {},
+  measuredAt: "2026-08-13",
 };
 
 const silentLogger: Logger = {

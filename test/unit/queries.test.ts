@@ -286,4 +286,14 @@ describe("a request carries nothing the caller did not write", () => {
     expect(recordRequest(SD, "performer", A).query).toContain("edits");
     expect(recordRequest(TP, "performer", A).query).not.toContain("edits");
   });
+
+  it("selects a field only where the kind of record declares it", () => {
+    // Measured: a scene, a performer and a tag each declare a list of open
+    // edits, and a studio declares none. Asking a studio for it fails the
+    // whole request rather than the one field.
+    for (const kind of ["scene", "performer", "tag"] as const) {
+      expect(recordRequest(SD, kind, A).query, `${kind} carries edits`).toContain("edits");
+    }
+    expect(recordRequest(SD, "studio", A).query).not.toContain("edits");
+  });
 });
