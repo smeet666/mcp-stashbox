@@ -18,6 +18,7 @@ import { describeSources } from "../answer/sources.js";
 import { renderCard } from "../answer/render.js";
 import type { Rendered } from "../answer/text.js";
 import { MOST_IDENTIFIERS } from "../stashbox/narrowings.js";
+import { SORTS } from "../stashbox/queries.js";
 import {
   catalogues,
   countryCode,
@@ -66,13 +67,18 @@ export interface Tool {
 
 const SORT_DIRECTIONS = ["asc", "desc"] as const;
 
-const paging = {
-  sort: text("sort", "the order the catalogue applies").optional(),
-  direction: oneOf("direction", "which way that order runs", SORT_DIRECTIONS).optional(),
-  page: wholeNumber("page", "the page to read", 1, 1000).optional(),
-  limit: wholeNumber("limit", "how many rows one page carries", 1, 100).optional(),
-  sources: catalogues("sources").optional(),
-};
+/** What a search takes beside its narrowings, with the orders each entity declares. */
+function paging(kind: keyof typeof SORTS) {
+  return {
+    // A closed set, measured: an order outside it is refused by the catalogue,
+    // and the refusal would read as a limit the catalogue does not have.
+    sort: oneOf("sort", "the order the catalogue applies", SORTS[kind] as never).optional(),
+    direction: oneOf("direction", "which way that order runs", SORT_DIRECTIONS).optional(),
+    page: wholeNumber("page", "the page to read", 1, 1000).optional(),
+    limit: wholeNumber("limit", "how many rows one page carries", 1, 100).optional(),
+    sources: catalogues("sources").optional(),
+  };
+}
 
 const held = {
   sources: catalogues("sources").optional(),
@@ -108,7 +114,7 @@ const sceneSearchInput = datedTogether(
       parent_studio_id: identifier("parent_studio_id").optional(),
       tag_ids: identifiers("tag_ids").optional(),
       match: oneOf("match", "how a list of identifiers is read", ["all", "any"]).optional(),
-      ...paging,
+      ...paging("scenes"),
     }),
     [
       "title",
@@ -152,7 +158,7 @@ const performerSearchInput = exclusiveQuery(
     ).optional(),
     performed_with: identifier("performed_with").optional(),
     studio_id: identifier("studio_id").optional(),
-    ...paging,
+    ...paging("performers"),
   }),
   [
     "name",
@@ -175,7 +181,7 @@ const studioSearchInput = exclusiveQuery(
     name: text("name", "words a name carries").optional(),
     parent_id: identifier("parent_id").optional(),
     has_parent: z.boolean().optional().describe("Whether the studio sits under another."),
-    ...paging,
+    ...paging("studios"),
   }),
   ["name", "parent_id", "has_parent"],
 );
@@ -185,7 +191,7 @@ const tagSearchInput = exclusiveQuery(
     query: text("query", "a string of words").optional().describe(WORDS),
     name: text("name", "words a name carries").optional(),
     category_id: identifier("category_id").optional(),
-    ...paging,
+    ...paging("tags"),
   }),
   ["name", "category_id"],
 );

@@ -256,6 +256,31 @@ function identifierCriterion(
   return { value: [...values], modifier: match === "all" ? "INCLUDES_ALL" : "INCLUDES" };
 }
 
+/**
+ * The orders each entity declares, measured on the reference instance.
+ *
+ * A caller writes one of these and no other: an order outside the set is
+ * refused by the catalogue, and the refusal would read as a limit it does not
+ * have.
+ */
+export const SORTS = {
+  scenes: ["title", "date", "duration", "trending", "popularity", "created_at", "updated_at"],
+  performers: [
+    "name",
+    "birthdate",
+    "deathdate",
+    "scene_count",
+    "career_start_year",
+    "debut",
+    "last_scene",
+    "popularity",
+    "created_at",
+    "updated_at",
+  ],
+  studios: ["name", "created_at", "updated_at"],
+  tags: ["name", "created_at", "updated_at"],
+} as const;
+
 /** How a caller reads a date, in the one comparison a catalogue takes. */
 export type DateCompare = "on" | "before" | "after";
 
@@ -326,10 +351,16 @@ export interface Faceted {
   unreceived: string[];
 }
 
-/** A whole number, written as the catalogue's input declares it. */
+/**
+ * A whole number, written as the catalogue's input declares it.
+ *
+ * Measured: the reference instance takes a year as a criterion carrying a
+ * comparison, and the catalogue that reimplements the interface takes the
+ * number written as text.
+ */
 function numberFilter(spec: InstanceSpec, value: number | undefined): unknown {
   if (value === undefined) return undefined;
-  return spec.filters === "plain" ? String(value) : value;
+  return spec.filters === "plain" ? String(value) : { value, modifier: "EQUALS" };
 }
 
 export interface SceneNarrowing {
@@ -412,11 +443,13 @@ export function performerQueryInput(spec: InstanceSpec, narrowing: PerformerNarr
   const input: Record<string, unknown> = {};
   const unreceived: string[] = [];
   put(spec, input, "name", narrowing.name, unreceived);
-  put(spec, input, "alias", textCriterion(spec, narrowing.alias), unreceived);
+  // Measured: a performer's alias is a plain string where a scene's is a
+  // criterion, and the two enumerated fields take the value itself.
+  put(spec, input, "alias", narrowing.alias, unreceived);
   put(spec, input, "disambiguation", textCriterion(spec, narrowing.disambiguation), unreceived);
-  put(spec, input, "gender", narrowing.gender, unreceived);
+  put(spec, input, "gender", narrowing.gender?.toUpperCase(), unreceived);
   put(spec, input, "country", textCriterion(spec, narrowing.country), unreceived);
-  put(spec, input, "ethnicity", textCriterion(spec, narrowing.ethnicity), unreceived);
+  put(spec, input, "ethnicity", narrowing.ethnicity?.toUpperCase(), unreceived);
   put(spec, input, "birth_year", numberFilter(spec, narrowing.birthYear), unreceived);
   put(spec, input, "career_start_year", numberFilter(spec, narrowing.careerStartYear), unreceived);
   put(spec, input, "career_end_year", numberFilter(spec, narrowing.careerEndYear), unreceived);
@@ -442,15 +475,17 @@ export function studioQueryInput(spec: InstanceSpec, narrowing: StudioNarrowing)
   const input: Record<string, unknown> = {};
   const unreceived: string[] = [];
   put(spec, input, "name", narrowing.name, unreceived);
+  // Measured: a studio names one parent, so its filter is a criterion carrying
+  // one identifier rather than a list of them.
   put(
     spec,
     input,
     "parent",
-    identifierCriterion(
-      spec,
-      narrowing.parentId === undefined ? undefined : [narrowing.parentId],
-      "any",
-    ),
+    narrowing.parentId === undefined
+      ? undefined
+      : spec.filters === "plain"
+        ? narrowing.parentId
+        : { value: narrowing.parentId, modifier: "EQUALS" },
     unreceived,
     "parent_id",
   );

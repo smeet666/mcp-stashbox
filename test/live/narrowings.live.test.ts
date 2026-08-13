@@ -87,7 +87,7 @@ describe.skipIf(!ENABLED)("live: every performer narrowing reaches a catalogue",
     ["a year a career closed", { careerEndYear: 2020, limit: 1 }],
     ["someone performed with", { performedWith: A_PERFORMER, limit: 1 }],
     ["a studio", { studioId: A_STUDIO, limit: 1 }],
-    ["an order", { name: "Angela", sort: "birth_date", direction: "asc", limit: 1 }],
+    ["an order", { name: "Angela", sort: "birthdate", direction: "asc", limit: 1 }],
     ["a page", { name: "Angela", page: 2, limit: 1 }],
   ];
 

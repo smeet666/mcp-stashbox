@@ -65,6 +65,7 @@ import {
   readStudio,
   readTag,
   rowsUnder,
+  groupsUnder,
 } from "./read.js";
 import { RateLimiter } from "./rateLimiter.js";
 
@@ -586,7 +587,16 @@ export class StashboxClient {
           request,
           "the fingerprint lookup",
           (payload) => {
-            const raw = rowsUnder(payload, request.operation, ask.spec, "the fingerprint lookup");
+            // The route answers a list of groups, one per hash asked, so the
+            // records are one level down. Reading a group as a record loses
+            // every row and calls the loss an emptiness.
+            const groups = groupsUnder(
+              payload,
+              request.operation,
+              ask.spec,
+              "the fingerprint lookup",
+            );
+            const raw = groups.flat();
             const read: Record<string, unknown>[] = [];
             let skipped = 0;
             for (const entry of raw) {
@@ -648,6 +658,7 @@ const IDENTIFIER_ARGUMENTS = [
   "studioIds",
   "tagIds",
   "parentStudioId",
+  "parentId",
   "performedWith",
   "studioId",
   "categoryId",
