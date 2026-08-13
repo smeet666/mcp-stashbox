@@ -206,9 +206,15 @@ function countIn(value: unknown): number | null {
 
 /** What became of one catalogue, whether it answered, failed or was never asked. */
 function holderOf(reading: Reading): CardHolder {
-  const status = (reading.record as { status?: RecordStatus } | undefined)?.status;
+  const held = reading.record as
+    { status?: RecordStatus; sourceUrl?: string; retrievedAt?: string } | undefined;
+  const status = held?.status;
   return {
     source: reading.source,
+    // Read from that catalogue, at that moment, by this client. Neither is a
+    // reading two catalogues could disagree about.
+    ...(held?.sourceUrl === undefined ? {} : { source_url: held.sourceUrl }),
+    ...(held?.retrievedAt === undefined ? {} : { retrieved_at: held.retrievedAt }),
     ...(reading.id === undefined ? {} : { id: reading.id }),
     state: reading.state,
     ...(status === undefined ? {} : { status }),

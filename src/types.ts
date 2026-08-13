@@ -304,6 +304,10 @@ export interface CardCount {
 export interface CardHolder {
   source: string;
   id?: string;
+  /** The address this catalogue was read at, which credits it. */
+  source_url?: string;
+  /** The moment this client read it there. */
+  retrieved_at?: string;
   state: SourceState;
   status?: RecordStatus;
   error?: string;

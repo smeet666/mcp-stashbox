@@ -30,7 +30,7 @@ import {
   type Config,
   type Logger,
 } from "../config.js";
-import { StashboxError } from "../errors.js";
+import { invalidInput, StashboxError } from "../errors.js";
 import type { Card, Read, Reading, RowsResult, SourceReport } from "../types.js";
 import { consolidate } from "../answer/card.js";
 import { Cache, cacheKey } from "./cache.js";
@@ -103,11 +103,9 @@ const SHAPES: Record<RecordKind, { scalars: string[]; lists: string[]; perSource
     lists: ["aliases", "urls", "images", "studios"],
     perSource: ["sceneCount"],
   },
-  studio: {
-    scalars: ["name", "parent"],
-    lists: ["aliases", "urls", "images"],
-    perSource: ["sceneCount"],
-  },
+  // A studio record carries no count of the scenes indexed on it in what this
+  // client selects, so publishing one would report a silence nobody measured.
+  studio: { scalars: ["name", "parent"], lists: ["aliases", "urls", "images"], perSource: [] },
   tag: { scalars: ["name", "description", "category"], lists: ["aliases"], perSource: [] },
 };
 
@@ -312,6 +310,7 @@ export class StashboxClient {
       faceted: boolean;
       operation: string;
       unreceived?: string[];
+      receivedInPart?: string[];
     },
     reader: (value: unknown, spec: InstanceSpec, at: string) => { record: T | null },
   ): Promise<Answer<T>> {
@@ -329,18 +328,36 @@ export class StashboxClient {
       (name) => !["sources", "prefer", "sections", "page", "limit"].includes(name),
     );
     const typed = input.query === undefined && narrowed;
-    const asks = chosen.asks.filter((ask) => !typed || ask.spec.facetedSearch);
-    const unasked: SourceReport[] = [
-      ...chosen.unasked,
-      ...chosen.asks
-        .filter((ask) => typed && !ask.spec.facetedSearch)
-        .map((ask) => ({
+    const unasked: SourceReport[] = [...chosen.unasked];
+    const asks: typeof chosen.asks = [];
+
+    for (const ask of chosen.asks) {
+      if (typed && !ask.spec.facetedSearch) {
+        unasked.push({
           source: ask.spec.id,
           name: ask.spec.name,
-          state: "absent" as const,
+          state: "absent",
           reason: `${ask.spec.name} answers a search of words alone: its faceted routes do not apply the narrowings written to them, so a question narrowed on typed arguments was never put to it.`,
-        })),
-    ];
+        });
+        continue;
+      }
+      // A catalogue whose share of the identifiers written is empty has
+      // nothing to narrow on. Asked anyway, it answers a page of its whole
+      // index, and that page reaches a reader as the answer to a question
+      // narrowed on a record it has never held.
+      const share = typed ? shareOf(input, ask.spec.id) : undefined;
+      if (share !== undefined && share.namingNoRecord.length > 0 && !anyIdentifierLeft(share)) {
+        unasked.push({
+          source: ask.spec.id,
+          name: ask.spec.name,
+          state: "absent",
+          narrowingsNamingNoRecord: share.namingNoRecord,
+          reason: `Every identifier written for ${ask.spec.name} names a record another catalogue minted (${share.namingNoRecord.join(", ")}), so it was left with nothing to narrow on and was never asked. Its first page would answer any question put to it.`,
+        });
+        continue;
+      }
+      asks.push(ask);
+    }
     const key = cacheKey({
       instance: asks
         .map((ask) => ask.spec.id)
@@ -416,6 +433,12 @@ export class StashboxClient {
           ...(request.unreceived !== undefined && request.unreceived.length > 0
             ? { narrowingsNotReceived: request.unreceived }
             : {}),
+          // A list shorn of another catalogue's identifiers narrowed on a
+          // fraction of what was written, which is neither the whole question
+          // nor a limit of this catalogue.
+          ...(request.receivedInPart !== undefined && request.receivedInPart.length > 0
+            ? { narrowingsReceivedInPart: request.receivedInPart }
+            : {}),
           ...(found.value.skipped > 0 ? { skipped: found.value.skipped } : {}),
           ...(found.value.total === undefined ? {} : { indexTotal: found.value.total }),
         };
@@ -425,6 +448,10 @@ export class StashboxClient {
     );
     reports.push(...results);
 
+    // The order the groups actually arrived in, which is what the answer says.
+    const answering = reports
+      .filter((one) => one.state === "answered" && (one.count ?? 0) > 0)
+      .map((one) => one.name ?? one.source);
     const perSource = orderByRegistry([...reports, ...unasked]);
     // A window states the page a catalogue paged through. Where every catalogue
     // that answered was never given the page, the rows are each one's own first
@@ -444,8 +471,11 @@ export class StashboxClient {
             },
           }),
       ordering:
-        asks.length > 1
-          ? "interleaved by catalogue, in the order the registry names them, since the catalogues share no measure to order them together by"
+        // Grouped rather than interleaved, and the groups arrive in the order
+        // the catalogues answered: they share no measure to order them
+        // together by, so nothing here ranks one against another.
+        answering.length > 1
+          ? `grouped by catalogue, each group in that catalogue's own order, in the order they answered: ${answering.join(", ")}. The catalogues share no measure to order them against one another, so nothing here ranks a row of one above a row of another`
           : "in the order the catalogue that answered holds them",
     };
     // An answer holding a failure is a statement about one exchange. Kept, it
@@ -484,13 +514,23 @@ export class StashboxClient {
       (spec) => {
         if (words !== undefined) {
           const built = searchRequest(spec, kind, words, limit);
-          return { ...built, faceted: built.paged };
+          // This route reads words and a size. A page, an order and every
+          // typed argument written beside them shape no part of the request,
+          // and a caller paging through one would collect the same rows for
+          // ever without a word saying so.
+          const unreceived = [
+            ...(((input.page as number | undefined) ?? 1) > 1 ? ["page"] : []),
+            ...(input.sort === undefined ? [] : ["sort"]),
+            ...(input.direction === undefined ? [] : ["direction"]),
+          ];
+          return { ...built, faceted: built.paged, unreceived };
         }
         // Every identifier a caller wrote names the catalogue that minted it,
         // so this one receives its own and nothing else. Sending the whole
         // list would put another catalogue's identifiers to it, and the
         // refusal that came back would read as a fact about this one.
-        const narrowing = { ...shareOf(input, spec.id), page, limit } as never;
+        const held = shareOf(input, spec.id);
+        const narrowing = { ...held.share, page, limit } as never;
         const shaped =
           kind === "scenes"
             ? sceneQueryInput(spec, narrowing)
@@ -500,7 +540,12 @@ export class StashboxClient {
                 ? studioQueryInput(spec, narrowing)
                 : tagQueryInput(spec, narrowing);
         const built = facetedRequest(spec, kind, shaped.input as Record<string, unknown>);
-        return { ...built, faceted: true, unreceived: shaped.unreceived };
+        return {
+          ...built,
+          faceted: true,
+          unreceived: shaped.unreceived,
+          receivedInPart: held.receivedInPart,
+        };
       },
       reader as never,
     );
@@ -526,6 +571,15 @@ export class StashboxClient {
     const prefer = (held.prefer as InstanceId[] | undefined) ?? INSTANCES.map((one) => one.id);
     const sections = (held.sections as string[] | undefined) ?? ["basic"];
     const parsed = parseId(written, this.configured);
+    if (named !== undefined && !named.includes(parsed.instance)) {
+      // The identifier names one catalogue and the call names others. Answered
+      // as an empty card, it would read as that catalogue holding nothing,
+      // when nobody asked it anything.
+      throw invalidInput(
+        `${written} names ${parsed.instance}, and this call names ${named.join(", ")}. An identifier is read on the catalogue that minted it, so nothing here could be asked about it.`,
+        `Ask for ${written} without naming catalogues, or name ${parsed.instance} among them.`,
+      );
+    }
     const readings: Reading[] = [];
     const replayed = new Set<string>();
 
@@ -557,9 +611,13 @@ export class StashboxClient {
     const card = consolidate({
       readings,
       prefer,
-      scalars: [...shape.scalars, "sourceUrl", "retrievedAt", "mergedInto"],
+      // The address a record was read from and the moment it was read belong
+      // to the catalogue that answered, so they travel on its holder rather
+      // than being put to a vote: two clock readings a fraction apart would
+      // otherwise be published as a disagreement and dilute a real one.
+      scalars: [...shape.scalars, "mergedInto"],
       lists: shape.lists,
-      perSource: [...shape.perSource, "pendingEdits", "rowsSkipped"],
+      perSource: shape.perSource,
     });
     // A loss dropped in silence makes the card a record holding less than the
     // catalogue holds, with nothing saying so.
@@ -705,6 +763,16 @@ export class StashboxClient {
 
   async findByFingerprint(input: Record<string, unknown>): Promise<Read<FingerprintResult>> {
     const fingerprints = input.fingerprints as Fingerprint[];
+    // A hash of one repeated character is what a failed computation writes.
+    // Put to a catalogue it reaches whatever was submitted upstream under the
+    // same failure, and the answer states that those bytes are that file.
+    const degenerate = fingerprints.filter((one) => /^(.)\1*$/.test(one.hash));
+    if (degenerate.length > 0) {
+      throw invalidInput(
+        `These hashes carry one repeated character and name no bytes: ${degenerate.map((one) => `${one.algorithm} ${one.hash}`).join(", ")}. A hash computed from a file this client could not read reaches whatever another submitter wrote under the same failure, and a record it reaches would be reported as the file.`,
+        "Compute the hash again from the file itself.",
+      );
+    }
     const named = input.sources as InstanceId[] | undefined;
     const { asks, unasked } = this.#chooseSources(
       "find_by_fingerprint",
@@ -890,8 +958,13 @@ const IDENTIFIER_ARGUMENTS = [
  * on the wire. A catalogue handed another's identifier refuses the request, and
  * the refusal reads as a fact about the catalogue rather than about the list.
  */
-function shareOf(input: Record<string, unknown>, source: InstanceId): Record<string, unknown> {
-  const held: Record<string, unknown> = { ...input };
+function shareOf(
+  input: Record<string, unknown>,
+  source: InstanceId,
+): { share: Record<string, unknown>; namingNoRecord: string[]; receivedInPart: string[] } {
+  const share: Record<string, unknown> = { ...input };
+  const namingNoRecord: string[] = [];
+  const receivedInPart: string[] = [];
   for (const name of IDENTIFIER_ARGUMENTS) {
     const written = input[name];
     if (written === undefined) continue;
@@ -899,11 +972,36 @@ function shareOf(input: Record<string, unknown>, source: InstanceId): Record<str
     const mine = all
       .filter((one) => one.startsWith(`${source}:`))
       .map((one) => one.slice(source.length + 1));
-    if (mine.length === 0) delete held[name];
-    else held[name] = Array.isArray(written) ? mine : mine[0];
+    if (mine.length === 0) {
+      // Sending the request without it asks this catalogue for a page of its
+      // whole index, and the answer would render that page as the answer to a
+      // question narrowed on someone it has never heard of.
+      namingNoRecord.push(PUBLISHED[name] ?? name);
+      delete share[name];
+    } else {
+      if (mine.length < all.length) receivedInPart.push(PUBLISHED[name] ?? name);
+      share[name] = Array.isArray(written) ? mine : mine[0];
+    }
   }
-  return held;
+  return { share, namingNoRecord, receivedInPart };
 }
+
+/** Whether any identifier narrowing survived this catalogue's share of the list. */
+function anyIdentifierLeft(held: { share: Record<string, unknown> }): boolean {
+  return IDENTIFIER_ARGUMENTS.some((name) => held.share[name] !== undefined);
+}
+
+/** The name a caller wrote, for a narrowing this client names in one word. */
+const PUBLISHED: Record<string, string> = {
+  performerIds: "performer_ids",
+  studioIds: "studio_ids",
+  tagIds: "tag_ids",
+  parentStudioId: "parent_studio_id",
+  parentId: "parent_id",
+  performedWith: "performed_with",
+  studioId: "studio_id",
+  categoryId: "category_id",
+};
 
 /** The catalogues a record is also held at, read off the record itself. */
 function alsoAt(record: Record<string, unknown>): { source: InstanceId; uuid: string }[] {

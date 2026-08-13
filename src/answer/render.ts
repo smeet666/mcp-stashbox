@@ -286,7 +286,12 @@ export function renderCard(card: Card, kind: string, cached = false): Rendered {
   const held = card.held_by.map((one) => {
     const who = catalogueOf(one.source).name;
     if (one.state === "answered") {
-      return `  - ${who}: holds it at ${one.id ?? ""}${one.status === undefined ? "" : markerSuffix(one.status)}`;
+      // A catalogue that looked and holds nothing there answered, and saying
+      // it holds the record is the one thing the answer cannot say.
+      if (one.reason !== undefined) return `  - ${who}: ${inline(one.reason) ?? ""}`;
+      const at = one.retrieved_at === undefined ? "" : `, read ${one.retrieved_at}`;
+      const where = one.source_url === undefined ? "" : ` (${inline(one.source_url) ?? ""})`;
+      return `  - ${who}: holds it at ${one.id ?? ""}${one.status === undefined ? "" : markerSuffix(one.status)}${where}${at}`;
     }
     if (one.state === "failed") {
       return `  - ${who}: could not answer (${one.error ?? "error"})${one.reason === undefined ? "" : `: ${inline(one.reason) ?? ""}`}`;

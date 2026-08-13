@@ -5,6 +5,47 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-08-13
+
+Nine people put real questions to the server and read the answers as people
+read them. Every fix below comes from one of those readings, and most of them
+are answers that were well formed, internally consistent, and false to a reader.
+
+### Fixed
+
+- A filter written with an identifier another catalogue minted was removed
+  before the request went out, and the whole index came back rendered as the
+  answer to it: a search for one performer's scenes reported a million rows.
+  A catalogue left with nothing to narrow on is now never asked, and the answer
+  names the narrowing that emptied it. A list shorn of another catalogue's
+  identifiers is reported as one received in part.
+- A record a catalogue holds nothing at was printed as "holds it at" while the
+  payload said the opposite on the same line. The prose carries what the
+  catalogue said.
+- The route that reads words takes no page and no order. Both were accepted,
+  echoed back, and dropped, so a caller paging through an answer collected the
+  same rows for ever. They are reported as narrowings that catalogue did not
+  receive, and no window is published for a page nobody was given.
+- A page past the end was reported as an emptiness the catalogue established,
+  in the same answer that said its index holds hundreds of rows for the
+  question. The two emptinesses are told apart.
+- An identifier naming one catalogue while the call names others is refused,
+  rather than answered with an empty card that reads as the named catalogue
+  holding nothing.
+- A hash of one repeated character is refused. It is what a failed computation
+  writes, it reaches whatever another submitter wrote under the same failure,
+  and the answer stated that those bytes were that file.
+- A studio card claimed its catalogue publishes no count of the scenes on it.
+  Nothing had asked for one.
+- The address a record was read at and the moment it was read travel with the
+  catalogue that answered rather than being put to a vote: two clock readings a
+  fraction apart were published as a disagreement and diluted a real one.
+- The sentence describing how rows are laid out says what the answer does. They
+  are grouped by catalogue in the order the catalogues answered, and nothing
+  ranks a row of one against a row of another.
+- `limit`, `page` and `match` say what they do. A limit is what one page of one
+  catalogue carries, so an answer holding two carries up to twice it.
+
 ## [0.5.0] - 2026-08-13
 
 The surface answers four entities where it answered two, and a record route

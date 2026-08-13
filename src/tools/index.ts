@@ -104,8 +104,16 @@ function paging(kind: keyof typeof SORTS) {
     // and the refusal would read as a limit the catalogue does not have.
     sort: oneOf("sort", "the order the catalogue applies", SORTS[kind] as never).optional(),
     direction: oneOf("direction", "which way that order runs", SORT_DIRECTIONS).optional(),
-    page: wholeNumber("page", "the page to read", 1, 1000).optional(),
-    limit: wholeNumber("limit", "how many rows one page carries", 1, 100).optional(),
+    page: wholeNumber("page", "the page to read", 1, 1000)
+      .optional()
+      .describe(
+        "The page of each catalogue's own order. A route that reads words alone takes no page, and the answer reports it as one that catalogue did not receive.",
+      ),
+    limit: wholeNumber("limit", "how many rows one page carries", 1, 100)
+      .optional()
+      .describe(
+        "How many rows one page of one catalogue carries. An answer holding several catalogues carries up to this many from each of them, since their pages are their own and nothing here interleaves them into one.",
+      ),
     sources: catalogues("sources").optional(),
   };
 }
@@ -324,7 +332,13 @@ function cardTool(
 function rowNotes(
   result: {
     rows: unknown[];
-    perSource: { state: string; count?: number; name?: string; source: string }[];
+    perSource: {
+      state: string;
+      count?: number;
+      indexTotal?: number;
+      name?: string;
+      source: string;
+    }[];
   },
   what: string,
   cached: boolean,
@@ -342,9 +356,21 @@ function rowNotes(
     );
   }
   if (result.rows.length === 0 && answered.length > 0) {
-    notes.push(
-      `These catalogues looked and found nothing for this question: ${named(answered)}. That is an emptiness they established, and it says nothing about the catalogues below.`,
-    );
+    // A page past the end and a question nothing answers are two emptinesses.
+    // A catalogue whose own index holds rows for this question found them, and
+    // reporting the page as its answer denies what it just said.
+    const holding = answered.filter((one) => (one.indexTotal ?? 0) > 0);
+    const found = answered.filter((one) => (one.indexTotal ?? 0) === 0);
+    if (holding.length > 0) {
+      notes.push(
+        `This page is past everything these catalogues hold for the question, so its emptiness belongs to the page rather than to the question: ${named(holding)}. Each of them names above how many rows its own index holds for it.`,
+      );
+    }
+    if (found.length > 0) {
+      notes.push(
+        `These catalogues looked and found nothing for this question: ${named(found)}. That is an emptiness they established, and it says nothing about the catalogues below.`,
+      );
+    }
   }
   if (failed.length > 0) {
     notes.push(

@@ -156,13 +156,15 @@ describe("a record route reads the catalogue the caller named", () => {
   for (const tool of TOOLS.filter(
     (one) => one.name.startsWith("get_") && one.name !== "get_sources",
   )) {
-    it(`${tool.name} asks no catalogue the caller left out`, async () => {
+    it(`${tool.name} refuses an identifier the named catalogues exclude`, async () => {
       const { client, sent } = watching();
       const read = tool.inputSchema.parse({ id: `stashdb:${UUID}`, sources: ["tpdb"] });
-      await tool.run(client as never, read as Record<string, unknown>);
-      // No key is held for the catalogue named, and the one the identifier
-      // names was excluded, so nothing should have gone out at all.
-      expect(sent, `${tool.name} asked a catalogue the caller excluded`).toEqual([]);
+      // Answered as an empty card, this would read as the named catalogue
+      // holding nothing, when nobody asked it anything.
+      await expect(
+        tool.run(client as never, read as Record<string, unknown>),
+      ).rejects.toMatchObject({ code: "invalid_input" });
+      expect(sent, `${tool.name} asked a catalogue before refusing`).toEqual([]);
     });
   }
 });

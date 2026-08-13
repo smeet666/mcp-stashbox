@@ -112,6 +112,8 @@ export const card = z.object({
       z.object({
         source: z.string(),
         id: z.string().optional(),
+        source_url: z.string().optional().describe("The address it was read at, which credits it."),
+        retrieved_at: z.string().optional().describe("The moment this client read it there."),
         state: z.enum(["answered", "failed", "absent"]),
         status: z
           .enum(["established", "merged", "deleted"])
