@@ -354,7 +354,7 @@ export function sceneQueryInput(spec: InstanceSpec, narrowing: SceneNarrowing): 
   const unreceived: string[] = [];
   const match = narrowing.match ?? "all";
   put(spec, input, "title", narrowing.title, unreceived);
-  put(spec, input, "alias", narrowing.alias, unreceived);
+  put(spec, input, "alias", textCriterion(spec, narrowing.alias), unreceived);
   put(spec, input, "code", textCriterion(spec, narrowing.code), unreceived);
   put(spec, input, "date", dateCriterion(spec, narrowing.date, narrowing.dateCompare), unreceived);
   put(
@@ -412,7 +412,7 @@ export function performerQueryInput(spec: InstanceSpec, narrowing: PerformerNarr
   const input: Record<string, unknown> = {};
   const unreceived: string[] = [];
   put(spec, input, "name", narrowing.name, unreceived);
-  put(spec, input, "alias", narrowing.alias, unreceived);
+  put(spec, input, "alias", textCriterion(spec, narrowing.alias), unreceived);
   put(spec, input, "disambiguation", textCriterion(spec, narrowing.disambiguation), unreceived);
   put(spec, input, "gender", narrowing.gender, unreceived);
   put(spec, input, "country", textCriterion(spec, narrowing.country), unreceived);

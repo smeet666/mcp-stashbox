@@ -272,11 +272,24 @@ export class StashboxClient {
     reader: (value: unknown, spec: InstanceSpec, at: string) => { record: T | null },
   ): Promise<Answer<T>> {
     const named = input.sources as InstanceId[] | undefined;
-    const { asks, unasked } = this.#chooseSources(
-      SEARCH[kind],
-      `${kind.slice(0, -1)} search`,
-      named,
-    );
+    const chosen = this.#chooseSources(SEARCH[kind], `${kind.slice(0, -1)} search`, named);
+    // A catalogue whose faceted routes do not apply the narrowings written to
+    // them answers rows that ignore the question, and a caller reads those as
+    // the answer to it. Such a catalogue is asked through its text route alone,
+    // and a question narrowed on typed arguments is never put to it.
+    const typed = input.query === undefined;
+    const asks = chosen.asks.filter((ask) => !typed || ask.spec.facetedSearch);
+    const unasked: SourceReport[] = [
+      ...chosen.unasked,
+      ...chosen.asks
+        .filter((ask) => typed && !ask.spec.facetedSearch)
+        .map((ask) => ({
+          source: ask.spec.id,
+          name: ask.spec.name,
+          state: "absent" as const,
+          reason: `${ask.spec.name} answers a search of words alone: its faceted routes do not apply the narrowings written to them, so a question narrowed on typed arguments was never put to it.`,
+        })),
+    ];
     const key = cacheKey({
       instance: asks
         .map((ask) => ask.spec.id)

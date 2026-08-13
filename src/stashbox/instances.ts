@@ -95,6 +95,18 @@ export interface InstanceSpec {
    * reported as one.
    */
   facets?: readonly string[];
+  /**
+   * Whether this catalogue's faceted routes answer the narrowings written to
+   * them.
+   *
+   * Measured on 2026-08-13: one of them answers a page whose rows are null on
+   * every scene query, and answers a performer query with rows that ignore the
+   * name written. Rows that ignore a narrowing are worse than none, since a
+   * caller reads them as the answer to what they asked. A catalogue marked
+   * false here is asked through its text route alone, and a question written
+   * with typed arguments reports it as never asked.
+   */
+  facetedSearch: boolean;
   /** The day the surface above was read from the catalogue itself. */
   measuredAt: string;
   /**
@@ -152,6 +164,7 @@ export const INSTANCES: readonly InstanceSpec[] = [
     routes: READ_ON_STASHDB,
     answersWith: SHAPES_ON_STASHDB,
     filters: "criteria",
+    facetedSearch: true,
     measuredAt: "2026-08-13",
   },
   {
@@ -191,14 +204,39 @@ export const INSTANCES: readonly InstanceSpec[] = [
     // of them as the value itself, declaring no comparison anywhere. A request
     // written as a criterion is refused before a row is seen.
     filters: "plain",
+    facetedSearch: false,
     // Its scene input declares no reference of the studio's own, so that
     // narrowing is one it cannot receive.
     facets: [
-      "text", "title", "url", "date", "production_date", "studios", "parentStudio",
-      "tags", "performers", "alias", "fingerprints", "page", "per_page", "direction", "sort",
-      "names", "name", "disambiguation", "gender", "birthdate", "deathdate", "birth_year",
-      "age", "ethnicity", "country", "career_start_year", "career_end_year",
-      "performed_with", "studio_id",
+      "text",
+      "title",
+      "url",
+      "date",
+      "production_date",
+      "studios",
+      "parentStudio",
+      "tags",
+      "performers",
+      "alias",
+      "fingerprints",
+      "page",
+      "per_page",
+      "direction",
+      "sort",
+      "names",
+      "name",
+      "disambiguation",
+      "gender",
+      "birthdate",
+      "deathdate",
+      "birth_year",
+      "age",
+      "ethnicity",
+      "country",
+      "career_start_year",
+      "career_end_year",
+      "performed_with",
+      "studio_id",
     ],
     measuredAt: "2026-08-13",
     requiresOrder: true,
@@ -213,6 +251,7 @@ export const INSTANCES: readonly InstanceSpec[] = [
     routes: READ_ON_STASHDB,
     answersWith: SHAPES_ON_STASHDB,
     filters: "criteria",
+    facetedSearch: true,
     measuredAt: "2026-08-13",
   },
   {
@@ -225,6 +264,7 @@ export const INSTANCES: readonly InstanceSpec[] = [
     routes: READ_ON_STASHDB,
     answersWith: SHAPES_ON_STASHDB,
     filters: "criteria",
+    facetedSearch: true,
     measuredAt: "2026-08-13",
   },
   {
@@ -237,6 +277,7 @@ export const INSTANCES: readonly InstanceSpec[] = [
     routes: READ_ON_STASHDB,
     answersWith: SHAPES_ON_STASHDB,
     filters: "criteria",
+    facetedSearch: true,
     measuredAt: "2026-08-13",
   },
 ];
