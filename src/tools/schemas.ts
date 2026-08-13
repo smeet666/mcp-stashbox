@@ -47,19 +47,10 @@ export const perSource = z.object({
     .describe(
       "Narrowings this catalogue cannot receive. This is the one field that says a catalogue cannot do something.",
     ),
-  narrowings_naming_no_record_here: z
-    .array(z.string())
-    .optional()
-    .describe("Narrowings written with identifiers another catalogue minted."),
-  narrowings_received_in_part: z
-    .array(z.string())
-    .optional()
-    .describe("Narrowings it received shorn of the identifiers another catalogue minted."),
   algorithms_not_searched: z
     .array(z.string())
     .optional()
     .describe("Fingerprint algorithms its lookup does not search, so they were never put to it."),
-  fields_searched: z.array(z.string()).optional().describe("The fields its own index read."),
   reason: z.string().optional().describe("Why it was not asked, or what went wrong."),
   moment: z.string().optional().describe("Which moment failed."),
   error: z
@@ -191,6 +182,9 @@ export const fingerprintOutput = {
     z.object({
       scene: card,
       algorithm: z.enum(["MD5", "OSHASH", "PHASH"]),
+      hash: z
+        .string()
+        .describe("The hash that reached this record, so two matches on one record differ."),
       match_kind: z
         .enum(["exact_file", "perceptual_similarity"])
         .describe(
@@ -202,8 +196,9 @@ export const fingerprintOutput = {
   scenes_matched: z.number().describe("Distinct files behind the matches."),
   unattributed: z
     .number()
-    .optional()
-    .describe("Records answered with that carry none of the hashes asked."),
+    .describe(
+      "Records the catalogues answered with that carry none of the hashes asked. Which hash reached them is unknown, so they stand as no match and are counted apart.",
+    ),
   asked: z.array(z.object({ hash: z.string(), algorithm: z.string() })),
   per_source: z.array(perSource),
   cached: z.boolean().optional(),

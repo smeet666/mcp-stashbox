@@ -282,7 +282,12 @@ function searchTool(
     run: async (client, args) => {
       const read = await client[call](asWritten(args));
       const rows = read.data as never as Parameters<typeof renderRows>[0] & { notes?: string[] };
-      return renderRows(rows, what.slice(0, -1), rowNotes(rows, what.slice(0, -1), read.cached));
+      return renderRows(
+        rows,
+        what.slice(0, -1),
+        rowNotes(rows, what.slice(0, -1), read.cached),
+        read.cached,
+      );
     },
   };
 }
@@ -375,9 +380,10 @@ function rowNotes(
  */
 function renderMatches(
   result: {
-    matches: { scene: never; algorithm: string; matchKind: string }[];
+    matches: { scene: never; algorithm: string; hash: string; matchKind: string }[];
     match_count: number;
     scenes_matched: number;
+    unattributed: number;
     asked: { hash: string; algorithm: string }[];
     perSource: { source: string; name?: string; state: string; reason?: string }[];
   },
@@ -398,6 +404,11 @@ function renderMatches(
   if (failed.length > 0) {
     notes.push(
       `These catalogues could not answer, so this holds no record of theirs and states nothing about what they hold: ${failed.map((one) => one.name ?? one.source).join(", ")}.`,
+    );
+  }
+  if (result.unattributed > 0) {
+    notes.push(
+      `${result.unattributed} record(s) the catalogues answered with carry none of the hashes asked. Which hash reached them is unknown, so they stand here as no match and are counted apart.`,
     );
   }
   if (result.matches.length === 0 && result.perSource.some((one) => one.state === "answered")) {
@@ -427,10 +438,12 @@ function renderMatches(
       matches: result.matches.map((one, at) => ({
         scene: (cards[at]?.structured as { card: unknown }).card,
         algorithm: one.algorithm,
+        hash: one.hash,
         match_kind: one.matchKind,
       })),
       match_count: result.match_count,
       scenes_matched: result.scenes_matched,
+      unattributed: result.unattributed,
       asked: result.asked,
       per_source: result.perSource,
       ...(cached ? { cached: true } : {}),
@@ -528,9 +541,10 @@ export const TOOLS: Tool[] = [
     run: async (client, args) => {
       const read = (await client.findByFingerprint(asWritten(args))) as {
         data: {
-          matches: { scene: never; algorithm: string; matchKind: string }[];
+          matches: { scene: never; algorithm: string; hash: string; matchKind: string }[];
           match_count: number;
           scenes_matched: number;
+          unattributed: number;
           asked: { hash: string; algorithm: string }[];
           perSource: { source: string; name?: string; state: string; reason?: string }[];
         };

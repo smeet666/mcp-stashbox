@@ -148,6 +148,8 @@ type Answer<T> = Read<RowsResult<T>>;
 export interface FingerprintMatch {
   scene: Card;
   algorithm: string;
+  /** The hash that reached this record, so two matches on one record differ. */
+  hash: string;
   matchKind: string;
 }
 
@@ -164,6 +166,7 @@ export interface FingerprintResult {
   matches: FingerprintMatch[];
   match_count: number;
   scenes_matched: number;
+  unattributed: number;
   asked: { hash: string; algorithm: string }[];
   perSource: SourceReport[];
 }
@@ -305,7 +308,11 @@ export class StashboxClient {
   async #search<T>(
     kind: Kind,
     input: Record<string, unknown>,
-    build: (spec: InstanceSpec) => GraphQLRequest & { faceted: boolean; operation: string },
+    build: (spec: InstanceSpec) => GraphQLRequest & {
+      faceted: boolean;
+      operation: string;
+      unreceived?: string[];
+    },
     reader: (value: unknown, spec: InstanceSpec, at: string) => { record: T | null },
   ): Promise<Answer<T>> {
     const named = input.sources as InstanceId[] | undefined;
@@ -397,6 +404,11 @@ export class StashboxClient {
           name: ask.spec.name,
           state: "answered",
           count: found.value.read.length,
+          // A narrowing this catalogue's own input declares no field for is a
+          // limit it has, and the rows here were never narrowed by it.
+          ...(request.unreceived !== undefined && request.unreceived.length > 0
+            ? { narrowingsNotReceived: request.unreceived }
+            : {}),
           ...(found.value.skipped > 0 ? { skipped: found.value.skipped } : {}),
           ...(found.value.total === undefined ? {} : { indexTotal: found.value.total }),
         };
@@ -407,9 +419,23 @@ export class StashboxClient {
     reports.push(...results);
 
     const perSource = orderByRegistry([...reports, ...unasked]);
+    // A window states the page a catalogue paged through. Where every catalogue
+    // that answered was never given the page, the rows are each one's own first
+    // page and a window naming another would describe a paging nobody did.
+    const paged = perSource.filter(
+      (one) => one.state === "answered" && !(one.narrowingsNotReceived ?? []).includes("page"),
+    );
     const data: RowsResult<T> = {
       rows,
       perSource,
+      ...(paged.length === 0
+        ? {}
+        : {
+            window: {
+              page: (input.page as number | undefined) ?? 1,
+              limit: (input.limit as number | undefined) ?? ROWS_PER_PAGE,
+            },
+          }),
       ordering:
         asks.length > 1
           ? "interleaved by catalogue, in the order the registry names them, since the catalogues share no measure to order them together by"
@@ -716,7 +742,9 @@ export class StashboxClient {
         if ("report" in found) return found.report;
 
         let count = 0;
+        let unattributed = 0;
         for (const scene of found.value.read) {
+          let reached = false;
           for (const print of fingerprints) {
             const carried =
               (scene.fingerprints as { hash: string; algorithm: string }[] | undefined) ?? [];
@@ -732,8 +760,13 @@ export class StashboxClient {
             )
               continue;
             raw.push({ source: ask.spec.id, scene, algorithm: print.algorithm, hash: print.hash });
+            reached = true;
             count += 1;
           }
+          // The catalogue answered with it and this client cannot say which
+          // hash reached it, so it stands as no match and is counted apart
+          // rather than dropped out of the answer entirely.
+          if (!reached) unattributed += 1;
         }
         return {
           source: ask.spec.id,
@@ -741,6 +774,7 @@ export class StashboxClient {
           state: "answered" as const,
           count,
           records: found.value.read.length,
+          ...(unattributed > 0 ? { unattributed } : {}),
           ...(found.value.skipped > 0 ? { skipped: found.value.skipped } : {}),
           ...(request.notSearched.length > 0 ? { algorithmsNotSearched: request.notSearched } : {}),
         };
@@ -776,6 +810,7 @@ export class StashboxClient {
           ...SHAPES.scene,
         }),
         algorithm: first.algorithm,
+        hash: first.hash,
         matchKind: first.algorithm === "PHASH" ? "perceptual_similarity" : "exact_file",
       };
     });
@@ -788,6 +823,7 @@ export class StashboxClient {
         // describe the same bytes, and counting their records would add
         // across corpora that overlap by an amount neither publishes.
         scenes_matched: matches.length,
+        unattributed: reports.reduce((total, one) => total + (one.unattributed ?? 0), 0),
         asked: fingerprints.map((one) => ({ hash: one.hash, algorithm: one.algorithm })),
         perSource: orderByRegistry([...reports, ...unasked]),
       },

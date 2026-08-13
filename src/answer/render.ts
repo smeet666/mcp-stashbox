@@ -324,6 +324,7 @@ export function renderCard(card: Card, kind: string, cached = false): Rendered {
 /** What a search answers with, once every catalogue has been heard from. */
 export interface Rows {
   rows: Record<string, unknown>[];
+  window?: { page: number; limit: number };
   perSource: {
     source: string;
     name?: string;
@@ -343,7 +344,7 @@ export interface Rows {
  * the text block alone must lose none of them, and the three states a
  * catalogue can be in are the qualification that matters most.
  */
-export function renderRows(result: Rows, what: string, notes: string[]): Rendered {
+export function renderRows(result: Rows, what: string, notes: string[], cached = false): Rendered {
   const lines = result.rows.map((row) => `- ${rowLine(row)}`);
   const reports = result.perSource.map((one) => {
     const who = inline(String(one.name ?? one.source)) ?? one.source;
@@ -372,6 +373,8 @@ export function renderRows(result: Rows, what: string, notes: string[]): Rendere
       result_count: result.rows.length,
       per_source: result.perSource.map((one) => rowPayload(one as never)),
       ordering: result.ordering,
+      ...(result.window === undefined ? {} : { window: result.window }),
+      ...(cached ? { cached: true } : {}),
       notes,
     },
   };
