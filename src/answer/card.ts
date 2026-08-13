@@ -122,11 +122,44 @@ function scalarOf(answered: readonly Answered[], name: string): CardValue {
   };
 }
 
-/** Whether two published readings are the same reading, structure included. */
+/**
+ * What a published value is, apart from where it is held.
+ *
+ * Every record a catalogue names carries that catalogue's own identifier, and
+ * two catalogues naming one studio mint two of them. Compared whole, the two
+ * readings differ by an address and the card reports a disagreement between two
+ * catalogues that said the same thing. Compared on what the value *is*, they
+ * agree, which is the stronger fact and the true one.
+ *
+ * A field a catalogue publishes no table for is left out of the comparison for
+ * the same reason: a null that stands for "this catalogue counts none" is a
+ * fact about the catalogue, and letting it split two readings would render a
+ * capability as a difference in the world.
+ */
+function identityOf(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value !== "object") return String(value);
+  const held = value as Record<string, unknown>;
+  if (typeof held.hash === "string")
+    return `${String(held.algorithm ?? "")} ${held.hash.toLowerCase()}`;
+  if (typeof held.url === "string") return held.url;
+  if (typeof held.value === "string" && typeof held.precision === "string") {
+    return `${held.value} ${held.precision}`;
+  }
+  if (typeof held.name === "string") return held.name.trim().toLowerCase();
+  if (typeof held.id === "string") return held.id.slice(held.id.indexOf(":") + 1);
+  // A shape with nothing naming it is compared whole, since there is nothing
+  // else to compare it on.
+  return JSON.stringify(
+    Object.fromEntries(Object.entries(held).filter(([name]) => name !== "id" && name !== "source")),
+  );
+}
+
+/** Whether two published readings name the same thing. */
 function same(a: unknown, b: unknown): boolean {
   if (a === b) return true;
-  if (a === null || b === null || typeof a !== "object" || typeof b !== "object") return false;
-  return JSON.stringify(a) === JSON.stringify(b);
+  if (a === null || b === null) return false;
+  return identityOf(a) === identityOf(b);
 }
 
 /**
@@ -142,7 +175,10 @@ function unionOf(answered: readonly Answered[], name: string): CardEntry[] {
     const value = one.record[name];
     if (!Array.isArray(value)) continue;
     for (const entry of value) {
-      const key = typeof entry === "string" ? entry : JSON.stringify(entry);
+      // Two catalogues naming one tag mint two identifiers for it. Keyed on
+      // the address, the union would publish one thing twice and a caller
+      // counting the entries would count double.
+      const key = typeof entry === "string" ? entry : identityOf(entry);
       const found = held.get(key);
       if (found === undefined)
         held.set(key, { value: entry as string, published_by: [one.source] });

@@ -125,6 +125,13 @@ export function catalogues(argument: string): z.ZodArray<z.ZodEnum<Record<string
     );
 }
 
+/** A reading with two states, refused in the words every other refusal uses. */
+export function trueOrFalse(argument: string, what: string): z.ZodBoolean {
+  return z.boolean({
+    error: `${CODE} ${argument} takes ${what}, written true or false. A value outside those two names no question this server can put to a catalogue.`,
+  });
+}
+
 /** A whole number inside the bounds an answer of that size can honour. */
 export function wholeNumber(
   argument: string,

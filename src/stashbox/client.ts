@@ -60,6 +60,7 @@ import {
 import {
   arrayUnder,
   objectUnder,
+  recordUnder,
   readPerformer,
   readScene,
   readStudio,
@@ -453,20 +454,48 @@ export class StashboxClient {
     const sections = (held.sections as string[] | undefined) ?? ["basic"];
     const parsed = parseId(written, this.configured);
     const readings: Reading[] = [];
+    const replayed = new Set<string>();
 
+    // The catalogues a caller named govern the first reading as much as the
+    // ones reached from it: spending a request on a catalogue they excluded
+    // asks a question they did not, and the card would then name a holder
+    // they asked to leave out.
     const first = await this.#readOne(kind, parsed.instance, parsed.uuid, sections, named);
     readings.push(first.reading);
+    if (first.replayed === true) replayed.add(parsed.instance);
 
     for (const other of first.alsoAt) {
       if (named !== undefined && !named.includes(other.source)) continue;
       if (readings.some((one) => one.source === other.source)) continue;
       const next = await this.#readOne(kind, other.source, other.uuid, sections, named);
       readings.push(next.reading);
+      if (next.replayed === true) replayed.add(other.source);
     }
 
     const shape = SHAPES[kind];
-    const card = consolidate({ readings, prefer, ...shape });
-    return { data: card, cached: false };
+    const card = consolidate({
+      readings,
+      prefer,
+      scalars: [...shape.scalars, "sourceUrl", "retrievedAt", "mergedInto"],
+      lists: shape.lists,
+      perSource: [...shape.perSource, "pendingEdits", "rowsSkipped"],
+    });
+    // A loss dropped in silence makes the card a record holding less than the
+    // catalogue holds, with nothing saying so.
+    for (const one of readings) {
+      const lost =
+        (one.record as { rowsSkipped?: number; rowsSkippedIn?: string[] } | undefined) ?? {};
+      if ((lost.rowsSkipped ?? 0) > 0) {
+        card.notes.push(
+          `${lost.rowsSkipped} row(s) of this record could not be read on ${one.source} and are left out of what it shows, in: ${(lost.rowsSkippedIn ?? []).join(", ")}. That is this client failing to read them and says nothing about what the catalogue holds.`,
+        );
+      }
+    }
+    // Replayed only where every catalogue that answered was answered from the
+    // store: one live reading makes the card a reading of this moment.
+    const answered = readings.filter((one) => one.state === "answered");
+    const cached = answered.length > 0 && answered.every((one) => replayed.has(one.source));
+    return { data: card, cached };
   }
 
   async #readOne(
@@ -475,7 +504,11 @@ export class StashboxClient {
     uuid: string,
     sections: readonly string[],
     named: readonly InstanceId[] | undefined,
-  ): Promise<{ reading: Reading; alsoAt: { source: InstanceId; uuid: string }[] }> {
+  ): Promise<{
+    reading: Reading;
+    alsoAt: { source: InstanceId; uuid: string }[];
+    replayed?: boolean;
+  }> {
     const spec = instanceById(source);
     const apiKey = spec === undefined ? undefined : this.#config.keys[spec.id];
     const id = `${source}:${uuid}`;
@@ -502,7 +535,17 @@ export class StashboxClient {
         alsoAt: [],
       };
     }
-    void named;
+    if (named !== undefined && !named.includes(spec.id)) {
+      return {
+        reading: {
+          source,
+          id,
+          state: "absent",
+          reason: `The catalogues named in this call left ${spec.name} out, so it was never asked.`,
+        },
+        alsoAt: [],
+      };
+    }
 
     const request = recordRequest(spec, kind, uuid, sections);
     const key = cacheKey({
@@ -512,15 +555,20 @@ export class StashboxClient {
     });
     const stored = this.#cache.get(key) as Record<string, unknown> | undefined;
     if (stored !== undefined) {
-      return { reading: { source, id, state: "answered", record: stored }, alsoAt: alsoAt(stored) };
+      return {
+        reading: { source, id, state: "answered", record: stored },
+        alsoAt: alsoAt(stored),
+        replayed: true,
+      };
     }
 
     const at = this.#now();
     const found = await this.#ask(spec, apiKey, request, `the ${kind}`, (payload) => {
-      const container = objectUnder(payload, request.operation, spec, `the ${kind}`) as Record<
-        string,
-        unknown
-      >;
+      // A key the answer does not carry is a shape this client cannot read.
+      // The key present and null is the catalogue saying it holds nothing at
+      // that identifier, and only that second reading is an absence.
+      const container = recordUnder(payload, request.operation, spec, `the ${kind}`);
+      if (container === null) return null;
       return READERS[kind](container, spec, at).record;
     });
 
@@ -542,9 +590,10 @@ export class StashboxClient {
         reading: {
           source,
           id,
-          state: "failed",
-          error: "parse_failure",
-          reason: `${spec.name} answered a ${kind} this client could not read, which states nothing about whether the record exists.`,
+          // The catalogue looked and holds nothing there, which is an absence
+          // it established rather than a reading this client failed at.
+          state: "answered",
+          reason: `${spec.name} holds no ${kind} at ${id}. Another catalogue may hold the same thing under an identifier of its own.`,
         },
         alsoAt: [],
       };
@@ -623,8 +672,15 @@ export class StashboxClient {
           for (const print of fingerprints) {
             const carried =
               (scene.fingerprints as { hash: string; algorithm: string }[] | undefined) ?? [];
+            // A hash is compared for what it is: the catalogues publish it in
+            // either case, and a comparison that reads two spellings of one
+            // hash as two hashes turns a match into an emptiness.
             if (
-              !carried.some((one) => one.hash === print.hash && one.algorithm === print.algorithm)
+              !carried.some(
+                (one) =>
+                  one.hash.toLowerCase() === print.hash.toLowerCase() &&
+                  one.algorithm === print.algorithm,
+              )
             )
               continue;
             raw.push({ source: ask.spec.id, scene, algorithm: print.algorithm, hash: print.hash });
@@ -680,7 +736,10 @@ export class StashboxClient {
       data: {
         matches,
         match_count: matches.length,
-        scenes_matched: new Set(raw.map((one) => one.scene.id)).size,
+        // Files, not records: two catalogues answering one exact hash
+        // describe the same bytes, and counting their records would add
+        // across corpora that overlap by an amount neither publishes.
+        scenes_matched: matches.length,
         asked: fingerprints.map((one) => ({ hash: one.hash, algorithm: one.algorithm })),
         perSource: orderByRegistry([...reports, ...unasked]),
       },

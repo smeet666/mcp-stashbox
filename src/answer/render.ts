@@ -260,7 +260,7 @@ function creditsLine(value: unknown): string | null {
  * A card as a reader meets it: every value with the catalogues that said it,
  * every disagreement stated rather than resolved in silence.
  */
-export function renderCard(card: Card, kind: string): Rendered {
+export function renderCard(card: Card, kind: string, cached = false): Rendered {
   const rows: (string | null)[] = [];
   for (const [name, held] of Object.entries(card.fields)) {
     rows.push(Array.isArray(held) ? unionLine(name, held) : valueLine(name, held));
@@ -296,16 +296,24 @@ export function renderCard(card: Card, kind: string): Rendered {
     `Preferred in this order: ${card.preferred.map((one) => catalogueOf(one).name).join(", ")}`,
   ]);
 
+  const notes = cached
+    ? [
+        ...card.notes,
+        "This answer was replayed from this client's store, so no catalogue was asked for it. What each is reported as holding is what it held when the answer was first read.",
+      ]
+    : card.notes;
+
   return {
-    text: `${body}${notesBlock(card.notes)}`,
+    text: `${body}${notesBlock(notes)}`,
     structured: {
+      ...(cached ? { cached: true } : {}),
       card: {
         kind,
         fields: card.fields,
         counts: card.counts,
         held_by: card.held_by,
         preferred: card.preferred,
-        notes: card.notes,
+        notes,
       },
     },
   };
@@ -362,7 +370,7 @@ export function renderRows(result: Rows, what: string, notes: string[]): Rendere
     structured: {
       results: result.rows.map((row) => rowPayload(row)),
       result_count: result.rows.length,
-      per_source: result.perSource,
+      per_source: result.perSource.map((one) => rowPayload(one as never)),
       ordering: result.ordering,
       notes,
     },

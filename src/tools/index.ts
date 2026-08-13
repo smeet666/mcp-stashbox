@@ -31,9 +31,29 @@ import {
   severalOf,
   strictInput,
   text,
+  trueOrFalse,
   wholeNumber,
 } from "./arguments.js";
 import { cardOutput, fingerprintOutput, rowsOutput, sourcesOutput } from "./schemas.js";
+
+/**
+ * What a caller wrote, under the names the layer below reads.
+ *
+ * The published names of this server hold more than one word, and the layer
+ * that builds a request names the same things in one. Handed across unchanged,
+ * every argument whose name holds two words is read as absent: the request goes
+ * out narrowed by nothing and the first page of the whole index comes back as
+ * the answer to a question nobody asked. The translation happens here, once,
+ * for every tool.
+ */
+function asWritten(args: Record<string, unknown>): Record<string, unknown> {
+  const held: Record<string, unknown> = {};
+  for (const [name, value] of Object.entries(args)) {
+    if (value === undefined) continue;
+    held[name.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase())] = value;
+  }
+  return held;
+}
 
 /** What a tool needs of the layer that reaches the catalogues. */
 export interface Catalogues {
@@ -191,7 +211,7 @@ const studioSearchShape = {
   query: text("query", "a string of words").optional().describe(WORDS),
   name: text("name", "words a name carries").optional(),
   parent_id: identifier("parent_id").optional(),
-  has_parent: z.boolean().optional().describe("Whether the studio sits under another."),
+  has_parent: trueOrFalse("has_parent", "whether the studio sits under another").optional(),
   ...paging("studios"),
 };
 
@@ -260,7 +280,7 @@ function searchTool(
     outputSchema: rowsOutput,
     annotations: { readOnlyHint: true, openWorldHint: true },
     run: async (client, args) => {
-      const read = await client[call](args);
+      const read = await client[call](asWritten(args));
       const rows = read.data as never as Parameters<typeof renderRows>[0] & { notes?: string[] };
       return renderRows(rows, what.slice(0, -1), rowNotes(rows, what.slice(0, -1), read.cached));
     },
@@ -283,8 +303,8 @@ function cardTool(
     outputSchema: cardOutput,
     annotations: { readOnlyHint: true, openWorldHint: true },
     run: async (client, args) => {
-      const read = await client.getCard(kind, String(args.id), args);
-      return renderCard(read.data as never, kind);
+      const read = await client.getCard(kind, String(args.id), asWritten(args));
+      return renderCard(read.data as never, kind, read.cached);
     },
   };
 }
@@ -506,7 +526,7 @@ export const TOOLS: Tool[] = [
     outputSchema: fingerprintOutput,
     annotations: { readOnlyHint: true, openWorldHint: true },
     run: async (client, args) => {
-      const read = (await client.findByFingerprint(args)) as {
+      const read = (await client.findByFingerprint(asWritten(args))) as {
         data: {
           matches: { scene: never; algorithm: string; matchKind: string }[];
           match_count: number;
