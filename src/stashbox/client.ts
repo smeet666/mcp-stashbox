@@ -150,6 +150,14 @@ export interface FingerprintMatch {
   matchKind: string;
 }
 
+/** One record a hash reached on one catalogue, before the records are put together. */
+interface Raw {
+  source: InstanceId;
+  scene: Record<string, unknown>;
+  algorithm: string;
+  hash: string;
+}
+
 /** What a set of hashes reached, and what every catalogue did with them. */
 export interface FingerprintResult {
   matches: FingerprintMatch[];
@@ -574,8 +582,9 @@ export class StashboxClient {
       named,
     );
 
+    const prefer = (input.prefer as InstanceId[] | undefined) ?? INSTANCES.map((one) => one.id);
     const reports: SourceReport[] = [];
-    const matches: FingerprintMatch[] = [];
+    const raw: Raw[] = [];
 
     const answered = await Promise.all(
       asks.map(async (ask) => {
@@ -618,11 +627,7 @@ export class StashboxClient {
               !carried.some((one) => one.hash === print.hash && one.algorithm === print.algorithm)
             )
               continue;
-            matches.push({
-              scene: scene as unknown as Card,
-              algorithm: print.algorithm,
-              matchKind: print.algorithm === "PHASH" ? "perceptual_similarity" : "exact_file",
-            });
+            raw.push({ source: ask.spec.id, scene, algorithm: print.algorithm, hash: print.hash });
             count += 1;
           }
         }
@@ -639,11 +644,43 @@ export class StashboxClient {
     );
     reports.push(...answered);
 
+    // One file, one card. Two catalogues answering the same exact hash
+    // describe the same bytes, which is the strongest identity the data
+    // carries, and both records are already here: consolidating them costs no
+    // request. A perceptual hash states a likeness and joins nothing, so its
+    // records stay one card per catalogue.
+    const byHash = new Map<string, Raw[]>();
+    for (const one of raw) {
+      const key =
+        one.algorithm === "PHASH"
+          ? `${one.algorithm} ${one.hash} ${one.source}`
+          : `${one.algorithm} ${one.hash}`;
+      byHash.set(key, [...(byHash.get(key) ?? []), one]);
+    }
+
+    const matches: FingerprintMatch[] = [...byHash.values()].map((group) => {
+      const first = group[0] as Raw;
+      return {
+        scene: consolidate({
+          readings: group.map((one) => ({
+            source: one.source,
+            id: String(one.scene.id),
+            state: "answered" as const,
+            record: one.scene,
+          })),
+          prefer: prefer,
+          ...SHAPES.scene,
+        }),
+        algorithm: first.algorithm,
+        matchKind: first.algorithm === "PHASH" ? "perceptual_similarity" : "exact_file",
+      };
+    });
+
     return {
       data: {
         matches,
         match_count: matches.length,
-        scenes_matched: new Set(matches.map((one) => JSON.stringify(one.scene))).size,
+        scenes_matched: new Set(raw.map((one) => one.scene.id)).size,
         asked: fingerprints.map((one) => ({ hash: one.hash, algorithm: one.algorithm })),
         perSource: orderByRegistry([...reports, ...unasked]),
       },

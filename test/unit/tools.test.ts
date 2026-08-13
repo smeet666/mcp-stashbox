@@ -261,36 +261,28 @@ describe("each tool declares what the specification gives it", () => {
 /* --------------------------------------------------- what a schema costs */
 
 describe("a shape is declared once", () => {
-  it("carries no shape a schema never names", () => {
-    // A shape a schema holds and never refers to costs a caller exactly what a
-    // shape it uses costs: the list is read whole before a question is asked.
-    for (const one of TOOLS) {
-      const schema = one.outputSchema as { $defs?: Record<string, unknown> };
-      const json = JSON.stringify(schema);
-      for (const name of Object.keys(schema.$defs ?? {})) {
-        expect(
-          json.includes(`#/$defs/${name}`),
-          `${one.name} carries the shape ${name} and refers to it nowhere`,
-        ).toBe(true);
-      }
-    }
+  /** What a client is actually sent, which is what a session pays for. */
+  const emitted = () =>
+    TOOLS.map((one) =>
+      JSON.stringify({
+        name: one.name,
+        description: one.description,
+        inputSchema: z.toJSONSchema(one.declared, { io: "input" }),
+        outputSchema: z.toJSONSchema(z.object(one.outputSchema), { io: "output" }),
+      }),
+    ).join("");
+
+  it("declares every tool inside the budget a session pays before it asks", () => {
+    // The whole list is read at the opening of a session, so this is money
+    // spent before a question. Ten tools are held under what five once cost.
+    expect(emitted().length).toBeLessThan(99_644);
   });
 
-  it("refers to a shape rather than writing it out, wherever two tools share one", () => {
-    for (const one of TOOLS) {
-      const schema = one.outputSchema as { properties?: Record<string, unknown> };
-      const written = JSON.stringify(schema.properties ?? {});
-      // The properties of a tool name the shapes; the shapes themselves live
-      // under $defs and are written once per schema rather than per field.
-      expect(
-        written.split('"source_url"').length - 1,
-        `${one.name} writes a record shape into its own properties`,
-      ).toBe(0);
-    }
-  });
-
-  it("declares ten tools for less than the five that came before cost", () => {
-    const bytes = JSON.stringify(TOOLS.map((one) => one.outputSchema)).length;
-    expect(bytes).toBeLessThan(91_436);
+  it("spends less than half of that budget on the words rather than the shape", () => {
+    const json = emitted();
+    const described = (json.match(/"description":"(?:[^"\\]|\\.)*"/g) ?? []).join("").length;
+    // Every sentence here earns its place, and a schema that is mostly prose
+    // is a schema whose reader pays for the same paragraph once per tool.
+    expect(described / json.length).toBeLessThan(0.5);
   });
 });

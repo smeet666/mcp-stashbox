@@ -14,26 +14,12 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { createLogger, loadConfig } from "./config.js";
 import { StashboxClient } from "./stashbox/client.js";
 import { createServer } from "./server.js";
-import { registerFindByFingerprint } from "./tools/findByFingerprint.js";
-import { registerGetPerformer } from "./tools/getPerformer.js";
-import { registerGetScene } from "./tools/getScene.js";
-import { registerSearchPerformers } from "./tools/searchPerformers.js";
-import { registerSearchScenes } from "./tools/searchScenes.js";
 
 async function main(): Promise<void> {
   const config = loadConfig();
   const logger = createLogger(config.logLevel);
 
-  const client = new StashboxClient({
-    keys: config.keys,
-    userAgent: config.userAgent,
-    minIntervalMs: config.minIntervalMs,
-    timeoutMs: config.timeoutMs,
-    maxRetries: config.maxRetries,
-    cacheTtlMs: config.cacheTtlMs,
-    cacheMaxEntries: config.cacheMaxEntries,
-    logger,
-  });
+  const client = new StashboxClient({ keys: config.keys, config, logger });
 
   if (client.configured.length === 0) {
     // Said once at startup: every answer would otherwise report five catalogues
@@ -43,14 +29,7 @@ async function main(): Promise<void> {
     );
   }
 
-  // The order is fixed, since a client caches the list of tools it is given.
-  const server = createServer(client, [
-    registerSearchScenes,
-    registerSearchPerformers,
-    registerGetScene,
-    registerGetPerformer,
-    registerFindByFingerprint,
-  ]);
+  const server = createServer(client as never);
 
   await server.connect(new StdioServerTransport());
   logger.info(`ready, reading ${client.configured.join(", ") || "no catalogue"}`);

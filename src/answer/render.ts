@@ -299,26 +299,142 @@ export function renderCard(card: Card, kind: string): Rendered {
   return {
     text: `${body}${notesBlock(card.notes)}`,
     structured: {
-      kind,
-      fields: card.fields,
-      counts: card.counts,
-      held_by: card.held_by,
-      preferred: card.preferred,
-      notes: card.notes,
+      card: {
+        kind,
+        fields: card.fields,
+        counts: card.counts,
+        held_by: card.held_by,
+        preferred: card.preferred,
+        notes: card.notes,
+      },
     },
   };
 }
 
+/* ---------------------------------------------------------------- the rows */
+
+/** What a search answers with, once every catalogue has been heard from. */
+export interface Rows {
+  rows: Record<string, unknown>[];
+  perSource: {
+    source: string;
+    name?: string;
+    state: string;
+    count?: number;
+    reason?: string;
+    [key: string]: unknown;
+  }[];
+  ordering: string;
+}
+
+/**
+ * A page of rows, with what each catalogue did and what the page does not
+ * establish.
+ *
+ * The prose carries every qualification the payload carries: a client showing
+ * the text block alone must lose none of them, and the three states a
+ * catalogue can be in are the qualification that matters most.
+ */
+export function renderRows(result: Rows, what: string, notes: string[]): Rendered {
+  const lines = result.rows.map((row) => `- ${rowLine(row)}`);
+  const reports = result.perSource.map((one) => {
+    const who = inline(String(one.name ?? one.source)) ?? one.source;
+    if (one.state === "answered") return `  - ${who}: answered, ${one.count ?? 0} row(s)`;
+    if (one.state === "failed") {
+      return `  - ${who}: could not answer: ${inline(String(one.reason ?? "")) ?? ""}`;
+    }
+    return `  - ${who}: not asked: ${inline(String(one.reason ?? "")) ?? ""}`;
+  });
+
+  const body = joinLines([
+    `${result.rows.length} ${what} row(s) from the catalogues that answered.`,
+    section(
+      `${what.charAt(0).toUpperCase()}${what.slice(1)}s`,
+      lines,
+      "no catalogue that answered returned a row",
+    ),
+    section("Catalogues", reports, "no catalogue was asked"),
+    `Rows are ${result.ordering}.`,
+  ]);
+
+  return {
+    text: `${body}${notesBlock(notes)}`,
+    structured: {
+      results: result.rows.map((row) => rowPayload(row)),
+      result_count: result.rows.length,
+      per_source: result.perSource,
+      ordering: result.ordering,
+      notes,
+    },
+  };
+}
+
+/**
+ * One row, under the names the published schema declares.
+ *
+ * A payload that carried this client's own spellings would announce one
+ * contract and answer another, and a caller reading the schema would find no
+ * address on a record that carries one.
+ */
+export function rowPayload(row: Record<string, unknown>): Record<string, unknown> {
+  const held: Record<string, unknown> = {};
+  for (const [name, value] of Object.entries(row)) {
+    if (value === undefined) continue;
+    held[name.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)] = value;
+  }
+  return held;
+}
+
+/** One row, opening with what names the record and closing with its address. */
+function rowLine(row: Record<string, unknown>): string {
+  const named =
+    inline((row.title as string | null) ?? (row.name as string | null)) ?? String(row.id);
+  const about = [
+    inline((row.disambiguation as string | null) ?? null),
+    studioLine(row.studio),
+    dateText((row.releaseDate as never) ?? null),
+    inline((row.country as string | null) ?? null),
+    categoryLine(row.category),
+  ].filter((part): part is string => part !== null && part !== "");
+  const tail = about.length === 0 ? "" : ` (${about.join(", ")})`;
+  return `${named}${markerSuffix(row.status as never)}${tail} [${String(row.id)}]`;
+}
+
+/**
+ * A value a catalogue published, as a reader reads it.
+ *
+ * A date carries the precision it was entered at, an address carries the site
+ * behind it, and a structure printed through its default rendering reaches a
+ * reader as nothing at all.
+ */
+function spelled(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "object") return inline(String(value));
+  const held = value as Record<string, unknown>;
+  if (typeof held.value === "string" && typeof held.precision === "string") {
+    return inline(held.value);
+  }
+  if (typeof held.url === "string") return linksText([held as never]);
+  if (typeof held.hash === "string")
+    return inline(`${String(held.algorithm)} ${String(held.hash)}`);
+  if (typeof held.name === "string" || typeof held.id === "string") {
+    return inline(String(held.name ?? held.id));
+  }
+  // A shape this renderer has no words for is published in the payload and
+  // named here rather than printed as the engine would print it.
+  return "a block this answer carries in its payload";
+}
+
 /** One value, with the catalogues that said it and the readings that lost. */
 function valueLine(name: string, held: CardValue): string | null {
-  const value = held.value === null ? null : inline(String(held.value));
+  const value = spelled(held.value);
   if (value === null) return null;
   const said = held.agreed_by.map((one) => catalogueOf(one).name).join(", ");
   const apart =
     held.disagreed === undefined
       ? ""
       : `; ${held.disagreed
-          .map((one) => `${catalogueOf(one.source).name} says ${inline(String(one.value)) ?? ""}`)
+          .map((one) => `${catalogueOf(one.source).name} says ${spelled(one.value) ?? ""}`)
           .join(", ")}`;
   return `${spelt(name)}: ${value} (${said}${apart})`;
 }
@@ -328,7 +444,7 @@ function unionLine(name: string, entries: readonly CardEntry[]): string | null {
   if (entries.length === 0) return null;
   const each = entries
     .map((entry) => {
-      const value = inline(String(entry.value));
+      const value = spelled(entry.value);
       const by = entry.published_by.map((one) => catalogueOf(one).name).join(", ");
       return value === null ? null : `${value} (${by})`;
     })
