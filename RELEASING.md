@@ -12,6 +12,13 @@ One version at a time, in this order.
    exist yet, since trusted publishing cannot be configured against an unknown
    name. Afterwards through the workflow, under the repository's OIDC identity,
    with no token stored anywhere.
+   **The bundle is built by the tag, not by `npm run build`.** `npm run build`
+   writes `dist/`, which is what npm serves and what the tests read. The single-file
+   bundle has a configuration of its own (`tsup.bundle.config.ts`) and is built in
+   the workflow, so a `dist-bundle/` sitting in a working copy can be any age at
+   all. Reading it to decide what a release contains is reading the wrong artefact:
+   download the `.mcpb` from the release and run the server inside it.
+
 5. **Tag**, which builds the bundle, cuts the GitHub release and files the
    registry entry.
 6. **The official registry.** Its description is capped at 100 characters and it

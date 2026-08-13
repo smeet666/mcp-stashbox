@@ -209,6 +209,18 @@ Les sections sont facultatives parce que les empreintes d'une scène pèsent plu
 que tout ce qu'elle porte. Les scènes créditant une personne se lisent par
 `search_scenes` avec `performer_ids`, qui pagine et filtre.
 
+## Ce que chaque catalogue répond
+
+`get_sources` publie ce que chaque catalogue a été **mesuré** répondre, la route
+sur laquelle chaque capacité a été vue, et le jour où sa surface a été lue chez
+lui. Rien n'y est déduit du logiciel qu'un catalogue est supposé faire tourner :
+quatre d'entre eux ont répondu les mêmes noms de routes parce que chacun a été
+interrogé, et l'un des quatre ne déclare aucun champ pour rétrécir une scène sur
+la référence du studio, ce que ses fiches portent pourtant.
+
+Détenir une clé pour un catalogue est un fait sur votre installation et ne
+change rien à ce que ce catalogue sait faire. Les deux restent deux champs.
+
 ## Ce qu'une réponse a le droit d'affirmer
 
 **Trois algorithmes d'empreinte, trois affirmations différentes.** MD5 et OSHASH

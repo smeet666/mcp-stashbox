@@ -184,16 +184,16 @@ announced rather than performed in silence.
 each naming the catalogue that published it and saying so where a catalogue
 publishes none.
 
-## What is kept, and what is rewritten
+## What the implementation rests on
 
-Kept, because round 19 read it and found it sound: the seam itself
-(`src/tools/*` imports the MCP SDK, `src/stashbox/*` never does), the six error
-codes, the transport with its pacing floor, its retries and its store, the
-identifier grammar, and the primitives that keep a catalogue's own words from
-forging a line this server writes.
+The seam, first: `src/tools/*` imports the MCP SDK and `src/stashbox/*` never
+does, so the lower layer is publishable as a library with its pacing, its store
+and its error taxonomy and no protocol attached.
 
-Rewritten: everything that describes what a catalogue answers, everything that
-builds a request, everything that reads an answer into a record, and every tool.
+Then the six error codes, the transport with its pacing floor and its retries,
+the identifier grammar, and the primitives that keep a catalogue's own words
+from forging a line this server writes. Each of those is read by a suite that
+drives it directly rather than through a tool that happens to exercise it.
 
 ## What the tests establish before any of it is written
 
