@@ -138,6 +138,28 @@ export function createHttpTransport(options: HttpTransportOptions): HttpTranspor
     // meaning on its own: a catalogue refusing a key answers an empty body, and
     // reading that body first turns the one mistake a new caller makes into a
     // catalogue that seems unreadable.
+    //
+    // Everything from here on runs inside one release: a refusal is the moment
+    // a site is already under strain, and it is the one path where holding on
+    // costs it something. A deadline left armed keeps this process alive past
+    // its work and fires an abort at an exchange that is over; a body nobody
+    // reads holds the connection open instead of returning it to the pool.
+    try {
+      return await readAnswer(spec, response, limiter, where);
+    } finally {
+      clearTimeout(deadline);
+      // A body already read cancels harmlessly; one abandoned on a refusal is
+      // the case this exists for.
+      void response.body?.cancel().catch(() => undefined);
+    }
+  }
+
+  async function readAnswer(
+    spec: InstanceSpec,
+    response: Response,
+    limiter: RateLimiter,
+    where: { instance: string; url: string },
+  ): Promise<Attempt> {
     const status = response.status;
 
     if (status === 429) {
@@ -206,8 +228,6 @@ export function createHttpTransport(options: HttpTransportOptions): HttpTranspor
         }),
         retryable: true,
       };
-    } finally {
-      clearTimeout(deadline);
     }
 
     let parsed: unknown;

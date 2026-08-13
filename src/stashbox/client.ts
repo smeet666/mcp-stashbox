@@ -178,14 +178,29 @@ export class StashboxClient {
 
   constructor(options: StashboxClientOptions = {}) {
     const loaded = loadConfig(process.env);
-    this.#config = { ...loaded, ...options.config, keys: options.keys ?? loaded.keys };
+    // A setting written here goes through the same bounds a setting read from
+    // the environment goes through. Spread over the loaded configuration, it
+    // would reach the transport unread, and the one that governs the pace owed
+    // to a free public site would be a suggestion.
+    this.#config = held(loaded, options.config, options.keys);
     this.configured = INSTANCES.filter((spec) => this.#config.keys[spec.id] !== undefined).map(
       (spec) => spec.id,
     );
     this.#cache = new Cache(this.#config.cacheTtlMs, this.#config.cacheMaxEntries);
     this.#now = options.now ?? (() => new Date().toISOString());
+    // A transport a caller supplies still owes the catalogues their pace: the
+    // debt is to the site, not to whoever writes the fetch. Wrapping it here
+    // keeps one request at a time and the interval underneath every path,
+    // including the one this package publishes as a library.
     this.#transport =
-      options.transport ??
+      (options.transport === undefined
+        ? undefined
+        : {
+            request: <T>(spec: InstanceSpec, apiKey: string, body: GraphQLRequest) =>
+              this.#limiterFor(spec).schedule(() =>
+                (options.transport as HttpTransport).request<T>(spec, apiKey, body),
+              ),
+          }) ??
       createHttpTransport({
         fetchImpl: options.fetchImpl ?? fetch,
         userAgent: this.#config.userAgent,
@@ -196,13 +211,25 @@ export class StashboxClient {
       });
   }
 
+  /** The interval this client holds to, which no setting takes below the floor. */
+  get pace(): number {
+    return Math.max(MIN_ALLOWED_INTERVAL_MS, this.#config.minIntervalMs);
+  }
+
+  /** The bounds every setting was read through, so a caller can see them. */
+  get bounds(): { timeoutMs: number; maxRetries: number; cacheMaxEntries: number } {
+    return {
+      timeoutMs: this.#config.timeoutMs,
+      maxRetries: this.#config.maxRetries,
+      cacheMaxEntries: this.#config.cacheMaxEntries,
+    };
+  }
+
   /** One pace per catalogue, with a floor the configuration may widen and never narrow. */
   #limiterFor(spec: InstanceSpec): RateLimiter {
     const held = this.#limiters.get(spec.id);
     if (held !== undefined) return held;
-    const made = new RateLimiter({
-      intervalMs: Math.max(MIN_ALLOWED_INTERVAL_MS, this.#config.minIntervalMs),
-    });
+    const made = new RateLimiter({ intervalMs: this.pace });
     this.#limiters.set(spec.id, made);
     return made;
   }
@@ -310,7 +337,20 @@ export class StashboxClient {
       // in the key: a replayed answer carries a reason per catalogue, and one
       // built for a narrower call would state a reason that was never this
       // call's.
-      params: { ...input, unasked: unasked.map((one) => `${one.source}:${one.reason}`).sort() },
+      // The question as it was asked, the standing page and size written in:
+      // two calls that build one request would otherwise key differently and
+      // the catalogue would be asked the same thing twice. The catalogues left
+      // out belong here too, with the reason each was left out, since a
+      // replayed answer carries a reason per catalogue and one built for a
+      // narrower call would state a reason that was never this call's.
+      params: {
+        asked: {
+          ...input,
+          page: (input.page as number | undefined) ?? 1,
+          limit: (input.limit as number | undefined) ?? ROWS_PER_PAGE,
+        },
+        unasked: unasked.map((one) => `${one.source}:${one.reason}`).sort(),
+      },
     });
     const held = this.#cache.get(key) as RowsResult<T> | undefined;
     if (held !== undefined) return { data: held, cached: true };
@@ -464,12 +504,20 @@ export class StashboxClient {
     readings.push(first.reading);
     if (first.replayed === true) replayed.add(parsed.instance);
 
-    for (const other of first.alsoAt) {
-      if (named !== undefined && !named.includes(other.source)) continue;
-      if (readings.some((one) => one.source === other.source)) continue;
-      const next = await this.#readOne(kind, other.source, other.uuid, sections, named);
+    // The catalogues a link reaches are different catalogues, so they are read
+    // together: each holds its own pace, and reading them one after another
+    // would make one question take as long as the sum of them all.
+    const others = first.alsoAt.filter(
+      (other) =>
+        (named === undefined || named.includes(other.source)) &&
+        !readings.some((one) => one.source === other.source),
+    );
+    const reached = await Promise.all(
+      others.map((other) => this.#readOne(kind, other.source, other.uuid, sections, named)),
+    );
+    for (const [at, next] of reached.entries()) {
       readings.push(next.reading);
-      if (next.replayed === true) replayed.add(other.source);
+      if (next.replayed === true) replayed.add(others[at]?.source ?? "");
     }
 
     const shape = SHAPES[kind];
@@ -746,6 +794,37 @@ export class StashboxClient {
       cached: false,
     };
   }
+}
+
+/**
+ * A setting, read through the bounds it is declared with.
+ *
+ * The same bounds the environment is read through, applied to what a caller
+ * writes: a value outside them is a value this client does not read, whichever
+ * way it arrived.
+ */
+function held(
+  loaded: Config,
+  written: Partial<Config> | undefined,
+  keys: Partial<Record<InstanceId, string>> | undefined,
+): Config {
+  const bounded = (value: number | undefined, standing: number, low: number, high: number) =>
+    value !== undefined && Number.isSafeInteger(value) && value >= low && value <= high
+      ? value
+      : standing;
+  return {
+    ...loaded,
+    ...written,
+    keys: keys ?? loaded.keys,
+    minIntervalMs: Math.max(
+      MIN_ALLOWED_INTERVAL_MS,
+      bounded(written?.minIntervalMs, loaded.minIntervalMs, MIN_ALLOWED_INTERVAL_MS, 60_000),
+    ),
+    timeoutMs: bounded(written?.timeoutMs, loaded.timeoutMs, 1, 600_000),
+    maxRetries: bounded(written?.maxRetries, loaded.maxRetries, 0, 10),
+    cacheTtlMs: bounded(written?.cacheTtlMs, loaded.cacheTtlMs, 0, 86_400_000),
+    cacheMaxEntries: bounded(written?.cacheMaxEntries, loaded.cacheMaxEntries, 1, 100_000),
+  };
 }
 
 /** The identifier arguments a caller writes, and the shape each one travels in. */

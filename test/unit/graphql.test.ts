@@ -576,3 +576,47 @@ describe("createHttpTransport, silence", () => {
     expect(errorOf(outcome).code).toBe("timeout");
   });
 });
+
+/* ------------------------------------------------- what a failure leaves behind */
+
+describe("a request lets go of everything it took, whatever came back", () => {
+  /**
+   * A refusal is the moment a site is already under strain, and it is the one
+   * path where holding on costs it something: a deadline left armed keeps this
+   * process alive and fires an abort at an exchange that is over, and a body
+   * nobody reads holds the connection open instead of returning it.
+   */
+  const answering = (status: number) => {
+    const cancelled: string[] = [];
+    const armed = () =>
+      vi.getTimerCount === undefined ? 0 : (vi.getTimerCount() as unknown as number);
+    const fetchImpl = (async () =>
+      ({
+        status,
+        headers: new Headers(),
+        body: { cancel: async () => void cancelled.push("cancelled") },
+        text: async () => "{}",
+      }) as unknown as Response) as unknown as typeof fetch;
+    return { cancelled, armed, fetchImpl };
+  };
+
+  for (const status of [429, 401, 403, 500, 400, 404]) {
+    it(`clears its deadline and lets go of the body on ${status}`, async () => {
+      const { cancelled, armed, fetchImpl } = answering(status);
+      const transport = createHttpTransport({
+        fetchImpl,
+        userAgent: "test",
+        timeoutMs: 20_000,
+        maxRetries: 0,
+        limiterFor: () => new RateLimiter({ intervalMs: 0 }),
+        logger: silentLogger,
+      });
+
+      const before = armed();
+      await transport.request(STASHDB, "key", { query: "{ x }" }).catch(() => undefined);
+
+      expect(armed(), `a deadline stayed armed after ${status}`).toBe(before);
+      expect(cancelled, `the body was never let go of after ${status}`).not.toHaveLength(0);
+    });
+  }
+});
