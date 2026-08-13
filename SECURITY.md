@@ -19,10 +19,17 @@ than the value it holds.
 **Third-party text reaches a model**, and it is guarded in two ways, because it
 arrives in two shapes.
 
-A value placed inside a line the server writes, such as a title, a name, an alias
-or a tag, has its line breaks collapsed to spaces before it is rendered. It
-therefore cannot begin a line of its own, which is what a forged note or a forged
-heading would need.
+A value placed inside a line the server writes has its line breaks collapsed to
+spaces before it is rendered. It therefore cannot begin a line of its own, which
+is what a forged note or a forged heading would need. This covers every value a
+catalogue publishes without exception: a title, a name, an alias, a tag, an
+address a record links to, the address of an image, and a fingerprint hash.
+
+A value that opens a line, such as the name a record's answer begins with, is
+shifted two spaces where it opens the way a line of the server's opens. That is
+read as a shape, a word or two then a colon, rather than as a list of the
+spellings somebody thought of: the server writes more openings than such a list
+holds, and a list goes stale the day a renderer gains a line.
 
 A block of a catalogue's own prose, such as a scene's description, is indented
 whole. Every line of it is shifted, whatever it says, so no line of it can begin

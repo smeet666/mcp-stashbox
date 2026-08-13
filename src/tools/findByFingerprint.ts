@@ -113,7 +113,7 @@ function lossLine(scene: SceneRecord): string | null {
 /** One match, opening with the hash that reached it. */
 function matchLines(match: FingerprintMatch): string[] {
   const scene = match.scene;
-  const hash = match.fingerprint === null ? "" : ` ${match.fingerprint.hash}`;
+  const hash = match.fingerprint === null ? "" : ` ${inline(match.fingerprint.hash) ?? ""}`;
   const studio = scene.studio;
   const by =
     studio === null ? "" : `, by ${inline(studio.name) ?? studio.id}${markerSuffix(studio.status)}`;

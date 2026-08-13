@@ -81,14 +81,21 @@ export function durationText(seconds: number | null): string | null {
   return `${seconds} seconds (${spelt})`;
 }
 
-/** Where a record links, each address with the site and category behind it. */
+/**
+ * Where a record links, each address with the site and category behind it.
+ *
+ * An address is written by whoever edits the record, so it reaches this line
+ * flattened. A line break inside one would open a line at the column this
+ * server opens its own, and a reader has no way to tell the two apart.
+ */
 export function linksText(links: readonly SiteLink[]): string {
   return links
     .map((link) => {
+      const url = inline(link.url) ?? "";
       const about = [inline(link.siteName), inline(link.siteCategory)].filter(
         (part): part is string => part !== null,
       );
-      return about.length === 0 ? link.url : `${link.url} (${about.join(", ")})`;
+      return about.length === 0 ? url : `${url} (${about.join(", ")})`;
     })
     .join("; ");
 }
@@ -98,7 +105,7 @@ export function imageRows(images: readonly ImageRow[]): string[] {
   return images.map((image) => {
     const size =
       image.width !== null && image.height !== null ? ` (${image.width}x${image.height})` : "";
-    return `  - ${image.url}${size}`;
+    return `  - ${inline(image.url) ?? ""}${size}`;
   });
 }
 
@@ -111,7 +118,9 @@ export function fingerprintRows(rows: readonly FingerprintRow[]): string[] {
       row.durationSeconds === null ? null : `${row.durationSeconds} seconds`,
     ].filter((part): part is string => part !== null);
     const about = counted.length === 0 ? "" : ` (${counted.join(", ")})`;
-    return `  - ${row.algorithm} ${row.hash}${about}`;
+    // The algorithm is one of a closed set this client reads; the hash is
+    // whatever the catalogue published, so it is flattened before it is placed.
+    return `  - ${row.algorithm} ${inline(row.hash) ?? ""}${about}`;
   });
 }
 

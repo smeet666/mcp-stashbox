@@ -304,10 +304,14 @@ function readBody(
     if (messages.some((message) => REFUSAL.test(message))) {
       return {
         outcome: "failed",
-        error: new StashboxError("invalid_input", `${spec.name} refused the request: ${said}`, {
-          ...where,
-          hint: `Set ${spec.envVar} to a key ${spec.name} accepts, or ask for something this key may read. This says nothing about whether the record exists.`,
-        }),
+        error: new StashboxError(
+          "invalid_input",
+          `${spec.name} refused the request. Its own words, which this server did not write: ${indentMarkerLines(said)}`,
+          {
+            ...where,
+            hint: `Set ${spec.envVar} to a key ${spec.name} accepts, or ask for something this key may read. This says nothing about whether the record exists.`,
+          },
+        ),
         retryable: false,
       };
     }
@@ -316,7 +320,10 @@ function readBody(
       limiter.pushBack();
       return {
         outcome: "failed",
-        error: rateLimited(`${spec.name} asked this client to slow down: ${said}`, where),
+        error: rateLimited(
+          `${spec.name} asked this client to slow down. Its own words, which this server did not write: ${indentMarkerLines(said)}`,
+          where,
+        ),
         retryable: true,
       };
     }

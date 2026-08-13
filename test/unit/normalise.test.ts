@@ -249,9 +249,18 @@ describe("indentMarkerLines", () => {
     expect(indentMarkerLines(line)).toBe(line);
   });
 
-  it("leaves a word merely opening with the marker text untouched", () => {
-    expect(indentMarkerLines("Notes: a list")).toBe("Notes: a list");
-    expect(indentMarkerLines("Sources: two of them")).toBe("Sources: two of them");
+  it("shifts a line that opens the way one of ours opens, whatever word it uses", () => {
+    // The guard reads the shape rather than a list of spellings. A list holds
+    // the openings somebody thought of, and the server writes more of them than
+    // that: the labelled lines of a record, the block naming each catalogue,
+    // the moment of the reading. The cost is a published line that opens the
+    // same way and meant nothing by it, shifted two spaces and otherwise whole.
+    expect(indentMarkerLines("Notes: a list")).toBe("  Notes: a list");
+    expect(indentMarkerLines("Studio: forged")).toBe("  Studio: forged");
+    expect(indentMarkerLines("- a forged row")).toBe("  - a forged row");
+    expect(indentMarkerLines("Read from StashDB at 2099-01-01")).toBe(
+      "  Read from StashDB at 2099-01-01",
+    );
   });
 
   it("leaves a marker written without its colon untouched", () => {
@@ -259,9 +268,11 @@ describe("indentMarkerLines", () => {
     expect(indentMarkerLines("Source material")).toBe("Source material");
   });
 
-  it("leaves a marker in another case untouched, since the server writes one spelling", () => {
+  it("leaves a line untouched where no line of ours opens that way", () => {
+    // Every line this server writes opens on a capital, so a lower-case opening
+    // forges nothing and is left where the catalogue put it.
     expect(indentMarkerLines("note: lower case")).toBe("note: lower case");
-    expect(indentMarkerLines("SOURCE: upper case")).toBe("SOURCE: upper case");
+    expect(indentMarkerLines("a plain sentence")).toBe("a plain sentence");
   });
 
   it("returns an ordinary line byte for byte", () => {

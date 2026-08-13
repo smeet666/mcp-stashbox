@@ -111,19 +111,32 @@ export function readContested(
   return reports >= submissions;
 }
 
-/** A line whose first non-space characters open one of the markers this server writes. */
-const MARKER_LINE = /^ *(?:Note|Source):/;
+/**
+ * A line whose first non-space characters open the way this server opens a line
+ * of its own.
+ *
+ * The set is every opening a rendered answer writes at column zero: the
+ * qualifications, the address a record was read from, the block naming each
+ * catalogue, the moment of the reading, and the labelled lines a record is made
+ * of. A list of the spellings somebody thought of leaves the next one open, so
+ * this reads the shape instead: a word or two, then a colon, is how every line
+ * of ours begins, and a leading dash is how every row of ours begins.
+ */
+const MARKER_LINE = /^ *(?:[A-Z][A-Za-z]*(?: [a-z]+){0,3}:|- |Read from )/;
 
 /**
- * Shifts the lines of published text that open with a marker this server writes
- * its own lines with.
+ * Shifts the lines of published text that open where a line this server writes
+ * opens.
  *
  * Text a catalogue published reaches a reader inside an answer this server
- * composes, and a description opening a line with `Note:` would forge a line
- * the server appears to have written. Two spaces are enough to tell them apart,
- * and every other byte of the text is left where it was, including the line
- * count and the blank lines. One spelling is shifted, since the server writes
- * exactly one.
+ * composes, and a description opening a line with `Note:` forges a line the
+ * server appears to have written. Two spaces are enough to tell them apart, and
+ * every other byte of the text is left where it was, including the line count
+ * and the blank lines.
+ *
+ * A value placed inside a line of ours is flattened rather than shifted, since
+ * a shifted line is still a line the reader did not expect there. This guard is
+ * for the one thing published as a block of its own.
  */
 export function indentMarkerLines(text: string): string {
   return text
