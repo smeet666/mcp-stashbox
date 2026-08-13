@@ -42,13 +42,25 @@ describe("the registry declares what was measured", () => {
     ]);
   });
 
-  it("gives no catalogue a capability set inherited from another", () => {
-    // Two catalogues declaring the identical set is what an inherited constant
-    // produces, and it is how a catalogue's own surface stops being read.
-    const sets = INSTANCES.map((spec) => [...spec.capabilities].sort().join(","));
-    const measured = INSTANCES.map((spec) => spec.measuredAt);
-    for (const at of measured) expect(at, "a catalogue declares no date of measure").toBeDefined();
-    expect(sets.length).toBe(INSTANCES.length);
+  it("gives every catalogue a day its own surface was read on", () => {
+    // A surface deduced from the software a catalogue is believed to run is
+    // the defect this file exists to prevent, and a date stamped on a
+    // deduction is that defect published as a fact.
+    for (const spec of INSTANCES) {
+      expect(spec.measuredAt, `${spec.id} claims a surface with no day behind it`).toMatch(
+        /^\d{4}-\d{2}-\d{2}$/,
+      );
+    }
+  });
+
+  it("records where a measurement disagreed rather than bending one set to fit", () => {
+    // Four catalogues answered one set of route names and one did not. The
+    // one that differs carries its own, and one of the four declares fewer
+    // faceted fields than its neighbours, which is a limit it has.
+    const shapes = new Set(INSTANCES.map((spec) => [...spec.capabilities].sort().join(",")));
+    expect(shapes.size, "every catalogue was read to answer the same thing").toBeGreaterThan(1);
+    const narrower = INSTANCES.filter((spec) => spec.facets !== undefined);
+    expect(narrower.map((spec) => spec.id).sort()).toEqual(["pmv", "tpdb"]);
   });
 
   it("carries, for every capability, the route it was measured on", () => {
@@ -94,6 +106,22 @@ describe("StashDB, measured", () => {
     expect(spec?.routes.search_performers).toBe("searchPerformers");
     expect(spec?.routes.search_studios).toBe("searchStudio");
     expect(spec?.routes.search_tags).toBe("searchTag");
+  });
+});
+
+describe("PMV Stash, measured", () => {
+  const spec = instanceById("pmv");
+
+  it("answers every route the reference instance answers", () => {
+    for (const capability of ["search_scenes", "search_studios", "get_tag"] as const) {
+      expect(supports(spec!, capability)).toBe(true);
+    }
+  });
+
+  it("declares no field to narrow a scene on the studio's own reference", () => {
+    // Measured: its records carry that reference, and its scene input holds
+    // no field for it, so it is a narrowing this catalogue cannot receive.
+    expect(spec?.facets).not.toContain("code");
   });
 });
 

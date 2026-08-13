@@ -35,6 +35,14 @@ table, and put to that catalogue every night.
 
 ### Changed
 
+- Every catalogue in the registry was read on its own endpoint. Three of them
+  carried a surface taken from the software they are believed to run, stamped
+  with a day nobody had measured them on, which is the same deduction that
+  produced the claim below with a date added to it. Introspection is open on
+  each of them, so the table is now what each one answered. Four agreed on one
+  set of route names; one of those four declares no field to narrow a scene on
+  the studio's own reference, which its records carry, and that limit is
+  recorded on its own entry rather than folded into the set.
 - ThePornDB answers searches. It was published as answering none at all: its
   route names are singular where its neighbour writes them plural, so a request
   written in the neighbour's spelling came back refused and the refusal was read

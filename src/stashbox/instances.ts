@@ -117,15 +117,18 @@ export interface InstanceSpec {
 }
 
 /**
- * The routes the published open-source server was measured answering, on the
- * instance that runs it in its reference form.
+ * The surface four of these catalogues were each read to answer.
  *
- * Three catalogues below share this set because each was measured, not because
- * one of them was taken as a model for the others. A catalogue whose surface has
- * never been read carries no capability at all, and a route absent from a spec
- * is a route this server never puts to it.
+ * Every one of them was introspected on its own endpoint on the day named in
+ * its entry, and the four answered the same route names. They share this
+ * constant because four measurements agreed, and a catalogue whose surface has
+ * never been read carries no capability at all: a route absent from a spec is
+ * one this server never puts to that catalogue.
+ *
+ * Where a measurement disagreed, the entry says so on its own rather than
+ * bending this constant to fit.
  */
-const READ_ON_STASHDB: Partial<Record<Capability, string>> = {
+const READ_ON_FOUR: Partial<Record<Capability, string>> = {
   search_scenes: "searchScenes",
   search_performers: "searchPerformers",
   search_studios: "searchStudio",
@@ -145,8 +148,8 @@ const READ_ON_STASHDB: Partial<Record<Capability, string>> = {
   performer_studios: "findPerformer.studios",
 };
 
-/** What each search route of the reference instance was measured answering with. */
-const SHAPES_ON_STASHDB: Partial<Record<Capability, "list" | "page">> = {
+/** What each search route of those four was measured answering with. */
+const SHAPES_ON_FOUR: Partial<Record<Capability, "list" | "page">> = {
   search_scenes: "page",
   search_performers: "page",
   search_studios: "list",
@@ -160,9 +163,9 @@ export const INSTANCES: readonly InstanceSpec[] = [
     endpoint: "https://stashdb.org/graphql",
     webBase: "https://stashdb.org",
     envVar: "STASHBOX_STASHDB_KEY",
-    capabilities: Object.keys(READ_ON_STASHDB) as Capability[],
-    routes: READ_ON_STASHDB,
-    answersWith: SHAPES_ON_STASHDB,
+    capabilities: Object.keys(READ_ON_FOUR) as Capability[],
+    routes: READ_ON_FOUR,
+    answersWith: SHAPES_ON_FOUR,
     filters: "criteria",
     facetedSearch: true,
     measuredAt: "2026-08-13",
@@ -247,9 +250,9 @@ export const INSTANCES: readonly InstanceSpec[] = [
     endpoint: "https://fansdb.cc/graphql",
     webBase: "https://fansdb.cc",
     envVar: "STASHBOX_FANSDB_KEY",
-    capabilities: Object.keys(READ_ON_STASHDB) as Capability[],
-    routes: READ_ON_STASHDB,
-    answersWith: SHAPES_ON_STASHDB,
+    capabilities: Object.keys(READ_ON_FOUR) as Capability[],
+    routes: READ_ON_FOUR,
+    answersWith: SHAPES_ON_FOUR,
     filters: "criteria",
     facetedSearch: true,
     measuredAt: "2026-08-13",
@@ -260,11 +263,50 @@ export const INSTANCES: readonly InstanceSpec[] = [
     endpoint: "https://pmvstash.org/graphql",
     webBase: "https://pmvstash.org",
     envVar: "STASHBOX_PMV_KEY",
-    capabilities: Object.keys(READ_ON_STASHDB) as Capability[],
-    routes: READ_ON_STASHDB,
-    answersWith: SHAPES_ON_STASHDB,
+    capabilities: Object.keys(READ_ON_FOUR) as Capability[],
+    routes: READ_ON_FOUR,
+    answersWith: SHAPES_ON_FOUR,
     filters: "criteria",
     facetedSearch: true,
+    // Its records carry the studio's own reference for a release, and its
+    // scene input declares no field to narrow on one. Every other faceted
+    // field it declares matches what the other three answer.
+    facets: [
+      "text",
+      "title",
+      "url",
+      "date",
+      "production_date",
+      "studios",
+      "parentStudio",
+      "tags",
+      "performers",
+      "alias",
+      "fingerprints",
+      "favorites",
+      "has_fingerprint_submissions",
+      "page",
+      "per_page",
+      "direction",
+      "sort",
+      "names",
+      "name",
+      "disambiguation",
+      "gender",
+      "birthdate",
+      "deathdate",
+      "birth_year",
+      "age",
+      "ethnicity",
+      "country",
+      "career_start_year",
+      "career_end_year",
+      "performed_with",
+      "studio_id",
+      "parent",
+      "has_parent",
+      "category_id",
+    ],
     measuredAt: "2026-08-13",
   },
   {
@@ -273,9 +315,9 @@ export const INSTANCES: readonly InstanceSpec[] = [
     endpoint: "https://javstash.org/graphql",
     webBase: "https://javstash.org",
     envVar: "STASHBOX_JAVSTASH_KEY",
-    capabilities: Object.keys(READ_ON_STASHDB) as Capability[],
-    routes: READ_ON_STASHDB,
-    answersWith: SHAPES_ON_STASHDB,
+    capabilities: Object.keys(READ_ON_FOUR) as Capability[],
+    routes: READ_ON_FOUR,
+    answersWith: SHAPES_ON_FOUR,
     filters: "criteria",
     facetedSearch: true,
     measuredAt: "2026-08-13",
