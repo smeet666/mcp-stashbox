@@ -341,6 +341,23 @@ export function performerPayload(
   };
 }
 
+/**
+ * What a block of a record lost on its way here, said the one way.
+ *
+ * Every heavy block loses rows the same way and owes a reader the same
+ * sentence, whichever kind of record carries it. Written out at each block, the
+ * wording drifted, and a loss phrased unlike its neighbour reads as a loss of
+ * another kind.
+ */
+export function blockLoss(
+  count: number | undefined,
+  what: string,
+  catalogue: string,
+): string | null {
+  if (count === undefined || count === 0) return null;
+  return `${count} ${what}(s) ${catalogue} answered with could not be read and are left out of the block here.`;
+}
+
 /* -------------------------------------------------------------- the marker */
 
 /** What a marker's answer opens with, which is all a marker carries. */

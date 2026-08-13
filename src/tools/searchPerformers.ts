@@ -185,7 +185,7 @@ function performerLines(row: PerformerRecord, times: boolean): string {
     line("  Country", inline(row.country)),
     line("  Born", dateText(row.birthDate)),
     line("  Died", dateText(row.deathDate)),
-    line(`  Scenes indexed by ${who}`, row.sceneCount === null ? null : String(row.sceneCount)),
+    line(`  Scenes indexed on ${who}`, row.sceneCount === null ? null : String(row.sceneCount)),
     line("  Folded into", row.mergedInto),
     line("  Created", times ? row.created : null),
     line("  Updated", times ? row.updated : null),

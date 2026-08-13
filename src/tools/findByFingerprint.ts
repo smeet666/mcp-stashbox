@@ -309,16 +309,30 @@ const fingerprintEntry = strictInput({
   algorithm: oneOf("algorithm", "how that hash was computed", ALGORITHMS),
 });
 
+/**
+ * The hashes held for one file, bounded as every list this server takes is.
+ *
+ * The two bounds are refused in the words the fault carries, and in the words a
+ * list of record identifiers refuses the same two faults: a caller who meets
+ * one of them on either argument reads one message and learns one thing.
+ */
+export const fingerprintList = z
+  .array(fingerprintEntry, {
+    error: `${CODE} fingerprints takes one to ${MOST_IDENTIFIERS} entries, each a hash and the algorithm it was computed with.`,
+  })
+  .min(
+    1,
+    `${CODE} fingerprints was written as an empty list, so nothing was asked about, and an emptiness nobody was asked for is no evidence about any file.`,
+  )
+  .max(
+    MOST_IDENTIFIERS,
+    `${CODE} fingerprints takes at most ${MOST_IDENTIFIERS} entries in one call. A longer list asks every configured catalogue about each of them at once, which is a run of reads rather than a lookup.`,
+  );
+
 const inputSchema = strictInput({
-  fingerprints: z
-    .array(fingerprintEntry, {
-      error: `${CODE} fingerprints takes one to ${MOST_IDENTIFIERS} entries, each a hash and the algorithm it was computed with.`,
-    })
-    .min(1, `${CODE} fingerprints was written as an empty list, so nothing was asked about.`)
-    .max(MOST_IDENTIFIERS, `${CODE} fingerprints takes at most ${MOST_IDENTIFIERS} entries.`)
-    .describe(
-      "The hashes held for one file, each with the algorithm it was computed with. MD5 and OSHASH name the bytes of a file; PHASH states a likeness, which a re-encode, a crop and another scene from one shoot all satisfy.",
-    ),
+  fingerprints: fingerprintList.describe(
+    "The hashes held for one file, each with the algorithm it was computed with. MD5 and OSHASH name the bytes of a file; PHASH states a likeness, which a re-encode, a crop and another scene from one shoot all satisfy.",
+  ),
   sources: catalogues("sources")
     .optional()
     .describe("The catalogues to ask. Left out, every catalogue a key is held for is asked."),

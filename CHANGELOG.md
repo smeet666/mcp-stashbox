@@ -58,6 +58,17 @@ what an answer states beside the rows.
 - A folded record named inside an answer is marked whatever the length of its
   name. A name of one or two characters was printed unmarked, so a caller read a
   record the catalogue no longer holds as itself.
+- `sources` and `sections` refused a list holding too many entries in the words
+  written for an empty one, telling a caller who wrote a name twice that they
+  had asked for nothing. Each bound now carries the sentence of the fault it
+  names.
+- `find_by_fingerprint` refused the bounds of its list of hashes in words unlike
+  the ones a list of record identifiers uses for the same two faults, and its
+  upper bound stated no reason.
+- A block that lost rows says so in one sentence, written once. A scene and a
+  performer worded the same loss differently.
+- A count of scenes on the rows of a search named the catalogue it counts on
+  with a different preposition from the one a record uses.
 
 ## [0.3.1] - 2026-08-12
 

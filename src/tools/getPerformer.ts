@@ -16,6 +16,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { isFolded, markerSuffix } from "../answer/marker.js";
 import { SCENE_COUNT_CAUTION } from "../answer/notes.js";
 import {
+  blockLoss,
   catalogueOf,
   dateText,
   headLine,
@@ -165,7 +166,9 @@ function performerExtras(
     notes.push(SCENE_COUNT_CAUTION);
   }
 
-  if (sections.includes("images")) notes.push(unread(record.imagesSkipped, "image", catalogue));
+  if (sections.includes("images")) {
+    notes.push(blockLoss(record.imagesSkipped, "image", catalogue.name));
+  }
 
   if (sections.includes("scenes")) {
     if (record.scenesUnavailable !== undefined) notes.push(record.scenesUnavailable);
@@ -176,27 +179,15 @@ function performerExtras(
           : `${catalogue.name} has indexed ${record.scenesTotal} scene(s) crediting this performer and ${record.scenesShown ?? record.scenes.length} are shown here. That counts what the catalogue indexed and never a person's work.`,
       );
     }
-    notes.push(unread(record.scenesSkipped, "scene", catalogue));
+    notes.push(blockLoss(record.scenesSkipped, "scene", catalogue.name));
   }
 
   if (sections.includes("studios")) {
     if (record.studiosUnavailable !== undefined) notes.push(record.studiosUnavailable);
-    notes.push(unread(record.studiosSkipped, "studio", catalogue));
+    notes.push(blockLoss(record.studiosSkipped, "studio", catalogue.name));
   }
 
   return notes;
-}
-
-/**
- * What a block of this record lost on its way here, said the one way.
- *
- * Every block loses rows the same way and owes a reader the same sentence, so
- * the sentence is written once: a block that phrased its loss differently from
- * its neighbour would read as a different kind of loss.
- */
-function unread(count: number | undefined, what: string, catalogue: Catalogue): string | null {
-  if (count === undefined || count === 0) return null;
-  return `${count} ${what}(s) ${catalogue.name} answered with could not be read and are left out of the block here.`;
 }
 
 /**

@@ -112,11 +112,17 @@ export function countryCode(argument: string): z.ZodString {
  * would read as an answer.
  */
 export function catalogues(argument: string): z.ZodArray<z.ZodEnum<Record<string, string>>> {
-  const error = `${CODE} ${argument} names the catalogues to ask, out of ${SOURCE_IDS.join(", ")}. An empty ${argument} asks none of them, and an emptiness nobody was asked for is no evidence about anything.`;
+  const error = `${CODE} ${argument} names the catalogues to ask, out of ${SOURCE_IDS.join(", ")}.`;
   return z
     .array(z.enum(SOURCE_IDS, { error }), { error })
-    .min(1, error)
-    .max(SOURCE_IDS.length, error);
+    .min(
+      1,
+      `${CODE} ${argument} was written as an empty list, so it asks none of them, and an emptiness nobody was asked for is no evidence about anything.`,
+    )
+    .max(
+      SOURCE_IDS.length,
+      `${CODE} ${argument} holds more entries than there are catalogues, so it names a catalogue twice. Each catalogue is asked once, and a name written twice asks for nothing more.`,
+    );
 }
 
 /** A whole number inside the bounds an answer of that size can honour. */
@@ -147,11 +153,17 @@ export function severalOf<const T extends readonly [string, ...string[]]>(
   what: string,
   readings: T,
 ): z.ZodArray<z.ZodEnum<Record<T[number], T[number]>>> {
-  const error = `${CODE} ${argument} takes ${what}, each one of: ${readings.join(", ")}. An empty ${argument} asks for no block at all, so the answer would carry nothing.`;
+  const error = `${CODE} ${argument} takes ${what}, each one of: ${readings.join(", ")}.`;
   return z
     .array(oneOf(argument, what, readings), { error })
-    .min(1, error)
-    .max(readings.length, error);
+    .min(
+      1,
+      `${CODE} ${argument} was written as an empty list, so it asks for no block at all and the answer would carry nothing.`,
+    )
+    .max(
+      readings.length,
+      `${CODE} ${argument} holds more entries than there are blocks to ask for, so it names a block twice. Each block is rendered once, and a name written twice asks for nothing more.`,
+    );
 }
 
 function identifierError(argument: string): string {

@@ -16,6 +16,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 import {
+  blockLoss,
   catalogueOf,
   dateText,
   durationText,
@@ -124,15 +125,11 @@ function sceneExtras(
       `${catalogue.name} counts no disputes against a fingerprint, so whether one here is disputed was never recorded, and none of them is a hash nobody has questioned.`,
     );
   }
-  if (record.fingerprintsSkipped !== undefined && sections.includes("fingerprints")) {
-    notes.push(
-      `${record.fingerprintsSkipped} fingerprint(s) ${catalogue.name} answered with could not be read and are left out of the block here.`,
-    );
+  if (sections.includes("fingerprints")) {
+    notes.push(blockLoss(record.fingerprintsSkipped, "fingerprint", catalogue.name));
   }
-  if (record.imagesSkipped !== undefined && sections.includes("images")) {
-    notes.push(
-      `${record.imagesSkipped} image(s) ${catalogue.name} answered with could not be read and are left out of the block here.`,
-    );
+  if (sections.includes("images")) {
+    notes.push(blockLoss(record.imagesSkipped, "image", catalogue.name));
   }
   return notes;
 }
