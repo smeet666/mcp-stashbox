@@ -321,7 +321,14 @@ export class StashboxClient {
     // them answers rows that ignore the question, and a caller reads those as
     // the answer to it. Such a catalogue is asked through its text route alone,
     // and a question narrowed on typed arguments is never put to it.
-    const typed = input.query === undefined;
+    // A question narrowed on nothing at all is neither path: it asks for a
+    // page of the whole index, which every catalogue answers. Reading it as
+    // the typed path would report a catalogue absent for a narrowing nobody
+    // wrote.
+    const narrowed = Object.keys(input).some(
+      (name) => !["sources", "prefer", "sections", "page", "limit"].includes(name),
+    );
+    const typed = input.query === undefined && narrowed;
     const asks = chosen.asks.filter((ask) => !typed || ask.spec.facetedSearch);
     const unasked: SourceReport[] = [
       ...chosen.unasked,

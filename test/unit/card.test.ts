@@ -108,17 +108,20 @@ describe("a value carries the catalogues that said it", () => {
   });
 
   it("states the policy that was applied, since choosing is a policy", () => {
-    expect(card([STASHDB, TPDB]).preferred).toEqual(["stashdb", "tpdb"]);
+    // The policy is what was written. What came back is a second fact, and a
+    // card reporting only the second would read as a policy nobody wrote.
     expect(card([STASHDB, TPDB], ["tpdb", "stashdb"]).preferred).toEqual(["tpdb", "stashdb"]);
+    expect(card([STASHDB, TPDB], ["tpdb", "stashdb"]).read_from).toEqual(["tpdb", "stashdb"]);
+    expect(card([STASHDB], ["tpdb", "stashdb"]).read_from).toEqual(["stashdb"]);
   });
 
-  it("publishes a field no catalogue carried as null rather than dropping it", () => {
+  it("publishes a field no catalogue carried as null, agreed by nobody", () => {
     const a = answered("stashdb", UUID_A, { ...STASHDB.record, country: null });
     const b = answered("tpdb", UUID_B, { ...TPDB.record, country: null });
-    expect(card([a, b]).fields.country as CardValue).toEqual({
-      value: null,
-      agreed_by: ["stashdb", "tpdb"],
-    });
+    // The field is published rather than dropped, since a key missing reads as
+    // a block nobody loaded. Agreeing takes two readings of something, and two
+    // silences are readings of nothing.
+    expect(card([a, b]).fields.country as CardValue).toEqual({ value: null, agreed_by: [] });
   });
 });
 
@@ -159,9 +162,12 @@ describe("a list is united, never chosen", () => {
 
 describe("a count is never merged", () => {
   it("stays one entry per catalogue", () => {
+    // The state travels with the number: a catalogue publishing no such count,
+    // one that could not answer and one nobody asked all carry a null, and a
+    // reader acts on which of the three they met.
     expect(card([STASHDB, TPDB]).counts.sceneCount).toEqual([
-      { source: "stashdb", value: 1041 },
-      { source: "tpdb", value: null },
+      { source: "stashdb", value: 1041, state: "answered" },
+      { source: "tpdb", value: null, state: "answered" },
     ]);
   });
 
@@ -169,8 +175,8 @@ describe("a count is never merged", () => {
     const other = answered("tpdb", UUID_B, { ...TPDB.record, sceneCount: 812 });
     const counts = card([STASHDB, other]).counts.sceneCount ?? [];
     expect(counts).toEqual([
-      { source: "stashdb", value: 1041 },
-      { source: "tpdb", value: 812 },
+      { source: "stashdb", value: 1041, state: "answered" },
+      { source: "tpdb", value: 812, state: "answered" },
     ]);
     // The sum would state a corpus nobody measured: the two overlap by an
     // amount neither catalogue publishes.

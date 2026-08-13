@@ -268,11 +268,15 @@ export function renderCard(card: Card, kind: string, cached = false): Rendered {
 
   for (const [name, counts] of Object.entries(card.counts)) {
     const each = counts
-      .map((one) =>
-        one.value === null
-          ? `${catalogueOf(one.source).name} publishes none`
-          : `${one.value} on ${catalogueOf(one.source).name}`,
-      )
+      .map((one) => {
+        const who = catalogueOf(one.source).name;
+        // A null is three different facts. Read as one, two of them become a
+        // limit the catalogue does not have.
+        if (one.value !== null) return `${one.value} on ${who}`;
+        if (one.state === "absent") return `${who} was never asked`;
+        if (one.state === "failed") return `${who} could not answer`;
+        return `${who} publishes no such count`;
+      })
       .join("; ");
     // Never added: these catalogues index corpora that overlap by an amount
     // none of them publishes.
@@ -294,6 +298,7 @@ export function renderCard(card: Card, kind: string, cached = false): Rendered {
     ...rows,
     section("Held by", held, "no catalogue was asked for this record"),
     `Preferred in this order: ${card.preferred.map((one) => catalogueOf(one).name).join(", ")}`,
+    `Read from: ${card.read_from.map((one) => catalogueOf(one).name).join(", ") || "no catalogue answered"}`,
   ]);
 
   const notes = cached
@@ -313,6 +318,7 @@ export function renderCard(card: Card, kind: string, cached = false): Rendered {
         counts: card.counts,
         held_by: card.held_by,
         preferred: card.preferred,
+        read_from: card.read_from,
         notes,
       },
     },
@@ -330,6 +336,10 @@ export interface Rows {
     name?: string;
     state: string;
     count?: number;
+    indexTotal?: number;
+    skipped?: number;
+    narrowingsNotReceived?: string[];
+    algorithmsNotSearched?: string[];
     reason?: string;
     [key: string]: unknown;
   }[];
@@ -348,7 +358,26 @@ export function renderRows(result: Rows, what: string, notes: string[], cached =
   const lines = result.rows.map((row) => `- ${rowLine(row)}`);
   const reports = result.perSource.map((one) => {
     const who = inline(String(one.name ?? one.source)) ?? one.source;
-    if (one.state === "answered") return `  - ${who}: answered, ${one.count ?? 0} row(s)`;
+    if (one.state === "answered") {
+      // Everything the payload carries about what this catalogue did: a
+      // client showing the text block alone must lose none of it.
+      const also = [
+        one.indexTotal === undefined
+          ? null
+          : `of ${String(one.indexTotal)} its own index holds for this question`,
+        one.skipped === undefined
+          ? null
+          : `${String(one.skipped)} row(s) it answered with could not be read and are left out`,
+        (one.narrowingsNotReceived ?? []).length === 0
+          ? null
+          : `did not receive: ${(one.narrowingsNotReceived ?? []).join(", ")}`,
+        (one.algorithmsNotSearched ?? []).length === 0
+          ? null
+          : `does not search ${(one.algorithmsNotSearched ?? []).join(", ")}`,
+      ].filter((part): part is string => part !== null);
+      const tail = also.length === 0 ? "" : `, ${also.join("; ")}`;
+      return `  - ${who}: answered, ${one.count ?? 0} row(s)${tail}`;
+    }
     if (one.state === "failed") {
       return `  - ${who}: could not answer: ${inline(String(one.reason ?? "")) ?? ""}`;
     }

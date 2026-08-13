@@ -285,10 +285,19 @@ export interface CardEntry<T = string> {
   published_by: string[];
 }
 
-/** A count, which stays beside the catalogue that published it. */
+/**
+ * A count, beside the catalogue that published it and what became of that
+ * catalogue.
+ *
+ * A null means three different things, and a reader acts on which: the
+ * catalogue publishes no such count, it could not answer, or nobody asked it.
+ * Folded into one null they read alike, and the last two would be reported as
+ * a limit the catalogue does not have.
+ */
 export interface CardCount {
   source: string;
   value: number | null;
+  state: SourceState;
 }
 
 /** What became of each catalogue asked for one record. */
@@ -306,8 +315,10 @@ export interface Card {
   fields: Record<string, CardValue | CardEntry[]>;
   counts: Record<string, CardCount[]>;
   held_by: CardHolder[];
-  /** The order the readings were preferred in, since choosing is a policy. */
+  /** The order the readings were preferred in, which is the policy applied. */
   preferred: string[];
+  /** The catalogues that answered, in that order, which is what came back. */
+  read_from: string[];
   notes: string[];
   perSource?: SourceReport[];
 }

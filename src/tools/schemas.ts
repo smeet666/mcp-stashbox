@@ -94,9 +94,18 @@ export const card = z.object({
       "Each field of the record. A scalar carries the catalogues that said it; a list is the union, each entry naming who published it.",
     ),
   counts: z
-    .record(z.string(), z.array(z.object({ source: z.string(), value: z.number().nullable() })))
+    .record(
+      z.string(),
+      z.array(
+        z.object({
+          source: z.string(),
+          value: z.number().nullable(),
+          state: z.enum(["answered", "failed", "absent"]),
+        }),
+      ),
+    )
     .describe(
-      "Counts, one entry per catalogue and never added together. A null is a catalogue that publishes no such count.",
+      "Counts, one entry per catalogue asked and never added together. A null is read with the state beside it: a catalogue that publishes no such count, one that could not answer, and one nobody asked are three different facts.",
     ),
   held_by: z
     .array(
@@ -115,7 +124,14 @@ export const card = z.object({
     .describe("Every catalogue asked, with the identifier the record carries there."),
   preferred: z
     .array(z.string())
-    .describe("The order the readings were preferred in, since choosing is a policy."),
+    .describe(
+      "The order the readings were preferred in. This is the policy that was applied, whether or not every catalogue in it answered.",
+    ),
+  read_from: z
+    .array(z.string())
+    .describe(
+      "The catalogues that answered, in the order they were preferred. A policy and an outcome are two facts, and a reader deciding whether to change the policy needs both.",
+    ),
   notes: z
     .array(z.string())
     .describe("What this answer does not establish, which is what makes it safe to act on."),

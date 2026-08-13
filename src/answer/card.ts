@@ -63,9 +63,13 @@ export function consolidate(shape: Consolidation): Card {
 
   const counts: Record<string, CardCount[]> = {};
   for (const name of shape.perSource) {
-    counts[name] = answered.map((one) => ({
+    // Every catalogue asked, not only those that answered: one dropped out of
+    // the table reads as a catalogue nobody asked, and a table with a hole in
+    // it is a table a reader cannot count from.
+    counts[name] = shape.readings.map((one) => ({
       source: one.source,
-      value: countIn(one.record[name]),
+      value: one.state === "answered" ? countIn(one.record?.[name]) : null,
+      state: one.state,
     }));
   }
 
@@ -73,7 +77,11 @@ export function consolidate(shape: Consolidation): Card {
     fields,
     counts,
     held_by: shape.readings.map(holderOf),
-    preferred: answered.map((one) => one.source),
+    // The policy and the outcome are two facts. A card reporting only the
+    // catalogues that answered would read as a policy nobody wrote, and a
+    // reader could not tell whether to change it.
+    preferred: [...shape.prefer],
+    read_from: answered.map((one) => one.source),
     notes: notesFor(shape, answered),
   };
 }
@@ -110,7 +118,10 @@ function scalarOf(answered: readonly Answered[], name: string): CardValue {
   const winner = said.find((one) => one.value !== null) ?? said[0];
   const value = winner?.value ?? null;
 
-  const agreed = said.filter((one) => same(one.value, value)).map((one) => one.source);
+  // Agreeing takes two readings of something. A field none of them published
+  // is a field none of them said anything about, so nobody agrees on it.
+  const agreed =
+    value === null ? [] : said.filter((one) => same(one.value, value)).map((one) => one.source);
   const disagreed = said
     .filter((one) => one.value !== null && !same(one.value, value))
     .map((one) => ({ source: one.source, value: one.value }));
@@ -244,9 +255,12 @@ function notesFor(shape: Consolidation, answered: readonly Answered[]): string[]
     const status = (one.record as { status?: RecordStatus } | undefined)?.status;
     return status !== undefined && status !== "established";
   });
-  if (folded.length > 0) {
+  for (const one of folded) {
+    const successor = (one.record as { mergedInto?: string | null } | undefined)?.mergedInto;
     notes.push(
-      `This record is folded on these catalogues, so what each of them holds about it is under another identifier: ${named(folded.map((one) => one.source))}.`,
+      successor
+        ? `${one.source} has folded this record into ${successor}, so what it holds about it is under that identifier.`
+        : `${one.source} has withdrawn this record and names none in its place, so what it once held is reachable there under no identifier at all.`,
     );
   }
 
