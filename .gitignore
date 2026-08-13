@@ -6,3 +6,9 @@ test/fixtures/
 *.log
 *.mcpb
 .DS_Store
+
+# Scratch files a reviewer or a script leaves at the root. Nothing the repo
+# ships is hidden, so a hidden file here is working material and never a
+# deliverable, and one swept in by `git add -A` carries whatever it was fed.
+.audit*
+.scratch*

@@ -76,17 +76,17 @@
         },
         {
           "name": "SB_CACHE_TTL_MS",
-          "description": "In-memory cache lifetime, in milliseconds. Default 900000. Set 0 to turn it off.",
+          "description": "In-memory cache lifetime, in milliseconds. Default 300000. Set 0 to turn it off.",
           "isRequired": false
         },
         {
           "name": "SB_CACHE_MAX_ENTRIES",
-          "description": "In-memory cache size. Default 200.",
+          "description": "In-memory cache size, in entries. Default 500.",
           "isRequired": false
         },
         {
           "name": "SB_LOG_LEVEL",
-          "description": "silent, error, info or debug. Default error. Logs go to stderr.",
+          "description": "error, info or debug. Default error. Logs go to stderr.",
           "isRequired": false
         }
       ]
