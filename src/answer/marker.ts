@@ -30,7 +30,7 @@ export function markerClause(status: RecordStatus, successor?: string | null): s
   if (!isFolded(status)) return "";
   if (status === "merged") {
     return successor
-      ? `, merged into ${successor}, so this identifier now addresses that record`
+      ? `, merged into ${successor}, so this identifier addresses that record`
       : ", merged, so this identifier now addresses the record it was folded into";
   }
   return ", withdrawn, so this identifier states nothing about what it once named";

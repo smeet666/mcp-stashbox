@@ -53,17 +53,31 @@ Optional settings: `SB_USER_AGENT`, `SB_MIN_INTERVAL_MS` (default and floor
 
 ## Tools
 
-| Tool                  | What it answers                                                        |
-| --------------------- | ---------------------------------------------------------------------- |
-| `search_scenes`       | scenes across every configured catalogue                               |
-| `search_performers`   | performers, matched on names and aliases alike                         |
-| `get_scene`           | one scene, with opt-in `fingerprints` and `images`                     |
-| `get_performer`       | one performer, with opt-in `appearance`, `images`, `scenes`, `studios` |
-| `find_by_fingerprint` | what a file is, from the hashes held for it                            |
+| Tool                  | What it answers                                                     |
+| --------------------- | ------------------------------------------------------------------- |
+| `get_sources`         | what each catalogue was measured answering, and the day it was read |
+| `search_scenes`       | scenes across every catalogue that answers a search                 |
+| `search_performers`   | performers, on names and aliases alike                              |
+| `search_studios`      | studios, and the studios under one parent                           |
+| `search_tags`         | tags, and the tags of one category                                  |
+| `get_scene`           | one scene, with opt-in `fingerprints` and `images`                  |
+| `get_performer`       | one performer, with opt-in `appearance`, `images`, `studios`        |
+| `get_studio`          | one studio, with the parent it names                                |
+| `get_tag`             | one tag, with the category it sits in                               |
+| `find_by_fingerprint` | what a file is, from the hashes held for it                         |
 
-Sections are opt-in because two of them dwarf the rest: a scene's fingerprints
-weigh more than everything else it carries, and a performer's scenes run to
-thousands.
+A search answers with identifiers. A record route reads one record on every
+catalogue that holds it, following the link each of them publishes to the same
+record elsewhere, and every value on the answer names the catalogues that said
+it. Name `sources` to read one catalogue alone.
+
+Sections are opt-in because a scene's fingerprints weigh more than everything
+else it carries. The scenes crediting a performer are read by `search_scenes`
+with `performer_ids`, which pages and filters, so no record route carries a
+block that runs a search of its own.
+
+`search_tags` is the way in to `tag_ids`, and `search_studios` to `studio_ids`:
+find the identifier, then narrow a scene search with it.
 
 ## What an answer is allowed to claim
 
@@ -108,13 +122,20 @@ record, so no answer carries any, and that silence is never read as permission.
 ## The catalogue that answers a smaller surface
 
 Four of these run one published open-source server. ThePornDB reimplements its
-interface from a source of its own. It reads records in full, and it answers no
-search at all, neither by words nor by typed arguments, so one of its records is
-reached by a fingerprint or by an identifier already held. It publishes no table
-sorting the sites a record links to, no taxonomy sorting its tags, no count of
-the scenes it indexes for a performer, no count of edits open against a record,
-and it counts no disputes over a fingerprint. Each of those is reported on every answer
-holding its rows. No value is filled in from a neighbour.
+interface from a source of its own, and what it answers was read from it rather
+than assumed: `get_sources` publishes that table with the day it was measured.
+
+It answers a search of words on scenes and on performers, under route names of
+its own. Its faceted routes do not apply the narrowings written to them, so a
+question narrowed on typed arguments is never put to it and the answer says so.
+It answers no search of studios and none of tags, and reads one of either by
+identifier or by name. It publishes no table sorting the sites a record links
+to, no taxonomy sorting its tags, no count of the scenes it indexes for a
+performer, no count of edits open against a record, and it counts no disputes
+over a fingerprint.
+
+Each of those is reported on every answer holding its rows, and no value is
+filled in from a neighbour.
 
 ## As a library
 
@@ -175,10 +196,18 @@ Réglages facultatifs : `SB_USER_AGENT`, `SB_MIN_INTERVAL_MS` (défaut et planch
 
 ## Les outils
 
-`search_scenes`, `search_performers`, `get_scene`, `get_performer` et
-`find_by_fingerprint`. Les sections sont facultatives parce que deux d'entre
-elles écrasent les autres : les empreintes d'une scène pèsent plus que tout ce
-qu'elle porte, et les scènes d'une personne se comptent par milliers.
+`get_sources`, quatre recherches (`search_scenes`, `search_performers`,
+`search_studios`, `search_tags`), quatre lectures (`get_scene`, `get_performer`,
+`get_studio`, `get_tag`) et `find_by_fingerprint`.
+
+Une recherche répond par des identifiants. Une lecture lit la fiche sur chaque
+catalogue qui la détient, en suivant le lien que chacun publie vers la même
+fiche ailleurs, et chaque valeur nomme les catalogues qui l'ont dite. Nommez
+`sources` pour ne lire qu'un catalogue.
+
+Les sections sont facultatives parce que les empreintes d'une scène pèsent plus
+que tout ce qu'elle porte. Les scènes créditant une personne se lisent par
+`search_scenes` avec `performer_ids`, qui pagine et filtre.
 
 ## Ce qu'une réponse a le droit d'affirmer
 

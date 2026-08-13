@@ -1,7 +1,7 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.smeet666/mcp-stashbox",
-  "description": "Search the public stash-box metadata catalogues, and identify a file by its fingerprint.",
+  "description": "Search scenes, performers, studios and tags across the public stash-box catalogues.",
   "websiteUrl": "https://github.com/smeet666/mcp-stashbox#readme",
   "icons": [
     {
@@ -19,12 +19,12 @@
     "url": "https://github.com/smeet666/mcp-stashbox",
     "source": "github"
   },
-  "version": "0.4.0",
+  "version": "0.5.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "mcp-stashbox",
-      "version": "0.4.0",
+      "version": "0.5.0",
       "transport": {
         "type": "stdio"
       },
@@ -93,8 +93,8 @@
     },
     {
       "registryType": "mcpb",
-      "identifier": "https://github.com/smeet666/mcp-stashbox/releases/download/v0.4.0/mcp-stashbox-0.4.0.mcpb",
-      "version": "0.4.0",
+      "identifier": "https://github.com/smeet666/mcp-stashbox/releases/download/v0.5.0/mcp-stashbox-0.5.0.mcpb",
+      "version": "0.5.0",
       "fileSha256": "0000000000000000000000000000000000000000000000000000000000000000",
       "transport": {
         "type": "stdio"

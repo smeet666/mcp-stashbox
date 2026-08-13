@@ -2,11 +2,11 @@
  * The ten tools this server publishes, declared in one place.
  *
  * They are declared as a list rather than registered one by one, and that is
- * the point of the file. A rule honoured at three registrars out of five is the
- * defect this project has met in every review: the hint that says this server
- * writes nowhere, the schema every answer is shaped by, the code every refusal
- * opens with. Stated over a list, a rule reaches every tool or reaches none,
- * and the suite runs its assertions over the same list.
+ * the point of the file. A rule stated over the list reaches every tool or
+ * reaches none: the hint that says this server writes nowhere, the schema every
+ * answer is shaped by, the code every refusal opens with. A registrar written
+ * per tool honours each of those wherever somebody remembered it, and the suite
+ * runs its assertions over this same list.
  *
  * The order is fixed on purpose: a client caches the list it is given, and an
  * order that varies between two runs invalidates that cache for nothing.

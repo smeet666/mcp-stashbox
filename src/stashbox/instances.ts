@@ -4,10 +4,10 @@
  *
  * **Every capability here was measured, and names the route it was measured
  * on.** Nothing is inherited from the software a catalogue is believed to run.
- * That inference is not a shortcut, it is the defect: a constant naming every
- * route was applied to a catalogue whose route names differ, its requests came
- * back refused, and the refusals were published as a claim that the catalogue
- * answered no search at all. It answers two, under names of its own.
+ * Two catalogues answering one capability name the route differently, one
+ * plural and one singular, so a request written in the other's spelling comes
+ * back refused, and a refusal read as a limit publishes a claim about a
+ * catalogue that nothing measured.
  *
  * A capability is therefore three things at once: the name a caller reads, the
  * route it was seen on, and the day it was seen. A claim with no date behind it

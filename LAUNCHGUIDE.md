@@ -52,7 +52,7 @@ Search & Web
 
 ## Tags
 
-mcp, stash-box, stashdb, metadata, catalogue, fingerprint, phash, aggregator
+mcp, stash-box, stashdb, metadata, catalogue, fingerprint, phash, studios, tags
 
 ## Documentation URL
 

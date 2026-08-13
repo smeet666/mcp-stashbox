@@ -5,6 +5,65 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-08-13
+
+The surface answers four entities where it answered two, and a record route
+answers one card read on every catalogue that holds it rather than one
+catalogue's reading. What each catalogue answers is now measured, published as a
+table, and put to that catalogue every night.
+
+### Added
+
+- `get_sources` answers what each catalogue was measured answering, the route
+  each capability was seen on, and the day its surface was read from it. It
+  reaches no catalogue and takes no argument. A key held for a catalogue is a
+  fact about an install and changes nothing about what the catalogue does, so
+  the two are separate fields.
+- `search_studios`, `search_tags`, `get_studio` and `get_tag`. A studio and a
+  tag are records with parents, categories, aliases and addresses of their own,
+  and finding a tag is the way in to narrowing a scene search by it.
+- A record route consolidates. It reads the record on the catalogue its
+  identifier names and on every catalogue that one publishes a link to, under a
+  category those catalogues keep for exactly that, and answers one card. Every
+  value names the catalogues that said it; where they disagree the reading
+  nobody preferred is published beside the one that won; a list is the union,
+  each entry naming who published it. `prefer` writes the order, and every card
+  states the order that was applied.
+- A fingerprint answer consolidates by hash. Two catalogues answering one exact
+  hash describe the same bytes, so they answer as one card. A perceptual hash
+  states a likeness and joins nothing.
+
+### Changed
+
+- ThePornDB answers searches. It was published as answering none at all: its
+  route names are singular where its neighbour writes them plural, so a request
+  written in the neighbour's spelling came back refused and the refusal was read
+  as a limit. Every capability in the registry now names the route it was
+  measured on and the day it was read, and the live suite walks that table and
+  puts each claim to the catalogue itself.
+- A date is written as one value and one comparison, `on`, `before` or `after`.
+  No catalogue answers a range, so no pair of bounds is offered.
+- Words and typed arguments are refused together. A catalogue's own index reads
+  the words as a union and the typed arguments narrow as an intersection, so
+  writing both answered one question while reporting the other as unreceived.
+- `get_performer` no longer takes a `scenes` block. The scenes crediting a
+  performer are `search_scenes` with `performer_ids`, which pages and filters.
+- The published shapes are declared once and referred to. Ten tools declare
+  54,613 bytes of schema where five declared 99,644.
+
+### Fixed
+
+- Counts are never added across catalogues, and a count of the records a set of
+  hashes reached counts files rather than catalogue records.
+- A record a catalogue says it holds nothing at is an absence that catalogue
+  established, rather than a reading this client failed at.
+- Every non-2xx answer releases its deadline and its body. A refusal left a
+  timer armed for the full timeout and a connection held open.
+- The pace owed to a catalogue holds on every path, including a transport
+  supplied through the published library entry point, and a setting written
+  through the constructor is read through the same bounds as one read from the
+  environment.
+
 ## [0.4.0] - 2026-08-13
 
 The qualifications a record carried when it was read on its own now travel with
@@ -436,6 +495,7 @@ did not carry.
   actually has.
 - The registry entry declared the npm package alone, so the bundle attached to a
   release was published and never advertised.
+
 ## [0.1.0] - 2026-08-11
 
 First release.
@@ -462,4 +522,3 @@ First release.
   either as itself or as a marker.
 - A live suite behind `STASHBOX_LIVE`, making one request per route and asserting
   the shape of an answer rather than its contents.
-
