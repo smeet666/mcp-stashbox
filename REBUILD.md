@@ -25,19 +25,19 @@ Read on 2026-08-13 by GraphQL introspection and by real requests.
 
 ### The routes each catalogue answers
 
-| | StashDB | ThePornDB |
-|---|---|---|
-| Routes on the query type | 36 | 11 |
-| Text search, scenes | `searchScenes(term)` | `searchScene(term)` |
-| Text search, performers | `searchPerformers(term)` | `searchPerformer(term)` |
-| Faceted, scenes | `queryScenes(input)` | `queryScenes(input)` |
-| Faceted, performers | `queryPerformers(input)` | `queryPerformers(input)` |
-| Faceted, studios | `queryStudios(input)` | absent |
-| Faceted, tags | `queryTags(input)` | `queryTags(input)` |
-| Text search, studios | `searchStudio(term)` | absent |
-| Text search, tags | `searchTag(term)` | absent |
-| One record | `findScene` `findPerformer` `findStudio` `findTag` | the same four |
-| By fingerprint | `findScenesBySceneFingerprints` | the same |
+|                          | StashDB                                            | ThePornDB                |
+| ------------------------ | -------------------------------------------------- | ------------------------ |
+| Routes on the query type | 36                                                 | 11                       |
+| Text search, scenes      | `searchScenes(term)`                               | `searchScene(term)`      |
+| Text search, performers  | `searchPerformers(term)`                           | `searchPerformer(term)`  |
+| Faceted, scenes          | `queryScenes(input)`                               | `queryScenes(input)`     |
+| Faceted, performers      | `queryPerformers(input)`                           | `queryPerformers(input)` |
+| Faceted, studios         | `queryStudios(input)`                              | absent                   |
+| Faceted, tags            | `queryTags(input)`                                 | `queryTags(input)`       |
+| Text search, studios     | `searchStudio(term)`                               | absent                   |
+| Text search, tags        | `searchTag(term)`                                  | absent                   |
+| One record               | `findScene` `findPerformer` `findStudio` `findTag` | the same four            |
+| By fingerprint           | `findScenesBySceneFingerprints`                    | the same                 |
 
 **ThePornDB answers searches.** Its route names are singular where StashDB
 writes them plural, and its faceted input requires `sort` and `direction`. A
@@ -48,21 +48,21 @@ claim that this catalogue searches nothing.
 
 Measured on StashDB with `queryScenes`:
 
-| Question | Rows the index holds |
-|---|---|
-| `title: "sunset"` | 281 |
-| `studios: INCLUDES [Vixen]` | 633 |
-| both together | **0** |
+| Question                    | Rows the index holds |
+| --------------------------- | -------------------- |
+| `title: "sunset"`           | 281                  |
+| `studios: INCLUDES [Vixen]` | 633                  |
+| both together               | **0**                |
 
 The filters are **ANDed**. A union would have answered about 914.
 
 Within one list, the modifier decides:
 
-| Question | Rows |
-|---|---|
-| tag A alone | 48 |
-| tag B alone | 5 |
-| `INCLUDES [A, B]` | **53**, the union |
+| Question              | Rows                    |
+| --------------------- | ----------------------- |
+| tag A alone           | 48                      |
+| tag B alone           | 5                       |
+| `INCLUDES [A, B]`     | **53**, the union       |
 | `INCLUDES_ALL [A, B]` | **0**, the intersection |
 
 The text route behaves the other way: its words are **ORed**. `"coucher"`
@@ -139,18 +139,18 @@ not asked where it was not.
 
 ### The ten tools
 
-| Tool | Arguments | Answers with |
-|---|---|---|
-| `get_sources` | none | `sources[]`: `id`, `name`, `web_url`, `key_configured`, `env_var`, `answers[]`, `publishes[]`, `lacks[]`. Reaches no catalogue. |
-| `search_scenes` | `query` (exclusive) · `title` `code` `alias` · `date` + `date_compare` (`on`\|`before`\|`after`) · `performer_ids[]` `studio_ids[]` `parent_studio_id` `tag_ids[]` · `match` (`all`\|`any`) · `sort` `direction` `page` `limit` `sources[]` | `results[]` of `Row` + `title` `studio` `date` `code` `performers[]` `tags[]` · `per_source[]` · `window` · `ordering` · `notes[]` |
-| `search_performers` | `query` (exclusive) · `name` `alias` `disambiguation` · `gender` `country` `ethnicity` · `birth_year` `career_start_year` `career_end_year` · `performed_with` `studio_id` · `sort` `direction` `page` `limit` `sources[]` | `results[]` of `Row` + `name` `disambiguation` `aliases[]` `gender` `country` `birth_date` · `per_source[]` · `window` · `ordering` · `notes[]` |
-| `search_studios` | `query` (exclusive) · `name` · `parent_id` `has_parent` · `sort` `direction` `page` `limit` `sources[]` | `results[]` of `Row` + `name` `parent` · `per_source[]` · `window` · `notes[]` |
-| `search_tags` | `query` (exclusive) · `name` · `category_id` · `sort` `direction` `page` `limit` `sources[]` | `results[]` of `Row` + `name` `category` `description` · `per_source[]` · `window` · `notes[]` |
-| `get_scene` | `id` · `sections[]` (`basic`\|`fingerprints`\|`images`) · `sources[]` · `prefer[]` | `Card`: `title` `code` `date` `duration` `director` `studio` `performers[]` `tags[]` `urls[]`, and the sections asked for |
-| `get_performer` | `id` · `sections[]` (`basic`\|`appearance`\|`images`\|`studios`) · `sources[]` · `prefer[]` | `Card`: `name` `disambiguation` `aliases[]` `gender` `country` `birth_date` `death_date` `career` `urls[]`, the sections asked for, and `scene_count[]` **per catalogue** |
-| `get_studio` | `id` · `sources[]` · `prefer[]` | `Card`: `name` `parent` `aliases[]` `urls[]` · `scene_count[]` per catalogue |
-| `get_tag` | `id` · `sources[]` · `prefer[]` | `Card`: `name` `aliases[]` `category` `description` |
-| `find_by_fingerprint` | `fingerprints[]` (`{hash, algorithm}`, 1 to 25) · `sources[]` · `prefer[]` | `matches[]` of `{ scene: Card, algorithm, match_kind, fingerprint }` · `asked[]` · `unattributed` · `per_source[]` |
+| Tool                  | Arguments                                                                                                                                                                                                                                   | Answers with                                                                                                                                                              |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `get_sources`         | none                                                                                                                                                                                                                                        | `sources[]`: `id`, `name`, `web_url`, `key_configured`, `env_var`, `answers[]`, `publishes[]`, `lacks[]`. Reaches no catalogue.                                           |
+| `search_scenes`       | `query` (exclusive) · `title` `code` `alias` · `date` + `date_compare` (`on`\|`before`\|`after`) · `performer_ids[]` `studio_ids[]` `parent_studio_id` `tag_ids[]` · `match` (`all`\|`any`) · `sort` `direction` `page` `limit` `sources[]` | `results[]` of `Row` + `title` `studio` `date` `code` `performers[]` `tags[]` · `per_source[]` · `window` · `ordering` · `notes[]`                                        |
+| `search_performers`   | `query` (exclusive) · `name` `alias` `disambiguation` · `gender` `country` `ethnicity` · `birth_year` `career_start_year` `career_end_year` · `performed_with` `studio_id` · `sort` `direction` `page` `limit` `sources[]`                  | `results[]` of `Row` + `name` `disambiguation` `aliases[]` `gender` `country` `birth_date` · `per_source[]` · `window` · `ordering` · `notes[]`                           |
+| `search_studios`      | `query` (exclusive) · `name` · `parent_id` `has_parent` · `sort` `direction` `page` `limit` `sources[]`                                                                                                                                     | `results[]` of `Row` + `name` `parent` · `per_source[]` · `window` · `notes[]`                                                                                            |
+| `search_tags`         | `query` (exclusive) · `name` · `category_id` · `sort` `direction` `page` `limit` `sources[]`                                                                                                                                                | `results[]` of `Row` + `name` `category` `description` · `per_source[]` · `window` · `notes[]`                                                                            |
+| `get_scene`           | `id` · `sections[]` (`basic`\|`fingerprints`\|`images`) · `sources[]` · `prefer[]`                                                                                                                                                          | `Card`: `title` `code` `date` `duration` `director` `studio` `performers[]` `tags[]` `urls[]`, and the sections asked for                                                 |
+| `get_performer`       | `id` · `sections[]` (`basic`\|`appearance`\|`images`\|`studios`) · `sources[]` · `prefer[]`                                                                                                                                                 | `Card`: `name` `disambiguation` `aliases[]` `gender` `country` `birth_date` `death_date` `career` `urls[]`, the sections asked for, and `scene_count[]` **per catalogue** |
+| `get_studio`          | `id` · `sources[]` · `prefer[]`                                                                                                                                                                                                             | `Card`: `name` `parent` `aliases[]` `urls[]` · `scene_count[]` per catalogue                                                                                              |
+| `get_tag`             | `id` · `sources[]` · `prefer[]`                                                                                                                                                                                                             | `Card`: `name` `aliases[]` `category` `description`                                                                                                                       |
+| `find_by_fingerprint` | `fingerprints[]` (`{hash, algorithm}`, 1 to 25) · `sources[]` · `prefer[]`                                                                                                                                                                  | `matches[]` of `{ scene: Card, algorithm, match_kind, fingerprint }` · `asked[]` · `unattributed` · `per_source[]`                                                        |
 
 ### The four rules the surface applies
 
