@@ -211,11 +211,20 @@ export const fingerprintOutput = {
     }),
   ),
   match_count: z.number(),
-  scenes_matched: z.number().describe("Distinct files behind the matches."),
+  scenes_matched: z
+    .number()
+    .describe(
+      "Distinct files behind the matches. Two hashes of one file are two matches and one file.",
+    ),
   unattributed: z
     .number()
     .describe(
       "Records the catalogues answered with that carry none of the hashes asked. Which hash reached them is unknown, so they stand as no match and are counted apart.",
+    ),
+  unmatched: z
+    .array(z.object({ hash: z.string(), algorithm: z.string() }))
+    .describe(
+      "The hashes asked that reached no record on any catalogue that answered. A catalogue named as unasked says nothing about them either way.",
     ),
   asked: z.array(z.object({ hash: z.string(), algorithm: z.string() })),
   per_source: z.array(perSource),

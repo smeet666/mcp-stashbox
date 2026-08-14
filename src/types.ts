@@ -65,6 +65,12 @@ export interface BaseRecord extends Losses {
   status: RecordStatus;
   /** The same record on another catalogue, read from a link that catalogue publishes. */
   alsoHeldAt?: { source: InstanceId; id: string }[];
+  /**
+   * A link to another catalogue that names the record by something this client
+   * cannot address, such as a slug. The link is written; it is this client that
+   * cannot follow it, and the two are different facts.
+   */
+  linkedUnfollowed?: { source: InstanceId; url: string }[];
   /** Edits open against it, null where the catalogue publishes no count. */
   pendingEdits?: number | null;
   pendingEditsUnreadable?: boolean;

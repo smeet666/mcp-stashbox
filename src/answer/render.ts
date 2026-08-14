@@ -31,7 +31,7 @@ import type {
   TagRef,
 } from "../types.js";
 import { markerSuffix } from "./marker.js";
-import { inline, joinLines, line, notesBlock, section, type Rendered } from "./text.js";
+import { inline, inlineAll, joinLines, line, notesBlock, section, type Rendered } from "./text.js";
 
 /* ------------------------------------------------------------ the catalogue */
 
@@ -465,9 +465,18 @@ function spelled(value: unknown): string | null {
   if (typeof held.name === "string" || typeof held.id === "string") {
     return inline(String(held.name ?? held.id));
   }
-  // A shape this renderer has no words for is published in the payload and
-  // named here rather than printed as the engine would print it.
-  return "a block this answer carries in its payload";
+  // A block of named fields is printed as its fields. A shape with nothing
+  // naming it at all is the only thing this renderer has no words for, and
+  // naming it beats printing it the way an engine would.
+  const named = Object.entries(held)
+    .filter(
+      ([, one]) => one !== null && one !== undefined && !(Array.isArray(one) && one.length === 0),
+    )
+    .map(
+      ([name, one]) =>
+        `${spelt(name).toLowerCase()} ${Array.isArray(one) ? inlineAll(one.map(String)) : (inline(String(one)) ?? "")}`,
+    );
+  return named.length === 0 ? null : named.join(", ");
 }
 
 /** One value, with the catalogues that said it and the readings that lost. */

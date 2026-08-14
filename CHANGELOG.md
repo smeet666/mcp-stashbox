@@ -5,6 +5,39 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-08-14
+
+A second round of real use, aimed at the surfaces the first did not reach: a
+fingerprint answer carrying several hashes, a card read from the far side of a
+join, an identifier taken out of one answer and put into the next.
+
+### Fixed
+
+- One catalogue that answered twice was counted twice. Two hashes reaching one
+  record on one catalogue is two matches and one reading, and the card read it
+  as three catalogues agreeing where two had. Agreement is the signal every
+  value on a card rests on, and this corrupted it wherever a file carried more
+  than one hash.
+- A set of hashes where two matched and two did not was answered as four
+  identified. The hashes that reached nothing are named, which is what a caller
+  asking which of their files are known is reading for.
+- A fingerprint answer counted matches where it announced files, so one scene
+  held by two catalogues and reached by two hashes was reported as three
+  records.
+- A fingerprint answer named none of the catalogues it did not ask, alone among
+  the tools. A reader had no signal that three of five were never asked, so no
+  match read as no catalogue holds this file. It also printed a perceptual
+  match beside a catalogue whose lookup searches no perceptual hash, without
+  saying so.
+- A link to another catalogue that names the record by a slug was reported as a
+  link nobody wrote, on a card printing that link three lines above. The link is
+  written; following it is what failed, and the answer says which.
+- A block of measurements was rendered as a sentence naming the payload it lives
+  in, and where two catalogues published the identical block, as a disagreement
+  between them about a person's body. It is printed as its fields.
+- A catalogue nobody asked was said to have not answered. Not asked and could
+  not answer are two of the three states this server exists to keep apart.
+
 ## [0.7.0] - 2026-08-13
 
 ### Fixed

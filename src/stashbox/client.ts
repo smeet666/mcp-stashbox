@@ -178,6 +178,8 @@ export interface FingerprintResult {
   match_count: number;
   scenes_matched: number;
   unattributed: number;
+  /** The hashes asked that reached no record anywhere. */
+  unmatched: { hash: string; algorithm: string }[];
   asked: { hash: string; algorithm: string }[];
   perSource: SourceReport[];
 }
@@ -634,7 +636,9 @@ export class StashboxClient {
             ? `The catalogues named in this call left ${spec.name} out, so it was never asked.`
             : !supports(spec, ROUTE[kind])
               ? `${spec.name} answers no ${kind} of its own, so it was never asked.`
-              : `${instanceById(first.reading.source)?.name ?? first.reading.source} publishes no link from this record to one on ${spec.name}, so nothing here reached it. That is a link nobody wrote rather than a record ${spec.name} lacks.`;
+              : unfollowed(first.reading, spec.id) !== undefined
+                ? `${instanceById(first.reading.source)?.name ?? first.reading.source} links this record to one on ${spec.name} at ${unfollowed(first.reading, spec.id)}, and that address names the record by something this client cannot address, so nothing here reached it. The link is written; following it is what failed.`
+                : `${instanceById(first.reading.source)?.name ?? first.reading.source} publishes no link from this record to one on ${spec.name}, so nothing here reached it. That is a link nobody wrote rather than a record ${spec.name} lacks.`;
       readings.push({ source: spec.id, state: "absent", reason });
     }
 
@@ -931,10 +935,31 @@ export class StashboxClient {
       data: {
         matches,
         match_count: matches.length,
-        // Files, not records: two catalogues answering one exact hash
-        // describe the same bytes, and counting their records would add
-        // across corpora that overlap by an amount neither publishes.
-        scenes_matched: matches.length,
+        // Files, not matches: two hashes of one file are two matches and one
+        // file, and counting the matches would report a caller's one file as
+        // several.
+        scenes_matched: new Set(
+          matches.map((one) =>
+            one.scene.held_by
+              .filter((held) => held.state === "answered")
+              .map((held) => held.id)
+              .sort()
+              .join("+"),
+          ),
+        ).size,
+        // The hashes that reached nothing, which is what a caller asking "which
+        // of my files are known?" is reading for. Left out, a set of hashes
+        // where two matched and two did not reads as four identified.
+        unmatched: fingerprints
+          .filter(
+            (one) =>
+              !raw.some(
+                (found) =>
+                  found.hash.toLowerCase() === one.hash.toLowerCase() &&
+                  found.algorithm === one.algorithm,
+              ),
+          )
+          .map((one) => ({ hash: one.hash, algorithm: one.algorithm })),
         unattributed: reports.reduce((total, one) => total + (one.unattributed ?? 0), 0),
         asked: fingerprints.map((one) => ({ hash: one.hash, algorithm: one.algorithm })),
         perSource: orderByRegistry([...reports, ...unasked]),
@@ -1039,6 +1064,14 @@ const PUBLISHED: Record<string, string> = {
   studioId: "studio_id",
   categoryId: "category_id",
 };
+
+/** A link to a catalogue that this client could not follow, read off the record. */
+function unfollowed(reading: Reading, source: InstanceId): string | undefined {
+  const held = (
+    reading.record as { linkedUnfollowed?: { source: string; url: string }[] } | undefined
+  )?.linkedUnfollowed;
+  return held?.find((one) => one.source === source)?.url;
+}
 
 /** The catalogues a record is also held at, read off the record itself. */
 function alsoAt(record: Record<string, unknown>): { source: InstanceId; uuid: string }[] {

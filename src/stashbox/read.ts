@@ -433,20 +433,32 @@ function readAlsoHeldAt(
   links: readonly SiteLink[],
   spec: InstanceSpec,
   kind: string,
-): { source: InstanceId; id: string }[] {
-  const held: { source: InstanceId; id: string }[] = [];
+): {
+  alsoHeldAt: { source: InstanceId; id: string }[];
+  linkedUnfollowed: { source: InstanceId; url: string }[];
+} {
+  const alsoHeldAt: { source: InstanceId; id: string }[] = [];
+  const linkedUnfollowed: { source: InstanceId; url: string }[] = [];
   for (const link of links) {
     const other = instanceByUrl(link.url);
     if (other === undefined || other.id === spec.id) continue;
     const expected = `${other.webBase}/${kind}/`;
     if (!link.url.startsWith(expected)) continue;
     const uuid = link.url.slice(expected.length).split(/[/?#]/)[0] ?? "";
-    if (!isUuid(uuid)) continue;
-    if (!held.some((one) => one.id === `${other.id}:${uuid}`)) {
-      held.push({ source: other.id, id: `${other.id}:${uuid}` });
+    if (!isUuid(uuid)) {
+      // The link is written, and it names the record by something this client
+      // cannot address. Reported as no link at all, it states the opposite of
+      // what the record carries on its face.
+      if (!linkedUnfollowed.some((one) => one.source === other.id)) {
+        linkedUnfollowed.push({ source: other.id, url: link.url });
+      }
+      continue;
+    }
+    if (!alsoHeldAt.some((one) => one.id === `${other.id}:${uuid}`)) {
+      alsoHeldAt.push({ source: other.id, id: `${other.id}:${uuid}` });
     }
   }
-  return held;
+  return { alsoHeldAt, linkedUnfollowed };
 }
 
 /** What every record carries, gathered once for all four kinds. */
@@ -466,7 +478,7 @@ function base(
     sourceUrl: addressOf(spec, kind, uuid),
     retrievedAt,
     status: readStatus(one.deleted, one.merged_into_id),
-    alsoHeldAt: readAlsoHeldAt(links, spec, kind),
+    ...readAlsoHeldAt(links, spec, kind),
     ...(supports(spec, "pending_edits")
       ? { pendingEdits: Array.isArray(edits) ? edits.length : tally(edits) }
       : {}),

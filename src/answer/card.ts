@@ -76,7 +76,7 @@ export function consolidate(shape: Consolidation): Card {
   return {
     fields,
     counts,
-    held_by: shape.readings.map(holderOf),
+    held_by: [...new Map(shape.readings.map((one) => [one.source, one])).values()].map(holderOf),
     // The policy and the outcome are two facts. A card reporting only the
     // catalogues that answered would read as a policy nobody wrote, and a
     // reader could not tell whether to change it.
@@ -101,7 +101,13 @@ function inPreferredOrder(shape: Consolidation): Answered[] {
     const at = shape.prefer.indexOf(source);
     return at === -1 ? shape.prefer.length : at;
   };
-  return [...answered]
+  // One catalogue that answered twice is one catalogue. Two hashes reaching
+  // one record on it is two matches and one reading, and counting it twice
+  // turns two agreeing catalogues into three, which is the one signal every
+  // value on this card rests on.
+  const once = new Map<string, Reading & { record: Record<string, unknown> }>();
+  for (const one of answered) if (!once.has(one.source)) once.set(one.source, one);
+  return [...once.values()]
     .sort((a, b) => rank(a.source) - rank(b.source))
     .map((one) => ({ source: one.source, record: one.record }));
 }
@@ -252,8 +258,11 @@ function notesFor(shape: Consolidation, answered: readonly Answered[]): string[]
   const first = shape.prefer.find((source) => shape.readings.some((one) => one.source === source));
   const reading = shape.readings.find((one) => one.source === first);
   if (reading !== undefined && reading.state !== "answered" && answered.length > 0) {
+    // Not asked and could not answer are two of the three states this server
+    // exists to keep apart, and the fallback is announced either way.
+    const what = reading.state === "absent" ? "was never asked" : "could not answer";
     notes.push(
-      `The catalogue this call preferred is ${first}, which did not answer, so every value here was read from ${named(answered.map((one) => one.source))} instead.`,
+      `The catalogue this call preferred is ${first}, which ${what}, so every value here was read from ${named(answered.map((one) => one.source))} instead.`,
     );
   }
 

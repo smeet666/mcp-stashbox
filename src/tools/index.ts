@@ -410,8 +410,16 @@ function renderMatches(
     match_count: number;
     scenes_matched: number;
     unattributed: number;
+    unmatched: { hash: string; algorithm: string }[];
     asked: { hash: string; algorithm: string }[];
-    perSource: { source: string; name?: string; state: string; reason?: string }[];
+    perSource: {
+      source: string;
+      name?: string;
+      state: string;
+      count?: number;
+      algorithmsNotSearched?: string[];
+      reason?: string;
+    }[];
   },
   cached: boolean,
 ): Rendered {
@@ -432,6 +440,11 @@ function renderMatches(
       `These catalogues could not answer, so this holds no record of theirs and states nothing about what they hold: ${failed.map((one) => one.name ?? one.source).join(", ")}.`,
     );
   }
+  if (result.unmatched.length > 0) {
+    notes.push(
+      `These hashes reached no record on any catalogue that answered: ${result.unmatched.map((one) => `${one.algorithm} ${one.hash}`).join(", ")}. Each of them is a file the catalogues that answered do not know, and the catalogues named below as unasked say nothing about them either way.`,
+    );
+  }
   if (result.unattributed > 0) {
     notes.push(
       `${result.unattributed} record(s) the catalogues answered with carry none of the hashes asked. Which hash reached them is unknown, so they stand here as no match and are counted apart.`,
@@ -449,9 +462,29 @@ function renderMatches(
   }
 
   const cards = result.matches.map((one) => renderCard(one.scene, "scene"));
+  // Every catalogue asked, and every one that was not, as every other answer
+  // states them. Left to the payload, a caller reading the prose has no signal
+  // that three of five catalogues were never asked, and "no match" reads as
+  // "no catalogue holds this file".
+  const reports = result.perSource.map((one) => {
+    const who = one.name ?? one.source;
+    if (one.state === "answered") {
+      const also = [
+        one.count === undefined ? null : `${one.count} match(es)`,
+        (one.algorithmsNotSearched ?? []).length === 0
+          ? null
+          : `does not search ${(one.algorithmsNotSearched ?? []).join(", ")}, so those were never put to it`,
+      ].filter((part): part is string => part !== null);
+      return `  - ${who}: answered${also.length === 0 ? "" : `, ${also.join("; ")}`}`;
+    }
+    if (one.state === "failed") return `  - ${who}: could not answer: ${one.reason ?? ""}`;
+    return `  - ${who}: not asked: ${one.reason ?? ""}`;
+  });
+
   const body = [
-    `${result.asked.length} fingerprint(s) asked, ${result.match_count} match(es) on ${result.scenes_matched} record(s).`,
+    `${result.asked.length} fingerprint(s) asked, ${result.match_count} match(es) on ${result.scenes_matched} file(s).`,
     `Asked: ${result.asked.map((one) => `${one.algorithm} ${one.hash}`).join(", ")}`,
+    `\nCatalogues:\n${reports.join("\n")}`,
     ...cards.map((one, at) => {
       const match = result.matches[at];
       return `\n${match?.algorithm ?? ""} ${match?.matchKind === "exact_file" ? "names these bytes" : "resembles this"}:\n${one.text}`;
@@ -470,6 +503,7 @@ function renderMatches(
       match_count: result.match_count,
       scenes_matched: result.scenes_matched,
       unattributed: result.unattributed,
+      unmatched: result.unmatched,
       asked: result.asked,
       per_source: result.perSource,
       ...(cached ? { cached: true } : {}),
@@ -571,8 +605,16 @@ export const TOOLS: Tool[] = [
           match_count: number;
           scenes_matched: number;
           unattributed: number;
+          unmatched: { hash: string; algorithm: string }[];
           asked: { hash: string; algorithm: string }[];
-          perSource: { source: string; name?: string; state: string; reason?: string }[];
+          perSource: {
+            source: string;
+            name?: string;
+            state: string;
+            count?: number;
+            algorithmsNotSearched?: string[];
+            reason?: string;
+          }[];
         };
         cached: boolean;
       };
