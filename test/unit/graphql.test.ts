@@ -51,6 +51,7 @@ const STASHDB: InstanceSpec = {
   answersWith: {},
   filters: "criteria" as const,
   facetedSearch: true,
+  evidence: "measured_answering",
   measuredAt: "2026-08-13",
 };
 

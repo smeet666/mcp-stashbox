@@ -297,3 +297,79 @@ describe("a request carries nothing the caller did not write", () => {
     expect(recordRequest(SD, "studio", A).query).not.toContain("edits");
   });
 });
+
+/* --------------------------- a narrowing the route answers nothing for */
+
+/**
+ * The filters a faceted input declares and its route reads nothing of.
+ *
+ * Measured on 2026-08-14 against StashDB: `queryPerformers` written with
+ * `alias`, `career_start_year` or `career_end_year`, and `queryScenes` written
+ * with `alias`, each answer the count, the page and the first row of a request
+ * carrying no narrowing at all. Written into a request they narrow nothing, and
+ * the whole index comes back as the answer to the question a caller narrowed.
+ */
+describe("a filter the catalogue's route reads nothing of", () => {
+  const cases: [string, string, Record<string, unknown>][] = [
+    ["a performer alias", "alias", { alias: "Angie" }],
+    ["a year a career opened", "career_start_year", { careerStartYear: 2003 }],
+    ["a year a career closed", "career_end_year", { careerEndYear: 2020 }],
+  ];
+
+  for (const [what, published, written] of cases) {
+    it(`leaves ${what} out of the request`, () => {
+      const built = performerQueryInput(SD, { ...written, page: 1, limit: 25 });
+      expect(built.input).not.toHaveProperty(published);
+    });
+
+    it(`names ${what} as a narrowing the route does not receive`, () => {
+      const built = performerQueryInput(SD, { ...written, page: 1, limit: 25 });
+      expect(built.unreceived).toContain(published);
+    });
+  }
+
+  it("leaves a scene alias out of the request and names it", () => {
+    const built = sceneQueryInput(SD, { alias: "sunset", page: 1, limit: 25 });
+    expect(built.input).not.toHaveProperty("alias");
+    expect(built.unreceived).toContain("alias");
+  });
+});
+
+describe("a filter beside one the route reads nothing of", () => {
+  // The correction that put four narrowings in the unreceived list is one line
+  // away from putting their siblings there too, and a sibling silently dropped
+  // is the very failure it was written for.
+  it("still writes the year of birth, which the route answers", () => {
+    const built = performerQueryInput(SD, { birthYear: 1985, page: 1, limit: 25 });
+    expect(built.input.birth_year).toEqual({ value: 1985, modifier: "EQUALS" });
+    expect(built.unreceived).toEqual([]);
+  });
+
+  it("still writes the name, the country and the studio beside an alias", () => {
+    const built = performerQueryInput(SD, {
+      alias: "Angie",
+      name: "Angela White",
+      country: "AU",
+      studioId: A,
+      page: 1,
+      limit: 25,
+    });
+    expect(built.input.name).toBe("Angela White");
+    expect(built.input.country).toEqual({ value: "AU", modifier: "EQUALS" });
+    expect(built.input.studio_id).toBe(A);
+    expect(built.unreceived).toEqual(["alias"]);
+  });
+
+  it("still writes a scene title and code beside an alias", () => {
+    const built = sceneQueryInput(SD, {
+      alias: "sunset",
+      title: "sunset",
+      code: "START-614",
+      page: 1,
+      limit: 25,
+    });
+    expect(built.input.title).toBe("sunset");
+    expect(built.input.code).toEqual({ value: "START-614", modifier: "EQUALS" });
+    expect(built.unreceived).toEqual(["alias"]);
+  });
+});

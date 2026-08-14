@@ -53,6 +53,11 @@ export const perSource = z.object({
     .describe(
       "Narrowings this catalogue cannot receive. This is the one field that says a catalogue cannot do something.",
     ),
+  narrowings_naming_no_record: z
+    .array(z.string())
+    .optional()
+    .describe("Narrowings written only with identifiers another catalogue minted."),
+  narrowings_received_in_part: z.array(z.string()).optional(),
   algorithms_not_searched: z
     .array(z.string())
     .optional()
@@ -211,6 +216,10 @@ export const sourcesOutput = {
       env_var: z.string(),
       answers: z.array(z.string()).describe("What it was measured answering, on the day named."),
       lacks: z.array(z.string()).describe("What it publishes no such thing for."),
+      evidence: z
+        .string()
+        .optional()
+        .describe("What the two lists rest on: a route seen answering, or one a schema declares."),
       measured_at: z.string().describe("The day its surface was read from it."),
     }),
   ),

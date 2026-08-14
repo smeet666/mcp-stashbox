@@ -568,7 +568,9 @@ export function renderMatches(result: Matches, cached: boolean): Rendered {
       unmatched: result.unmatched,
       not_searched: result.not_searched,
       asked: result.asked,
-      per_source: result.perSource,
+      // Under the names the published schema declares. A report handed over as
+      // this client spells it announces one contract and answers another.
+      per_source: result.perSource.map((one) => rowPayload(one as never)),
       ...(cached ? { cached: true } : {}),
       notes,
     },

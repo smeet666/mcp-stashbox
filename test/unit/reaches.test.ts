@@ -87,6 +87,23 @@ const REACHES: Record<string, (sent: string) => boolean> = {
 /** The arguments that decide who is asked rather than what is asked. */
 const NOT_A_NARROWING = new Set(["sources", "prefer", "sections", "sort", "direction", "id"]);
 
+/**
+ * The narrowings a catalogue's faceted input declares and its route reads
+ * nothing of.
+ *
+ * Measured on 2026-08-14: written into a request, each of these answers the
+ * count, the page and the first row of a request carrying no narrowing at all.
+ * They never reach a catalogue, so they owe a caller the other half of the rule:
+ * the answer names them as narrowings the route did not receive, and a page
+ * narrowed on nothing is never handed over as the answer to them.
+ */
+const ANSWERED_BY_NO_ROUTE: Record<string, readonly string[]> = {
+  search_scenes: ["alias"],
+  search_performers: ["alias", "career_start_year", "career_end_year"],
+  search_studios: [],
+  search_tags: [],
+};
+
 /** A client that reaches no catalogue and hands back what it would have sent. */
 function watching(): { client: StashboxClient; sent: string[] } {
   const sent: string[] = [];
@@ -103,33 +120,59 @@ function watching(): { client: StashboxClient; sent: string[] } {
   return { client, sent };
 }
 
+/** A client whose catalogue answers a well-formed empty page, so a report comes back. */
+function answering(): StashboxClient {
+  return new StashboxClient({
+    keys: { stashdb: "a key this test never sends anywhere" },
+    transport: {
+      request: async (_spec, _apiKey, body) => {
+        const named = /(?:query|mutation)\s+\w+[^{]*\{\s*(\w+)/.exec(body.query)?.[1] ?? "";
+        const rows = named.toLowerCase().includes("performer")
+          ? "performers"
+          : named.toLowerCase().includes("studio")
+            ? "studios"
+            : named.toLowerCase().includes("tag")
+              ? "tags"
+              : "scenes";
+        return { [named]: { count: 0, [rows]: [] } } as never;
+      },
+    },
+  });
+}
+
+/** One narrowing, written on its own with whatever the declaration reads beside it. */
+function written(argument: string): Record<string, unknown> {
+  const held: Record<string, unknown> = { [argument]: VALUE[argument] };
+  // A date and the comparison it is read with travel together.
+  if (argument === "date") held.date_compare = "after";
+  if (argument === "date_compare") held.date = "2019-04-12";
+  // A list of identifiers is read one way or the other, and the reading is what
+  // `match` decides, so it needs a list to decide about.
+  if (argument === "match") held.tag_ids = VALUE.tag_ids;
+  return held;
+}
+
 const searches = TOOLS.filter((one) => one.name.startsWith("search_"));
 
 describe("every narrowing a search declares reaches the catalogue", () => {
   for (const tool of searches) {
+    const inert = ANSWERED_BY_NO_ROUTE[tool.name] ?? [];
     const declared = Object.keys((tool.declared as z.ZodObject<z.ZodRawShape>).shape).filter(
       (name) => !NOT_A_NARROWING.has(name) && name !== "query",
     );
 
-    for (const argument of declared) {
+    for (const argument of declared.filter((name) => !inert.includes(name))) {
       it(`${tool.name} sends ${argument}`, async () => {
         const value = VALUE[argument];
         expect(value, `this suite holds no value for ${argument}`).toBeDefined();
         const reaches = REACHES[argument];
         expect(reaches, `this suite says nothing about what ${argument} looks like`).toBeDefined();
 
-        const written: Record<string, unknown> = { [argument]: value };
-        // A date and the comparison it is read with travel together.
-        if (argument === "date") written.date_compare = "after";
-        if (argument === "date_compare") written.date = "2019-04-12";
-        // A list of identifiers is read one way or the other, and the reading
-        // is what `match` decides, so it needs a list to decide about.
-        if (argument === "match") written.tag_ids = VALUE.tag_ids;
-
-        const read = tool.inputSchema.safeParse(written);
+        const asked = written(argument);
+        const read = tool.inputSchema.safeParse(asked);
         expect(
           read.success,
-          `${tool.name} refused its own ${argument}: ${JSON.stringify(written)}`,
+          `${tool.name} refused its own ${argument}: ${JSON.stringify(asked)}`,
         ).toBe(true);
 
         const { client, sent } = watching();
@@ -140,6 +183,31 @@ describe("every narrowing a search declares reaches the catalogue", () => {
           sent.some((one) => reaches?.(one) === true),
           `${tool.name} declares ${argument} and the catalogue was sent ${sent.join(" ")}`,
         ).toBe(true);
+      });
+    }
+
+    for (const argument of inert) {
+      it(`${tool.name} names ${argument} as one the route did not receive`, async () => {
+        expect(
+          declared,
+          `${tool.name} does not declare ${argument}, so this case measures nothing`,
+        ).toContain(argument);
+        const read = tool.inputSchema.parse(written(argument));
+        const rendered = await tool.run(answering() as never, read as Record<string, unknown>);
+        const reports = (rendered.structured as { per_source: { source: string }[] }).per_source;
+        const stashdb = reports.find((one) => one.source === "stashdb") as {
+          state?: string;
+          narrowings_not_received?: string[];
+          reason?: string;
+        };
+        // The only question left for the catalogue is a page of its whole
+        // index. Answered, that page reaches a reader as the answer to the
+        // question they narrowed, so it is never asked and the answer says
+        // which narrowing left it with nothing.
+        expect(stashdb?.state).toBe("absent");
+        expect(stashdb?.narrowings_not_received ?? []).toContain(argument);
+        expect(stashdb?.reason ?? "").toContain(argument);
+        expect((rendered.structured as { results: unknown[] }).results).toEqual([]);
       });
     }
 

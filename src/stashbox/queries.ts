@@ -310,13 +310,31 @@ function dateCriterion(
 }
 
 /**
- * Writes a key where the caller gave it something and the catalogue declares
- * the field.
+ * The filters a faceted input declares and its route reads nothing of.
+ *
+ * Measured on 2026-08-14 against StashDB: `queryPerformers` written with
+ * `alias`, `career_start_year` or `career_end_year`, and `queryScenes` written
+ * with `alias`, each answer the same count, the same page and the same first
+ * row as a request carrying no narrowing at all, while their siblings
+ * `birth_year`, `name` and `title` cut the count to a fraction of the corpus.
+ * The field is in the schema and the resolver reads none of it.
+ *
+ * A request is refused nothing for carrying one, so no failure marks it. Left
+ * in, the whole index comes back as the answer to the question a caller
+ * narrowed, which is the one thing this server exists not to do, so they travel
+ * as narrowings the route does not receive and reach a caller as that.
+ */
+const ANSWERED_BY_NO_ROUTE = new Set(["alias", "career_start_year", "career_end_year"]);
+
+/**
+ * Writes a key where the caller gave it something and the catalogue both
+ * declares the field and answers it.
  *
  * A field a catalogue's own input does not declare is one it cannot receive,
- * and writing it fails the whole request rather than that one narrowing. The
- * name is handed back so the answer can say the catalogue received nothing for
- * it.
+ * and writing it fails the whole request rather than that one narrowing. A
+ * field the input declares and the route reads nothing of narrows nothing at
+ * all. The name is handed back either way, so the answer can say the catalogue
+ * received nothing for it.
  */
 function put(
   spec: InstanceSpec,
@@ -327,6 +345,10 @@ function put(
   as = name,
 ): void {
   if (value === undefined) return;
+  if (ANSWERED_BY_NO_ROUTE.has(name)) {
+    unreceived.push(as);
+    return;
+  }
   if (spec.facets !== undefined && !spec.facets.includes(name)) {
     unreceived.push(as);
     return;

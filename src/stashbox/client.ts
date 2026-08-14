@@ -30,12 +30,13 @@ import {
   type Config,
   type Logger,
 } from "../config.js";
-import { invalidInput, StashboxError } from "../errors.js";
+import { invalidInput, notFound, StashboxError } from "../errors.js";
 import type { Card, Read, Reading, RowsResult, SourceReport } from "../types.js";
 import { consolidate } from "../answer/card.js";
 import { Cache, cacheKey } from "./cache.js";
 import { createHttpTransport, type GraphQLRequest, type HttpTransport } from "./graphql.js";
 import { parseId } from "./identifiers.js";
+import { identifierList, singleIdentifier } from "./narrowings.js";
 import {
   INSTANCES,
   instanceById,
@@ -360,6 +361,10 @@ export class StashboxClient {
     const typed = input.query === undefined && narrowed;
     const unasked: SourceReport[] = [...chosen.unasked];
     const asks: typeof chosen.asks = [];
+    // The request each catalogue receives, built once. What it carries decides
+    // whether the catalogue is asked at all, and building it twice would let
+    // that decision and the request drift apart.
+    const built = new Map<InstanceId, ReturnType<typeof build>>();
 
     for (const ask of chosen.asks) {
       // A catalogue whose faceted routes ignore what is written to them is
@@ -394,7 +399,27 @@ export class StashboxClient {
         });
         continue;
       }
+      // A catalogue's faceted input can declare a field its route reads
+      // nothing of: the request is accepted, the narrowing shapes no part of
+      // the answer, and a page of the whole index comes back. Where every
+      // narrowing written lands there, the request left carries paging alone,
+      // so the catalogue is named as never asked rather than handed a page it
+      // narrowed nothing to build.
+      const request = build(ask.spec);
+      const left = typed ? narrowingsIn(request) : ["narrowed by the words themselves"];
+      if (left.length === 0) {
+        const missed = request.unreceived ?? [];
+        unasked.push({
+          source: ask.spec.id,
+          name: ask.spec.name,
+          state: "absent",
+          narrowingsNotReceived: missed,
+          reason: `${ask.spec.name} receives none of the narrowings written for it (${missed.join(", ")}): its own route takes each of them and reads nothing of any, so it was never asked. Its first page would answer any question put to it.`,
+        });
+        continue;
+      }
       asks.push(ask);
+      built.set(ask.spec.id, request);
     }
     const key = cacheKey({
       instance: asks
@@ -428,7 +453,7 @@ export class StashboxClient {
     const reports: SourceReport[] = [];
     const results = await Promise.all(
       asks.map(async (ask) => {
-        const request = build(ask.spec);
+        const request = built.get(ask.spec.id) ?? build(ask.spec);
         const at = this.#now();
         const found = await this.#ask(
           ask.spec,
@@ -543,7 +568,12 @@ export class StashboxClient {
     return this.#searchOf("tags", input) as never;
   }
 
-  #searchOf(kind: Kind, input: Record<string, unknown>): Promise<Answer<unknown>> {
+  #searchOf(kind: Kind, given: Record<string, unknown>): Promise<Answer<unknown>> {
+    // Every identifier reaches the layer below naming the catalogue that
+    // minted it. A uuid written without one names no catalogue, and reading it
+    // as another's leaves this catalogue with nothing to narrow on for a reason
+    // the string never carried.
+    const input = namedIdentifiers(given, this.configured);
     const words = input.query as string | undefined;
     const page = (input.page as number | undefined) ?? 1;
     const limit = (input.limit as number | undefined) ?? ROWS_PER_PAGE;
@@ -681,6 +711,24 @@ export class StashboxClient {
                 ? `${instanceById(first.reading.source)?.name ?? first.reading.source} links this record to one on ${spec.name} at ${unfollowed(first.reading, spec.id)}, and that address names the record by something this client cannot address, so nothing here reached it. The link is written; following it is what failed.`
                 : `${instanceById(first.reading.source)?.name ?? first.reading.source} publishes no link from this record to one on ${spec.name}, so nothing here reached it. That is a link nobody wrote rather than a record ${spec.name} lacks.`;
       readings.push({ source: spec.id, state: "absent", reason });
+    }
+
+    // A card built where every catalogue that looked holds nothing carries a
+    // null in each of its fields and an empty list under each of its blocks,
+    // and the prose around it reads as a record whose editors filled nothing
+    // in. The taxonomy has a code for a catalogue that looked and holds no such
+    // record, and this is what it is for.
+    const looked = readings.filter((one) => one.state === "answered");
+    if (looked.length > 0 && !looked.some((one) => one.record !== undefined)) {
+      throw notFound(
+        `No catalogue holds a ${kind} at ${written}. ${looked
+          .map((one) => one.reason ?? `${instanceById(one.source)?.name ?? one.source} holds none.`)
+          .join(" ")}`,
+        {
+          instance: parsed.instance,
+          hint: `Search for the ${kind} and read it by an identifier a row of that search carries. An identifier names the catalogue that minted it, so the same uuid on another catalogue names another record.`,
+        },
+      );
     }
 
     const shape = SHAPES[kind];
@@ -1237,6 +1285,49 @@ function shareOf(
 /** Whether any identifier narrowing survived this catalogue's share of the list. */
 function anyIdentifierLeft(held: { share: Record<string, unknown> }): boolean {
   return IDENTIFIER_ARGUMENTS.some((name) => held.share[name] !== undefined);
+}
+
+/**
+ * Every identifier a caller wrote, each naming the catalogue that minted it.
+ *
+ * The same uuid names a different record on every catalogue, so one written
+ * without a prefix is resolved only where a single catalogue is configured, and
+ * refused in the words a record route refuses it in everywhere else. Left
+ * unresolved, it reaches the share of no catalogue at all, and each of them is
+ * reported as narrowed on a record another catalogue minted, which is a
+ * provenance the string does not carry and the sentence a genuinely foreign
+ * identifier earns.
+ */
+function namedIdentifiers(
+  input: Record<string, unknown>,
+  configured: readonly InstanceId[],
+): Record<string, unknown> {
+  const held: Record<string, unknown> = { ...input };
+  for (const name of IDENTIFIER_ARGUMENTS) {
+    const written = input[name];
+    if (written === undefined) continue;
+    const published = PUBLISHED[name] ?? name;
+    held[name] = Array.isArray(written)
+      ? identifierList(published, written as string[], configured).entries.map((one) => one.given)
+      : singleIdentifier(published, String(written), configured).entries[0]?.given;
+  }
+  return held;
+}
+
+/** The keys of a faceted input that decide the page rather than what is on it. */
+const PAGING = new Set(["page", "per_page", "sort", "direction"]);
+
+/**
+ * The narrowings a built request actually carries.
+ *
+ * A faceted input holding paging and an order alone asks for the first page of
+ * a whole index. Answered, that page reaches a reader as the answer to whatever
+ * the caller narrowed on, so this is what tells the two apart.
+ */
+function narrowingsIn(request: { variables?: Record<string, unknown> }): string[] {
+  const input = request.variables?.input as Record<string, unknown> | undefined;
+  if (input === undefined) return ["read on a route that takes no input"];
+  return Object.keys(input).filter((name) => !PAGING.has(name));
 }
 
 /** The name a caller wrote, for a narrowing this client names in one word. */

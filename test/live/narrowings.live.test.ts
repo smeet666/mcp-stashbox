@@ -8,10 +8,18 @@
  * wire shape varies **per narrowing**.
  *
  * So this suite asks one question per narrowing. A narrowing that travels
- * differently from its siblings gets its own case, and a case fails when a
- * catalogue refuses the request rather than when it answers something
- * unexpected: what a catalogue holds belongs to the people who edit it, and
- * pinning that would produce failures that say nothing about this client.
+ * differently from its siblings gets its own case, and a case never pins what a
+ * catalogue holds: that belongs to the people who edit it, and pinning it would
+ * produce failures that say nothing about this client.
+ *
+ * Two things fail a case, because a refusal is only one of the two ways a
+ * narrowing dies. **A refused request** is the loud one. **A request accepted
+ * and answered as though it carried nothing** is the quiet one: a catalogue's
+ * faceted input declares a field its route reads nothing of, so the page that
+ * comes back is the first page of the whole index and reaches a caller as the
+ * answer to what they narrowed. Its signature is a count of what the index
+ * holds for the question that equals the count for no question at all, and that
+ * is what every case here reads.
  */
 
 import { describe, expect, it } from "vitest";
@@ -33,6 +41,55 @@ function refusals(reports: readonly SourceReport[]): string[] {
   return reports
     .filter((report) => report.state === "failed")
     .map((report) => `${report.name ?? report.source}: ${report.error} ${report.reason ?? ""}`);
+}
+
+/**
+ * What each catalogue's index holds for no question at all, per entity.
+ *
+ * This is the number a narrowing has to move. Read once per entity from a
+ * search carrying nothing but a size, which is the very page a narrowing that
+ * travelled nowhere answers with.
+ */
+const CORPUS = new Map<string, Map<string, number>>();
+
+async function corpus(kind: string): Promise<Map<string, number>> {
+  const held = CORPUS.get(kind);
+  if (held !== undefined) return held;
+  const read = await (
+    client[`search${kind}` as "searchScenes"] as (
+      input: Record<string, unknown>,
+    ) => Promise<{ data: { perSource: SourceReport[] } }>
+  )({ limit: 1 });
+  const totals = new Map<string, number>();
+  for (const report of read.data.perSource) {
+    if (report.state === "answered" && report.indexTotal !== undefined) {
+      totals.set(report.source, report.indexTotal);
+    }
+  }
+  CORPUS.set(kind, totals);
+  return totals;
+}
+
+/**
+ * The catalogues that answered a narrowed question with the whole of their
+ * index.
+ *
+ * A catalogue that received the narrowing answers a count of its own. One that
+ * did not answers the count it answers for nothing, and the page beneath it is
+ * the first page of everything it holds.
+ */
+function unnarrowed(reports: readonly SourceReport[], totals: Map<string, number>): string[] {
+  return reports
+    .filter(
+      (report) =>
+        report.state === "answered" &&
+        report.indexTotal !== undefined &&
+        report.indexTotal === totals.get(report.source),
+    )
+    .map(
+      (report) =>
+        `${report.name ?? report.source}: ${String(report.indexTotal)}, which is everything its index holds`,
+    );
 }
 
 /** Identifiers that exist, used only to give a narrowing something to carry. */
@@ -64,10 +121,15 @@ describe.skipIf(!ENABLED)("live: every scene narrowing reaches a catalogue", () 
 
   for (const [what, input] of cases) {
     it(`is answered when narrowed on ${what}`, async () => {
+      const totals = await corpus("Scenes");
       const read = await client.searchScenes(input);
       expect(
         refusals(read.data.perSource),
         `a scene search narrowed on ${what} was refused, so the request this client builds is not one the catalogue takes`,
+      ).toEqual([]);
+      expect(
+        unnarrowed(read.data.perSource, totals),
+        `a scene search narrowed on ${what} was answered with the whole index, so the narrowing reached the catalogue and shaped nothing`,
       ).toEqual([]);
     }, 60_000);
   }
@@ -93,8 +155,13 @@ describe.skipIf(!ENABLED)("live: every performer narrowing reaches a catalogue",
 
   for (const [what, input] of cases) {
     it(`is answered when narrowed on ${what}`, async () => {
+      const totals = await corpus("Performers");
       const read = await client.searchPerformers(input);
       expect(refusals(read.data.perSource), `narrowed on ${what}`).toEqual([]);
+      expect(
+        unnarrowed(read.data.perSource, totals),
+        `a performer search narrowed on ${what} was answered with the whole index, so the narrowing reached the catalogue and shaped nothing`,
+      ).toEqual([]);
     }, 60_000);
   }
 });
@@ -111,8 +178,13 @@ describe.skipIf(!ENABLED)("live: every studio narrowing reaches a catalogue", ()
 
   for (const [what, input] of cases) {
     it(`is answered when narrowed on ${what}`, async () => {
+      const totals = await corpus("Studios");
       const read = await client.searchStudios(input);
       expect(refusals(read.data.perSource), `narrowed on ${what}`).toEqual([]);
+      expect(
+        unnarrowed(read.data.perSource, totals),
+        `a studio search narrowed on ${what} was answered with the whole index, so the narrowing reached the catalogue and shaped nothing`,
+      ).toEqual([]);
     }, 60_000);
   }
 });
@@ -128,8 +200,13 @@ describe.skipIf(!ENABLED)("live: every tag narrowing reaches a catalogue", () =>
 
   for (const [what, input] of cases) {
     it(`is answered when narrowed on ${what}`, async () => {
+      const totals = await corpus("Tags");
       const read = await client.searchTags(input);
       expect(refusals(read.data.perSource), `narrowed on ${what}`).toEqual([]);
+      expect(
+        unnarrowed(read.data.perSource, totals),
+        `a tag search narrowed on ${what} was answered with the whole index, so the narrowing reached the catalogue and shaped nothing`,
+      ).toEqual([]);
     }, 60_000);
   }
 });

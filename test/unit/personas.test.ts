@@ -233,3 +233,194 @@ describe("a block a caller asked for", () => {
     expect(said.toLowerCase()).toMatch(/none|no studio/);
   });
 });
+
+/* --------------------- a narrowing the catalogue's route reads nothing of */
+
+describe("a question written only with narrowings the route reads nothing of", () => {
+  it("is never sent as no question at all", async () => {
+    const { client, sent } = watching();
+    await client.searchPerformers({ alias: "zzzzzzzznotathing", limit: 2 });
+    // Measured: the route takes this field, answers the same count and the
+    // same first row as a request carrying nothing, and refuses nothing. Sent
+    // anyway, a page of the whole index comes back and the answer renders it
+    // as the two performers known by that name.
+    expect(sent.filter((one) => one.instance === "stashdb")).toEqual([]);
+  });
+
+  it("reports the catalogue as never asked, naming the narrowing", async () => {
+    const { client } = watching();
+    const read = await client.searchPerformers({ alias: "zzzzzzzznotathing", limit: 2 });
+    const stashdb = read.data.perSource.find((one) => one.source === "stashdb");
+    expect(stashdb?.state).toBe("absent");
+    expect(stashdb?.narrowingsNotReceived ?? []).toContain("alias");
+    expect(stashdb?.reason ?? "").toContain("alias");
+  });
+
+  it("counts no row and publishes no total for a catalogue nobody asked", async () => {
+    const { client } = watching();
+    const read = await client.searchPerformers({ careerStartYear: 1801, limit: 1 });
+    const stashdb = read.data.perSource.find((one) => one.source === "stashdb");
+    // A total beside a catalogue is what its own index holds for the question.
+    // Published for a question it never received, it is the size of the corpus
+    // standing where the answer to a narrowed question belongs.
+    expect(stashdb?.indexTotal).toBeUndefined();
+    expect(stashdb?.count).toBeUndefined();
+  });
+});
+
+describe("a question written beside a narrowing the route reads nothing of", () => {
+  it("is still put to the catalogue for the narrowings it does receive", async () => {
+    const { client, sent } = watching();
+    const read = await client.searchPerformers({ alias: "Angie", name: "Angela White", limit: 1 });
+    // One narrowing left behind never silences the others: the catalogue
+    // answers what it was given, and the answer names what it was not.
+    const toStashdb = sent.filter((one) => one.instance === "stashdb");
+    expect(toStashdb.length).toBeGreaterThan(0);
+    expect(toStashdb[0]?.body).toContain("Angela White");
+    const stashdb = read.data.perSource.find((one) => one.source === "stashdb");
+    expect(stashdb?.state).toBe("answered");
+    expect(stashdb?.narrowingsNotReceived ?? []).toContain("alias");
+  });
+
+  it("is still put to the catalogue where every narrowing written travels", async () => {
+    const { client, sent } = watching();
+    const read = await client.searchPerformers({ birthYear: 1991, limit: 1 });
+    expect(sent.filter((one) => one.instance === "stashdb").length).toBeGreaterThan(0);
+    const stashdb = read.data.perSource.find((one) => one.source === "stashdb");
+    expect(stashdb?.state).toBe("answered");
+    expect(stashdb?.narrowingsNotReceived).toBeUndefined();
+  });
+
+  it("is still put to the catalogue where the caller narrowed on nothing at all", async () => {
+    const { client, sent } = watching();
+    const read = await client.searchPerformers({ limit: 1 });
+    // A page of the whole index is exactly what this question asks for, and
+    // reporting the catalogue as unasked would deny it what it answered.
+    expect(sent.filter((one) => one.instance === "stashdb").length).toBeGreaterThan(0);
+    expect(read.data.perSource.find((one) => one.source === "stashdb")?.state).toBe("answered");
+  });
+});
+
+/* ------------------------------ an identifier no catalogue ever minted */
+
+/**
+ * A client whose catalogues answer one record route with whatever a case hands
+ * them, so what is under test is what the reading concludes from an answer.
+ */
+function holding(answers: Partial<Record<string, unknown>>) {
+  return new StashboxClient({
+    keys: { stashdb: "a key this test never sends anywhere", tpdb: "another" },
+    transport: {
+      request: async (spec, _apiKey, body) => {
+        const named = /(?:query|mutation)\s+\w+[^{]*\{\s*(\w+)/.exec(body.query)?.[1] ?? "";
+        if (!(spec.id in answers)) throw new Error(`${spec.name} could not be reached`);
+        return { [named]: answers[spec.id] } as never;
+      },
+    },
+  });
+}
+
+describe("a record route asked for an identifier nobody minted", () => {
+  it("answers that nothing was found rather than a card of empty fields", async () => {
+    // A card is a record read on the catalogues that hold it. Built where none
+    // of them holds one, every field of it is null and every list empty, and
+    // the prose around it reads as a record whose editors filled nothing in.
+    await expect(holding({ tpdb: null }).getCard("tag", `tpdb:${A}`)).rejects.toMatchObject({
+      code: "not_found",
+    });
+  });
+
+  it("names the catalogue that looked and the identifier it looked at", async () => {
+    const failed = await holding({ stashdb: null })
+      .getCard("scene", `stashdb:${A}`)
+      .catch((cause: Error) => cause);
+    expect(String((failed as Error).message)).toContain("StashDB");
+    expect(String((failed as Error).message)).toContain(`stashdb:${A}`);
+  });
+});
+
+describe("a record route beside one asked for an identifier nobody minted", () => {
+  const TAG = { id: A, name: "Brown Hair", deleted: false, aliases: [], description: null };
+
+  it("still answers a card where a catalogue holds the record", async () => {
+    const card = await holding({ stashdb: TAG }).getCard("tag", `stashdb:${A}`);
+    expect(card.data.read_from).toEqual(["stashdb"]);
+  });
+
+  it("still answers a card where the catalogue that holds it could not answer", async () => {
+    // A catalogue that failed states nothing about what it holds, so the
+    // absence of a record here belongs to the exchange rather than the world.
+    const card = await holding({}).getCard("tag", `stashdb:${A}`);
+    expect(card.data.held_by.find((one) => one.source === "stashdb")?.state).toBe("failed");
+  });
+
+  it("still answers a card where no catalogue was asked at all", async () => {
+    const card = await holding({ stashdb: TAG }).getCard("tag", `fansdb:${A}`);
+    // Nobody looked, so nothing here is evidence that the record does not
+    // exist, and calling it not found would make it one.
+    expect(card.data.held_by.find((one) => one.source === "fansdb")?.state).toBe("absent");
+  });
+});
+
+/* ------------------------- an identifier that names no catalogue at all */
+
+describe("a narrowing written with a uuid and no catalogue", () => {
+  it("is refused rather than blamed on another catalogue", async () => {
+    const { client, sent } = watching();
+    // The same uuid names a different record on each catalogue. Read as one
+    // another catalogue minted, the answer states a provenance the string does
+    // not carry, and a genuinely foreign identifier receives that same
+    // sentence, so the two become impossible to tell apart.
+    await expect(client.searchScenes({ performerIds: [A], limit: 1 })).rejects.toMatchObject({
+      code: "invalid_input",
+    });
+    expect(sent, "a catalogue was asked before the identifier was refused").toEqual([]);
+  });
+
+  it("is refused in the words the record route refuses it in", async () => {
+    const { client } = watching();
+    const said = await client
+      .searchScenes({ performerIds: [A], limit: 1 })
+      .catch((cause: Error) => cause.message);
+    const also = await client.getCard("performer", A).catch((cause: Error) => cause.message);
+    // One surface refusing a grammar its sibling invents a reason for is what
+    // makes a caller distrust both answers.
+    expect(String(said)).toContain("ambiguous");
+    expect(String(also)).toContain("ambiguous");
+    expect(String(said)).toContain("performer_ids");
+  });
+
+  it("is refused where it is written beside one that names a catalogue", async () => {
+    const { client } = watching();
+    await expect(
+      client.searchScenes({ performerIds: [`stashdb:${A}`, A], limit: 1 }),
+    ).rejects.toMatchObject({ code: "invalid_input" });
+  });
+});
+
+describe("a narrowing written beside one that names no catalogue", () => {
+  it("still travels where every identifier names the catalogue that minted it", async () => {
+    const { client, sent } = watching();
+    await client.searchScenes({ performerIds: [`stashdb:${A}`], limit: 1 });
+    const toStashdb = sent.filter((one) => one.instance === "stashdb");
+    expect(toStashdb.length).toBeGreaterThan(0);
+    expect(toStashdb[0]?.body).toContain(A);
+  });
+
+  it("still resolves a bare uuid where one catalogue alone is configured", async () => {
+    const sent: { instance: string; body: string }[] = [];
+    const client = new StashboxClient({
+      keys: { stashdb: "a key this test never sends anywhere" },
+      transport: {
+        request: async (spec, _apiKey, body) => {
+          sent.push({ instance: spec.id, body: JSON.stringify(body.variables ?? {}) });
+          return { queryScenes: { count: 0, scenes: [] } } as never;
+        },
+      },
+    });
+    // One catalogue is the only one that could have minted it, so nothing is
+    // chosen on the caller's behalf by reading it as theirs.
+    await client.searchScenes({ performerIds: [A], limit: 1 });
+    expect(sent[0]?.body).toContain(A);
+  });
+});

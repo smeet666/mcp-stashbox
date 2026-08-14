@@ -25,6 +25,7 @@ import {
   calendarDay,
   datedTogether,
   exclusiveQuery,
+  hexadecimalHash,
   identifier,
   identifiers,
   oneOf,
@@ -130,6 +131,35 @@ const held = {
 const WORDS =
   "Words for the catalogue's own text index, which reads them as a union. It is exclusive with the typed arguments, which narrow as an intersection.";
 
+/**
+ * The readings a performer's gender and ethnicity are recorded under.
+ *
+ * Read on 2026-08-14 off the enumerations the catalogues' own performer input
+ * declares, in the spellings a row of an answer publishes, so a value taken from
+ * one answer is a value the next call takes.
+ */
+const GENDERS = [
+  "UNKNOWN",
+  "MALE",
+  "FEMALE",
+  "TRANSGENDER_MALE",
+  "TRANSGENDER_FEMALE",
+  "INTERSEX",
+  "NON_BINARY",
+] as const;
+
+const ETHNICITIES = [
+  "UNKNOWN",
+  "CAUCASIAN",
+  "BLACK",
+  "ASIAN",
+  "INDIAN",
+  "LATIN",
+  "MIDDLE_EASTERN",
+  "MIXED",
+  "OTHER",
+] as const;
+
 /* ---------------------------------------------------------------- the ten */
 
 const sourcesInput = strictInput({});
@@ -178,9 +208,14 @@ const performerSearchShape = {
     "disambiguation",
     "the text telling two people of one name apart",
   ).optional(),
-  gender: text("gender", "the gender the catalogue records").optional(),
+  // Closed sets, measured: each of these is an enumeration on the catalogue's
+  // own input, and a value outside one is refused with a status. Sent, that
+  // refusal comes back as a catalogue that could not answer, and a caller reads
+  // their own typo as an outage. The spellings are the ones a row publishes, so
+  // a value read off an answer is one this argument takes.
+  gender: oneOf("gender", "the gender the catalogue records", GENDERS).optional(),
   country: countryCode("country").optional(),
-  ethnicity: text("ethnicity", "the ethnicity the catalogue records").optional(),
+  ethnicity: oneOf("ethnicity", "the ethnicity the catalogue records", ETHNICITIES).optional(),
   birth_year: wholeNumber("birth_year", "the year of birth", 1800, 2200).optional(),
   career_start_year: wholeNumber(
     "career_start_year",
@@ -252,10 +287,12 @@ const CODE = "[invalid_input]";
 const BLOCKS =
   "The blocks read beside the record's own fields, which come back whatever is written here. Each name adds a block, and 'basic' asks for those fields alone.";
 
-const fingerprintEntry = strictInput({
-  hash: text("hash", "one fingerprint as the catalogues store it"),
-  algorithm: oneOf("algorithm", "how that hash was computed", ["MD5", "OSHASH", "PHASH"]),
-});
+const fingerprintEntry = hexadecimalHash(
+  strictInput({
+    hash: text("hash", "one fingerprint as the catalogues store it"),
+    algorithm: oneOf("algorithm", "how that hash was computed", ["MD5", "OSHASH", "PHASH"]),
+  }),
+);
 
 const fingerprintShape = {
   fingerprints: z

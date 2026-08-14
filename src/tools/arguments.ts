@@ -100,6 +100,32 @@ export function calendarDay(argument: string, what: string): z.ZodString {
     .refine((value) => readDate(value)?.precision === "day", error);
 }
 
+/**
+ * How many hexadecimal characters each algorithm writes.
+ *
+ * A hash is a fixed number of bits written in hexadecimal, so anything else is
+ * a string that names no file. Put to a catalogue, it comes back refused with a
+ * status, and that refusal reaches a caller as a catalogue that could not
+ * answer rather than as the value they wrote.
+ */
+const HASH_LENGTH: Record<string, number> = { MD5: 32, OSHASH: 16, PHASH: 16 };
+
+/** One fingerprint, written as the algorithm that computed it writes one. */
+export function hexadecimalHash<T extends z.ZodObject<z.ZodRawShape>>(schema: T): T {
+  return schema.superRefine((value, ctx) => {
+    const written = value as { hash?: unknown; algorithm?: unknown };
+    const algorithm = String(written.algorithm);
+    const hash = String(written.hash);
+    const length = HASH_LENGTH[algorithm];
+    if (length === undefined) return;
+    if (new RegExp(`^[0-9a-fA-F]{${length}}$`).test(hash)) return;
+    ctx.addIssue({
+      code: "custom",
+      message: `${CODE} "${hash}" is no ${algorithm}. ${algorithm} writes ${length} hexadecimal characters, and a string outside that shape names no file any catalogue indexes.`,
+    });
+  }) as unknown as T;
+}
+
 /** A two-letter country code, as the catalogues store one. */
 export function countryCode(argument: string): z.ZodString {
   const error = `${CODE} ${argument} takes a two-letter country code, as in AU or SE. A country written out in full names no code the catalogues store, so it would match nothing they hold.`;

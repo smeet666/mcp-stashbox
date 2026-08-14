@@ -81,7 +81,7 @@ describe("the sentence naming the order rows stand in", () => {
   it("states the order that was asked for where the catalogue applied it", async () => {
     const { client } = watching({ queryScenes: { count: 1, scenes: [ROW] } });
     const read = await client.searchScenes({
-      tag_ids: [`stashdb:${UUID}`],
+      tagIds: [`stashdb:${UUID}`],
       sort: "date",
       direction: "asc",
       sources: ["stashdb"],

@@ -318,3 +318,84 @@ describe("a shape is declared once", () => {
     expect(described / json.length).toBeLessThan(0.5);
   });
 });
+
+/* --------------------------------- the closed sets the catalogues take */
+
+/**
+ * A value outside a set the catalogue declares, refused before a request.
+ *
+ * These fields are enumerations on the catalogue's own input, and a value
+ * outside one is refused with a status. Sent, that refusal comes back as a
+ * catalogue that could not answer, under a code whose meaning is an answer this
+ * client could not read, and the caller reads their own typo as an outage.
+ */
+describe("a value outside a set the catalogue declares", () => {
+  const cases: [string, unknown][] = [
+    ["search_performers", { gender: "zzz" }],
+    ["search_performers", { gender: "woman" }],
+    ["search_performers", { ethnicity: "zzz" }],
+    ["search_performers", { ethnicity: "european" }],
+    ["find_by_fingerprint", { fingerprints: [{ hash: "zzz", algorithm: "MD5" }] }],
+    ["find_by_fingerprint", { fingerprints: [{ hash: "not a hash at all", algorithm: "OSHASH" }] }],
+  ];
+
+  for (const [name, input] of cases) {
+    it(`${name} refuses ${JSON.stringify(input).slice(0, 58)}`, () => {
+      const said = refusal(tool(name).inputSchema, input);
+      expect(said, `a refusal reached a caller with no code: ${said}`).toContain("[invalid_input]");
+    });
+  }
+});
+
+describe("a value inside a set the catalogue declares", () => {
+  // The correction that closes a set is one entry away from closing it around
+  // less than the catalogue takes, and a value it answers refused here is a
+  // question this server can no longer put to it at all.
+  const GENDERS = [
+    "UNKNOWN",
+    "MALE",
+    "FEMALE",
+    "TRANSGENDER_MALE",
+    "TRANSGENDER_FEMALE",
+    "INTERSEX",
+    "NON_BINARY",
+  ];
+  const ETHNICITIES = [
+    "UNKNOWN",
+    "CAUCASIAN",
+    "BLACK",
+    "ASIAN",
+    "INDIAN",
+    "LATIN",
+    "MIDDLE_EASTERN",
+    "MIXED",
+    "OTHER",
+  ];
+
+  for (const gender of GENDERS) {
+    it(`search_performers takes ${gender}, which its rows publish`, () => {
+      expect(tool("search_performers").inputSchema.safeParse({ gender }).success).toBe(true);
+    });
+  }
+
+  for (const ethnicity of ETHNICITIES) {
+    it(`search_performers takes ${ethnicity}, which its rows publish`, () => {
+      expect(tool("search_performers").inputSchema.safeParse({ ethnicity }).success).toBe(true);
+    });
+  }
+
+  const HASHES: [string, string][] = [
+    ["MD5", "d41d8cd98f00b204e9800998ecf8427e"],
+    ["OSHASH", "3c30b044619b6487"],
+    ["PHASH", "841f346c96e743b3"],
+  ];
+
+  for (const [algorithm, hash] of HASHES) {
+    it(`find_by_fingerprint takes a ${algorithm} as the catalogues store one`, () => {
+      const read = tool("find_by_fingerprint").inputSchema.safeParse({
+        fingerprints: [{ hash, algorithm }],
+      });
+      expect(read.success, `a hash a catalogue published was refused: ${hash}`).toBe(true);
+    });
+  }
+});

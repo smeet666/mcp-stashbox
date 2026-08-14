@@ -11,8 +11,11 @@
  * a catalogue does not answer is nobody's.** Folded into one field they read
  * alike, and a caller who reads "unavailable" cannot tell which they have met.
  *
- * Each row carries the day its surface was read from the catalogue itself, so a
- * claim here is a claim with a date on it.
+ * Each row carries the kind of evidence its capabilities rest on and the day
+ * that evidence was gathered, so a claim here is a claim a reader can weigh and
+ * a claim with a date on it. A route seen answering and a route a schema
+ * declares are two different things to know about a catalogue, and a caller
+ * planning a call acts differently on each.
  */
 
 import {
@@ -20,6 +23,7 @@ import {
   FACETED_SEARCH,
   INSTANCES,
   supports,
+  type Evidence,
   type InstanceId,
   type InstanceSpec,
 } from "../stashbox/instances.js";
@@ -34,10 +38,16 @@ export interface SourceDescription {
   /** Whether this server holds a key for it, which is a fact about this install. */
   key_configured: boolean;
   env_var: string;
-  /** What it was measured answering. Unchanged by whether a key is held. */
+  /** What it was read to answer. Unchanged by whether a key is held. */
   answers: string[];
   /** What it publishes no such thing for, which is a limit it has. */
   lacks: string[];
+  /**
+   * What the two lists above rest on: routes put to the catalogue and seen
+   * answered, or routes its own schema declares and nothing has exercised.
+   */
+  evidence: Evidence;
+  /** The day that evidence was gathered from the catalogue itself. */
   measured_at: string;
 }
 
@@ -69,12 +79,14 @@ export function describeSources(held: { configured: readonly InstanceId[] }): So
       ...CAPABILITIES.filter((capability) => !supports(spec, capability)),
       ...(spec.facetedSearch ? [] : [FACETED_SEARCH]),
     ],
+    evidence: spec.evidence,
     measured_at: spec.measuredAt,
   }));
 
   const notes: string[] = [
-    "What a catalogue answers is what it was measured answering, on the day named beside it. A key held for it is a fact about this install and changes none of that.",
+    "What a catalogue answers is what the evidence beside its row was gathered from, on the day named there: a route put to the catalogue and seen answered, or a route the catalogue's own schema declares. A key held for it is a fact about this install and changes neither.",
     "Counts from two catalogues are never added. They index corpora that overlap by an amount none of them publishes, so one thing held by both is a record on each.",
+    ...INSTANCES.filter((spec) => spec.evidence === "declared_in_schema").map(readFromItsSchema),
     ...INSTANCES.filter((spec) => !spec.facetedSearch).map(limitOnItsSearches),
   ];
 
@@ -86,6 +98,20 @@ export function describeSources(held: { configured: readonly InstanceId[] }): So
   }
 
   return { sources, notes };
+}
+
+/**
+ * A catalogue whose row was read from its schema, said as one.
+ *
+ * A caller plans calls from this table, and a row read off a GraphQL schema
+ * carries route names, record fields and result shapes the catalogue publishes
+ * about itself. What comes back when the route is called is a second fact, and
+ * this sentence is what keeps a reader from taking the first for it. The
+ * faceted search is named on its own, since a schema declares an input and
+ * cannot state that the rows honour it.
+ */
+function readFromItsSchema(spec: InstanceSpec): string {
+  return `${spec.name}: no request has been put to it from this install, and every capability listed for it was read from its own GraphQL schema on ${spec.measuredAt}, which is what the catalogue declares about itself. That covers ${FACETED_SEARCH} too: a schema declares the input a faceted route takes, and rows honouring the narrowings written to it are what a request would show.`;
 }
 
 /**

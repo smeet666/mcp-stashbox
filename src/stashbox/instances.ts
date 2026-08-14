@@ -1,17 +1,19 @@
 /**
- * The catalogues this server holds an address for, and what each was measured
- * to answer.
+ * The catalogues this server holds an address for, and what each was read to
+ * answer.
  *
- * **Every capability here was measured, and names the route it was measured
- * on.** Nothing is inherited from the software a catalogue is believed to run.
- * Two catalogues answering one capability name the route differently, one
- * plural and one singular, so a request written in the other's spelling comes
- * back refused, and a refusal read as a limit publishes a claim about a
- * catalogue that nothing measured.
+ * **Every capability here was read from the catalogue itself, and names the
+ * route it was read on.** Nothing is inherited from the software a catalogue is
+ * believed to run. Two catalogues answering one capability name the route
+ * differently, one plural and one singular, so a request written in the other's
+ * spelling comes back refused, and a refusal read as a limit publishes a claim
+ * about a catalogue that nothing measured.
  *
- * A capability is therefore three things at once: the name a caller reads, the
- * route it was seen on, and the day it was seen. A claim with no date behind it
- * is a claim nobody can check, and this file is what `get_sources` publishes.
+ * A capability is therefore four things at once: the name a caller reads, the
+ * route it was seen on, the kind of evidence it was seen by, and the day it was
+ * seen. A claim with no date behind it is a claim nobody can check, a claim
+ * with no evidence named beside it is a claim a caller reads as stronger than
+ * it is, and this file is what `get_sources` publishes.
  *
  * **What a catalogue answers and what this operator can reach are two facts.**
  * Nothing here knows about keys. A catalogue with no key is a catalogue nobody
@@ -56,6 +58,20 @@ export const CAPABILITIES = [
 export type Capability = (typeof CAPABILITIES)[number];
 
 /**
+ * What the capabilities of one catalogue rest on.
+ *
+ * `measured_answering` names routes this server put to the catalogue and saw
+ * answered, and a nightly suite puts every one of them again. `declared_in_schema`
+ * names routes the catalogue's own GraphQL schema publishes, read from its
+ * endpoint by introspection: the catalogue declares them, and no request has
+ * shown what comes back. The two are different evidence, and folding them into
+ * one word tells a caller a call has been exercised when nothing has.
+ */
+export const EVIDENCE = ["measured_answering", "declared_in_schema"] as const;
+
+export type Evidence = (typeof EVIDENCE)[number];
+
+/**
  * The typed narrowing, named as the table names a capability.
  *
  * A capability answers what a catalogue does and cannot qualify it. One
@@ -79,9 +95,9 @@ export interface InstanceSpec {
   webBase: string;
   /** The environment variable holding the key for this catalogue alone. */
   envVar: string;
-  /** What this catalogue was measured answering. A route absent here is never asked. */
+  /** What this catalogue was read to answer. A route absent here is never asked. */
   capabilities: readonly Capability[];
-  /** The route each capability was measured on, in that catalogue's own spelling. */
+  /** The route each capability was read on, in that catalogue's own spelling. */
   routes: Partial<Record<Capability, string>>;
   /**
    * What a text search route was measured answering with.
@@ -120,7 +136,15 @@ export interface InstanceSpec {
    * with typed arguments reports it as never asked.
    */
   facetedSearch: boolean;
-  /** The day the surface above was read from the catalogue itself. */
+  /**
+   * What the table above rests on, which a caller planning calls needs as much
+   * as the table. A catalogue read by introspection alone carries every word of
+   * it as a declaration, `facetedSearch` included: whether a faceted route
+   * applies the narrowings written to it is a thing a request shows and a
+   * schema cannot state.
+   */
+  evidence: Evidence;
+  /** The day that evidence was gathered from the catalogue itself. */
   measuredAt: string;
   /**
    * Fields a faceted query of this catalogue refuses to be written without.
@@ -130,16 +154,19 @@ export interface InstanceSpec {
 }
 
 /**
- * The surface four of these catalogues were each read to answer.
+ * The surface four of these catalogues each declare.
  *
  * Every one of them was introspected on its own endpoint on the day named in
- * its entry, and the four answered the same route names. They share this
- * constant because four measurements agreed, and a catalogue whose surface has
- * never been read carries no capability at all: a route absent from a spec is
- * one this server never puts to that catalogue.
+ * its entry, and the four declare the same route names, the same record fields
+ * and the same result shapes. They share this constant because four readings
+ * agreed, and a catalogue whose surface has never been read carries no
+ * capability at all: a route absent from a spec is one this server never puts
+ * to that catalogue.
  *
- * Where a measurement disagreed, the entry says so on its own rather than
- * bending this constant to fit.
+ * One of the four was also put every one of these routes and answered them.
+ * That difference is the `evidence` of each entry rather than a difference of
+ * route names, and where a reading disagreed the entry says so on its own
+ * rather than bending this constant to fit.
  */
 const READ_ON_FOUR: Partial<Record<Capability, string>> = {
   search_scenes: "searchScenes",
@@ -161,7 +188,7 @@ const READ_ON_FOUR: Partial<Record<Capability, string>> = {
   performer_studios: "findPerformer.studios",
 };
 
-/** What each search route of those four was measured answering with. */
+/** The shape each search route of those four declares its answer in. */
 const SHAPES_ON_FOUR: Partial<Record<Capability, "list" | "page">> = {
   search_scenes: "page",
   search_performers: "page",
@@ -181,6 +208,9 @@ export const INSTANCES: readonly InstanceSpec[] = [
     answersWith: SHAPES_ON_FOUR,
     filters: "criteria",
     facetedSearch: true,
+    // Every route above was put to it and answered, and the live suite puts
+    // each of them again on every run.
+    evidence: "measured_answering",
     measuredAt: "2026-08-13",
   },
   {
@@ -254,6 +284,9 @@ export const INSTANCES: readonly InstanceSpec[] = [
       "performed_with",
       "studio_id",
     ],
+    // Its routes were read from its schema and then put to it, which is how
+    // the two searches it answers were found under names of its own.
+    evidence: "measured_answering",
     measuredAt: "2026-08-13",
     requiresOrder: true,
   },
@@ -268,7 +301,11 @@ export const INSTANCES: readonly InstanceSpec[] = [
     answersWith: SHAPES_ON_FOUR,
     filters: "criteria",
     facetedSearch: true,
-    measuredAt: "2026-08-13",
+    // Introspected on its own endpoint, which needs no key. No request has
+    // been put to it from here, so every word of its table is what it
+    // declares.
+    evidence: "declared_in_schema",
+    measuredAt: "2026-08-14",
   },
   {
     id: "pmv",
@@ -320,7 +357,11 @@ export const INSTANCES: readonly InstanceSpec[] = [
       "has_parent",
       "category_id",
     ],
-    measuredAt: "2026-08-13",
+    // Introspected on its own endpoint, which needs no key. No request has
+    // been put to it from here, so every word of its table is what it
+    // declares.
+    evidence: "declared_in_schema",
+    measuredAt: "2026-08-14",
   },
   {
     id: "javstash",
@@ -333,7 +374,11 @@ export const INSTANCES: readonly InstanceSpec[] = [
     answersWith: SHAPES_ON_FOUR,
     filters: "criteria",
     facetedSearch: true,
-    measuredAt: "2026-08-13",
+    // Introspected on its own endpoint, which needs no key. No request has
+    // been put to it from here, so every word of its table is what it
+    // declares.
+    evidence: "declared_in_schema",
+    measuredAt: "2026-08-14",
   },
 ];
 

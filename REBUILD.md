@@ -23,6 +23,33 @@ decide every design choice in this document.
 
 Read on 2026-08-13 by GraphQL introspection and by real requests.
 
+### Two kinds of evidence, kept apart
+
+A schema and an answer say different things about a catalogue. Introspection
+says what a catalogue **declares**: route names, record fields, the shape a
+result takes. A request says what it **answers**: rows, or a refusal. A table
+built from the first and published as the second tells a caller a call has been
+exercised when nothing has, and the caller plans a session on it.
+
+A key is held here for StashDB and ThePornDB, so those two carry
+`measured_answering`: every capability their rows publish was put to them and
+answered, and the live suite puts each of them again on every run. FansDB, PMV
+Stash and JAVStash have never been sent a request from here. Introspection needs
+no key, so their endpoints were read on 2026-08-14, and their rows carry
+`declared_in_schema`: the routes, record fields and result shapes below are what
+each of them publishes about itself. `get_sources` names the kind beside every
+row, dates it, and says in its own words that no request was put to the three.
+
+The faceted search sits under that same distinction. A schema declares the input
+a faceted route takes, and rows honouring the narrowings written to it are what a
+request shows, which is why `faceted_search` is a declaration on those three rows
+and a measurement on the other two.
+
+The live capability suite walks both kinds: every capability of every catalogue
+is resolved against that catalogue's own schema, key or no key, and every
+capability of a catalogue published as measured answering is put to it. A case
+that cannot run names what went unverified in its own name.
+
 ### The routes each catalogue answers
 
 |                          | StashDB                                            | ThePornDB                |
