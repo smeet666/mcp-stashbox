@@ -32,6 +32,12 @@ export const perSource = z.object({
     .number()
     .optional()
     .describe("What its own index holds for this question, the rows on this page included."),
+  index_total_over_any_word: z
+    .boolean()
+    .optional()
+    .describe(
+      "The total counts rows carrying any word of the query, its text index reading them apart.",
+    ),
   skipped: z
     .number()
     .optional()
@@ -216,10 +222,17 @@ export const fingerprintOutput = {
   matches: z.array(
     z.object({
       scene: card,
-      algorithm: z.enum(["MD5", "OSHASH", "PHASH"]),
-      hash: z
-        .string()
-        .describe("The hash that reached this record, so two matches on one record differ."),
+      matched_by: z
+        .array(
+          z.object({
+            hash: z.string(),
+            algorithm: z.enum(["MD5", "OSHASH", "PHASH"]),
+            sources: z.array(z.string()),
+          }),
+        )
+        .describe(
+          "Every hash that reached this record, each naming the catalogues it reached it on. A hash a catalogue does not search reached nothing there.",
+        ),
       match_kind: z
         .enum(["exact_file", "perceptual_similarity"])
         .describe(
@@ -227,7 +240,7 @@ export const fingerprintOutput = {
         ),
     }),
   ),
-  match_count: z.number().describe("One per hash that reached one record."),
+  match_count: z.number().describe("One per record reached, whatever number of hashes reached it."),
   records_named: z
     .number()
     .describe(
@@ -249,9 +262,9 @@ export const fingerprintOutput = {
       "The hashes put to a catalogue that answered, which reached no record there. A catalogue named as unasked says nothing about them either way.",
     ),
   not_searched: z
-    .array(z.object({ hash: z.string(), algorithm: z.string() }))
+    .array(z.object({ hash: z.string(), algorithm: z.string(), sources: z.array(z.string()) }))
     .describe(
-      "Hashes whose algorithm no answering catalogue searches, so none was put to one. Nobody looked for them, which is no evidence about the files behind them.",
+      "Hashes and the catalogues that answered without searching their algorithm, so they were never put to those. Nobody looked there, which is no evidence about the files behind them.",
     ),
   asked: z.array(z.object({ hash: z.string(), algorithm: z.string() })),
   per_source: z.array(perSource),

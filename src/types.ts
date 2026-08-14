@@ -239,6 +239,8 @@ export interface SourceReport {
   error?: ErrorCode;
   /** What its index holds for the question, the page returned included. */
   indexTotal?: number;
+  /** Whether that total counts the rows carrying any word of a query, the index reading them apart. */
+  indexTotalOverAnyWord?: boolean;
   /** Rows it answered with that came back unreadable and were left out. */
   skipped?: number;
   /** Distinct records behind its rows, where one record can answer more than once. */

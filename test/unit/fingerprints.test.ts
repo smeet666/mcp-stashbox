@@ -19,6 +19,7 @@ import { StashboxClient } from "../../src/stashbox/client.js";
 import { fingerprintRows, renderMatches } from "../../src/answer/render.js";
 
 const OSHASH = "cc2fed05aa9ab4a8";
+const OTHER_OSHASH = "3c30b044619b6487";
 const PHASH = "e276686d35b2c94c";
 const CHAPTER_THREE = "2975e03c-1bb1-7383-8782-ea0e678f6de0";
 const CHAPTER_TWO = "e134b8f5-1bb1-7383-8782-ea0e678f6de1";
@@ -153,6 +154,64 @@ describe("two records of one catalogue carrying one hash", () => {
     const said = renderMatches(read.data, read.cached).text;
     expect(said).toContain("Being Riley Chapter 3");
     expect(said).toContain("Being Riley Chapter 2");
+    // Which of the two holds the file is a question the catalogue answers no
+    // way at all, and it says so by minting two identifiers.
+    expect(said).toContain("reached more than one record");
+  });
+});
+
+/* ------------------------------ several hashes of one file, one catalogue */
+
+describe("two hashes of one file reaching one record", () => {
+  /**
+   * The route answers a group per hash, and a record carrying both hashes
+   * stands in both groups. Read as two records, one file is reported as
+   * several, and a caller identifying a folder quarantines it.
+   */
+  const answers = {
+    stashdb: [
+      [
+        scene(CHAPTER_THREE, "Being Riley Chapter 3", [
+          { hash: OSHASH, algorithm: "OSHASH" },
+          { hash: OTHER_OSHASH, algorithm: "OSHASH" },
+        ]),
+      ],
+      [
+        scene(CHAPTER_THREE, "Being Riley Chapter 3", [
+          { hash: OSHASH, algorithm: "OSHASH" },
+          { hash: OTHER_OSHASH, algorithm: "OSHASH" },
+        ]),
+      ],
+    ],
+    tpdb: [[], []],
+  };
+  const asked = {
+    fingerprints: [
+      { hash: OSHASH, algorithm: "OSHASH" },
+      { hash: OTHER_OSHASH, algorithm: "OSHASH" },
+    ],
+    sources: ["stashdb"],
+  };
+
+  it("is one match, since one record is one record", async () => {
+    const read = await reading(answers).findByFingerprint(asked);
+    expect(read.data.matches).toHaveLength(1);
+    expect(read.data.match_count).toBe(1);
+    expect(read.data.records_named).toBe(1);
+  });
+
+  it("names both hashes on the one block it opens", async () => {
+    const read = await reading(answers).findByFingerprint(asked);
+    const said = renderMatches(read.data, read.cached).text;
+    expect(said).toContain(OSHASH);
+    expect(said).toContain(OTHER_OSHASH);
+    expect(said.match(/Being Riley Chapter 3/g)).toHaveLength(1);
+  });
+
+  it("asserts no ambiguity, since one record leaves nothing to choose between", async () => {
+    const read = await reading(answers).findByFingerprint(asked);
+    const said = renderMatches(read.data, read.cached).text;
+    expect(said).not.toContain("reached more than one record");
   });
 });
 
@@ -180,7 +239,9 @@ describe("a hash of an algorithm no answering catalogue searches", () => {
 
   it("is reported as never put to one, and never as unmatched", async () => {
     const read = await reading({ tpdb: [[]] }).findByFingerprint(asked);
-    expect(read.data.not_searched).toEqual([{ hash: PHASH, algorithm: "PHASH" }]);
+    expect(read.data.not_searched).toEqual([
+      { hash: PHASH, algorithm: "PHASH", sources: ["tpdb"] },
+    ]);
     expect(read.data.unmatched).toEqual([]);
   });
 
@@ -199,6 +260,72 @@ describe("a hash of an algorithm no answering catalogue searches", () => {
     // its silence is no evidence about the file the hash was computed from.
     expect(said).not.toContain("looked and found nothing");
     expect(said).not.toContain("do not know");
+  });
+});
+
+/* ------------------ a hash one catalogue searches and another never reads */
+
+describe("a batch mixing an algorithm one catalogue does not search", () => {
+  /**
+   * ThePornDB's lookup searches no perceptual hash, so the PHASH is never put
+   * to it. The record it answers the exact hash with carries a PHASH of its
+   * own, which is the catalogue describing its record and no answer to a
+   * question it was never asked.
+   */
+  const answers = {
+    stashdb: [
+      [scene(ELSEWHERE, "A", [{ hash: OSHASH, algorithm: "OSHASH" }])],
+      [scene(CHAPTER_THREE, "B", [{ hash: PHASH, algorithm: "PHASH" }])],
+    ],
+    tpdb: [
+      [
+        scene(CHAPTER_TWO, "A", [
+          { hash: OSHASH, algorithm: "OSHASH" },
+          { hash: PHASH, algorithm: "PHASH" },
+        ]),
+      ],
+    ],
+  };
+  const asked = {
+    fingerprints: [
+      { hash: OSHASH, algorithm: "OSHASH" },
+      { hash: PHASH, algorithm: "PHASH" },
+    ],
+  };
+
+  it("attributes no perceptual match to the catalogue that never received one", async () => {
+    const read = await reading(answers).findByFingerprint(asked);
+    for (const one of read.data.matches) {
+      if (one.matchKind !== "perceptual_similarity") continue;
+      const held = one.scene.held_by
+        .filter((who) => who.state === "answered")
+        .map((who) => who.source);
+      expect(held).not.toContain("tpdb");
+    }
+  });
+
+  it("carries on every match the hash that reached it on each catalogue", async () => {
+    const read = await reading(answers).findByFingerprint(asked);
+    for (const one of read.data.matches)
+      for (const by of one.matchedBy)
+        if (by.algorithm === "PHASH") expect(by.sources).not.toContain("tpdb");
+  });
+
+  it("keeps the hash that catalogue never searched in the payload", async () => {
+    const read = await reading(answers).findByFingerprint(asked);
+    // Collapsed where another hash of the batch was searched, the one fact a
+    // caller has about that catalogue and that file disappears.
+    expect(read.data.not_searched).toEqual([
+      { hash: PHASH, algorithm: "PHASH", sources: ["tpdb"] },
+    ]);
+  });
+
+  it("names that catalogue in the note that says the hash was never put", async () => {
+    const read = await reading(answers).findByFingerprint(asked);
+    const notes = (renderMatches(read.data, read.cached).structured as { notes: string[] }).notes;
+    const said = notes.find((one) => one.toLowerCase().includes("never put")) ?? "";
+    expect(said).toContain(PHASH);
+    expect(said).toContain("ThePornDB");
   });
 });
 

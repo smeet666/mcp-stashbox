@@ -399,13 +399,17 @@ export function renderCard(card: Card, kind: string, cached = false): Rendered {
 
 /** What a set of hashes reached, and what every catalogue did with them. */
 export interface Matches {
-  matches: { scene: Card; algorithm: string; hash: string; matchKind: string }[];
+  matches: {
+    scene: Card;
+    matchedBy: { hash: string; algorithm: string; sources: string[] }[];
+    matchKind: string;
+  }[];
   match_count: number;
   records_named: number;
   resemblances: number;
   unattributed: number;
   unmatched: { hash: string; algorithm: string }[];
-  not_searched: { hash: string; algorithm: string }[];
+  not_searched: { hash: string; algorithm: string; sources: string[] }[];
   asked: { hash: string; algorithm: string }[];
   perSource: {
     source: string;
@@ -432,6 +436,11 @@ export interface Matches {
  */
 export function renderMatches(result: Matches, cached: boolean): Rendered {
   const notes: string[] = [];
+  /** One hash as a reader meets it, of a length that fits a line. */
+  const spelt = (one: { algorithm: string; hash: string }) =>
+    `${one.algorithm} ${inline(one.hash) ?? ""}`;
+  const named = (source: string) =>
+    inline(result.perSource.find((one) => one.source === source)?.name ?? source) ?? source;
   if (result.matches.some((one) => one.matchKind === "perceptual_similarity")) {
     notes.push(
       "A perceptual hash states a likeness. A record it reaches may hold a re-encode, a crop, or another scene from one shoot, so a match of that kind establishes a resemblance and says nothing about the bytes of either file.",
@@ -446,19 +455,16 @@ export function renderMatches(result: Matches, cached: boolean): Rendered {
   // and it is the catalogue that says so by minting two identifiers. Folded
   // into one card, one of the two disappears; left unsaid, a reader takes the
   // two cards for two files.
-  const doubled = [
-    ...new Set(
-      result.matches
-        .filter(
-          (one) =>
-            one.matchKind === "exact_file" &&
-            result.matches.filter(
-              (other) => other.algorithm === one.algorithm && other.hash === one.hash,
-            ).length > 1,
-        )
-        .map((one) => `${one.algorithm} ${inline(one.hash) ?? ""}`),
-    ),
-  ];
+  // The count that decides this is a count of records, never one of matches:
+  // a record reached by three hashes is one record, and read off the matches
+  // the note would assert a choice a caller does not have to make.
+  const cardsPerHash = new Map<string, number>();
+  for (const one of result.matches) {
+    if (one.matchKind !== "exact_file") continue;
+    for (const by of one.matchedBy)
+      cardsPerHash.set(spelt(by), (cardsPerHash.get(spelt(by)) ?? 0) + 1);
+  }
+  const doubled = [...cardsPerHash].filter(([, cards]) => cards > 1).map(([hash]) => hash);
   if (doubled.length > 0) {
     notes.push(
       `These hashes reached more than one record: ${doubled.join(", ")}. A catalogue mints one identifier per record it holds, so the records stand here one card each, and which of them holds the file the hash was computed from is a question the catalogues answer no way at all.`,
@@ -472,12 +478,12 @@ export function renderMatches(result: Matches, cached: boolean): Rendered {
   }
   if (result.unmatched.length > 0) {
     notes.push(
-      `These hashes reached no record on any catalogue that answered: ${result.unmatched.map((one) => `${one.algorithm} ${inline(one.hash) ?? ""}`).join(", ")}. Each of them is a file the catalogues that answered do not know, and the catalogues named below as unasked say nothing about them either way.`,
+      `These hashes reached no record on any catalogue that searched them: ${result.unmatched.map(spelt).join(", ")}. Each of them is a file the catalogues that searched them do not know, and the catalogues named below as unasked say nothing about them either way.`,
     );
   }
   if (result.not_searched.length > 0) {
     notes.push(
-      `No catalogue that answered searches the algorithm these hashes were computed with, so they were never put to one: ${result.not_searched.map((one) => `${one.algorithm} ${inline(one.hash) ?? ""}`).join(", ")}. Nothing here is evidence about the files behind them, either way.`,
+      `These hashes were never put to the catalogues named beside them, whose lookup does not search the algorithm they were computed with: ${result.not_searched.map((one) => `${spelt(one)} to ${one.sources.map(named).join(", ")}`).join("; ")}. What those catalogues hold is no evidence about the files behind them, either way.`,
     );
   }
   if (result.unattributed > 0) {
@@ -523,9 +529,27 @@ export function renderMatches(result: Matches, cached: boolean): Rendered {
     `\nCatalogues:\n${reports.join("\n")}`,
     ...cards.map((one, at) => {
       const match = result.matches[at];
-      const hash = match === undefined ? "" : `${match.algorithm} ${inline(match.hash) ?? ""}`;
-      const claim = match?.matchKind === "exact_file" ? "names these bytes" : "resembles this";
-      return `\n${hash} ${claim}:\n${one.text}`;
+      const by = match?.matchedBy ?? [];
+      // Where a card holds a reading from more than one catalogue, a hash
+      // reached it on some of them and a hash written bare would stand as a
+      // hash every catalogue on the card answered.
+      const several =
+        (match?.scene.held_by.filter((who) => who.state === "answered").length ?? 0) > 1;
+      const hashes = by
+        .map(
+          (print) =>
+            `${spelt(print)}${several ? ` on ${print.sources.map(named).join(", ")}` : ""}`,
+        )
+        .join(", ");
+      const claim =
+        match?.matchKind === "exact_file"
+          ? by.length > 1
+            ? "name these bytes"
+            : "names these bytes"
+          : by.length > 1
+            ? "resemble this"
+            : "resembles this";
+      return `\n${hashes} ${claim}:\n${one.text}`;
     }),
   ].join("\n");
 
@@ -534,8 +558,7 @@ export function renderMatches(result: Matches, cached: boolean): Rendered {
     structured: {
       matches: result.matches.map((one, at) => ({
         scene: (cards[at]?.structured as { card: unknown }).card,
-        algorithm: one.algorithm,
-        hash: one.hash,
+        matched_by: one.matchedBy,
         match_kind: one.matchKind,
       })),
       match_count: result.match_count,
@@ -564,6 +587,7 @@ export interface Rows {
     state: string;
     count?: number;
     indexTotal?: number;
+    indexTotalOverAnyWord?: boolean;
     skipped?: number;
     narrowingsNotReceived?: string[];
     algorithmsNotSearched?: string[];
@@ -591,7 +615,11 @@ export function renderRows(result: Rows, what: string, notes: string[], cached =
       const also = [
         one.indexTotal === undefined
           ? null
-          : `of ${String(one.indexTotal)} its own index holds for this question`,
+          : `of ${String(one.indexTotal)} its own index holds for ${
+              one.indexTotalOverAnyWord === true
+                ? "rows carrying any of the words asked, which is how its text index reads them"
+                : "this question"
+            }`,
         one.skipped === undefined
           ? null
           : `${String(one.skipped)} row(s) it answered with could not be read and are left out`,

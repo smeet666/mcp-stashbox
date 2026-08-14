@@ -91,19 +91,36 @@ describe("a filter written with another catalogue's identifiers", () => {
 /* --------------------------------------- a page the route never receives */
 
 describe("a page a route cannot take", () => {
-  it("is reported as one the catalogue did not receive on the text path", async () => {
+  it("is refused rather than answered with the first rows on the text path", async () => {
     const { client } = watching();
-    const read = await client.searchScenes({ query: "sunset", page: 900, limit: 5 });
-    const stashdb = read.data.perSource.find((one) => one.source === "stashdb");
     // The text route sends words and a size and no page at all, so a caller
-    // paging through one collects the same rows forever.
-    expect(stashdb?.narrowingsNotReceived ?? []).toContain("page");
+    // paging through one collects the same rows forever, and each answer
+    // reads as the page they asked for.
+    await expect(
+      client.searchScenes({ query: "sunset", page: 900, limit: 5 }),
+    ).rejects.toMatchObject({ code: "invalid_input" });
   });
 
-  it("states no window for a page nobody received", async () => {
+  it("says in the refusal what an argument read and dropped would produce", async () => {
     const { client } = watching();
-    const read = await client.searchScenes({ query: "sunset", page: 900, limit: 5 });
-    expect((read.data as { window?: unknown }).window).toBeUndefined();
+    const refused = await client.searchScenes({ query: "sunset", page: 2 }).then(
+      () => "",
+      (error: Error) => error.message,
+    );
+    expect(refused).toContain("read and dropped");
+    expect(refused).toContain("page");
+  });
+
+  it("takes the page the faceted route pages with", async () => {
+    const { client } = watching();
+    const read = await client.searchScenes({ title: "sunset", page: 3, limit: 5 });
+    expect((read.data as { window?: { page: number } }).window?.page).toBe(3);
+  });
+
+  it("reads the first page of a text search, which is the page it answers", async () => {
+    const { client } = watching();
+    const read = await client.searchScenes({ query: "sunset", page: 1, limit: 5 });
+    expect(read.data.perSource.some((one) => one.state === "answered")).toBe(true);
   });
 
   it("reports an order the text route does not take", async () => {

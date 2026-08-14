@@ -156,13 +156,21 @@ export interface StashboxClientOptions {
 /** What a search or a lookup carries back, with what every catalogue did. */
 type Answer<T> = Read<RowsResult<T>>;
 
-/** One hash, and the record it reached on one catalogue. */
+/** One record, and every hash that reached it, each naming where it reached it. */
 export interface FingerprintMatch {
   scene: Card;
-  algorithm: string;
-  /** The hash that reached this record, so two matches on one record differ. */
-  hash: string;
+  /**
+   * The hashes this card was reached by. A hash names the catalogues it
+   * reached the record on, since a catalogue searches the algorithms its own
+   * lookup declares and a hash it never received reached nothing there.
+   */
+  matchedBy: { hash: string; algorithm: string; sources: string[] }[];
   matchKind: string;
+}
+
+/** The fingerprints a record publishes, as the catalogue that holds it wrote them. */
+function heldPrints(scene: Record<string, unknown>): { hash: string; algorithm: string }[] {
+  return (scene.fingerprints as { hash: string; algorithm: string }[] | undefined) ?? [];
 }
 
 /** One record a hash reached on one catalogue, before the records are put together. */
@@ -184,8 +192,8 @@ export interface FingerprintResult {
   unattributed: number;
   /** The hashes put to a catalogue that answered, which reached no record. */
   unmatched: { hash: string; algorithm: string }[];
-  /** The hashes no catalogue that answered searches, so none was put to one. */
-  not_searched: { hash: string; algorithm: string }[];
+  /** The hashes a catalogue that answered does not search, with the ones that did not. */
+  not_searched: { hash: string; algorithm: string; sources: string[] }[];
   asked: { hash: string; algorithm: string }[];
   perSource: SourceReport[];
 }
@@ -332,6 +340,7 @@ export class StashboxClient {
       operation: string;
       unreceived?: string[];
       receivedInPart?: string[];
+      wordsApart?: boolean;
     },
     reader: (value: unknown, spec: InstanceSpec, at: string) => { record: T | null },
   ): Promise<Answer<T>> {
@@ -470,6 +479,12 @@ export class StashboxClient {
             : {}),
           ...(found.value.skipped > 0 ? { skipped: found.value.skipped } : {}),
           ...(found.value.total === undefined ? {} : { indexTotal: found.value.total }),
+          // A total counted over words the index reads apart counts the rows
+          // carrying any of them, which is a different question from the one
+          // the words spell together.
+          ...(found.value.total !== undefined && request.wordsApart === true
+            ? { indexTotalOverAnyWord: true }
+            : {}),
         };
         rows.push(...found.value.read);
         return report;
@@ -539,22 +554,32 @@ export class StashboxClient {
       at: string,
     ) => { record: unknown };
 
+    // The route a catalogue answers words on takes a term and a size and no
+    // page at all, so every call reads the same first rows.
+    if (words !== undefined && page > 1) {
+      throw invalidInput(
+        `A search written with query does not take page. The route a catalogue reads words on takes a term and a size, so it answers its first rows whatever page names. An argument that is read and dropped produces an answer computed without it, which reads as the answer to the question that was asked.`,
+        "Narrow the words, raise limit, or write the typed arguments, which reach the route that pages.",
+      );
+    }
+
     return this.#search(
       kind,
       input,
       (spec) => {
         if (words !== undefined) {
           const built = searchRequest(spec, kind, words, limit);
-          // This route reads words and a size. A page, an order and every
-          // typed argument written beside them shape no part of the request,
-          // and a caller paging through one would collect the same rows for
-          // ever without a word saying so.
+          // This route reads words and a size, and an order written beside
+          // them shapes no part of the request.
           const unreceived = [
-            ...(((input.page as number | undefined) ?? 1) > 1 ? ["page"] : []),
             ...(input.sort === undefined ? [] : ["sort"]),
             ...(input.direction === undefined ? [] : ["direction"]),
           ];
-          return { ...built, faceted: built.paged, unreceived };
+          // A catalogue's text index reads the words apart, so a total it
+          // publishes counts the rows carrying any of them. Rendered as a
+          // total for the phrase, six figures stand as a claim about how
+          // common the phrase is.
+          return { ...built, faceted: built.paged, unreceived, wordsApart: true };
         }
         // Every identifier a caller wrote names the catalogue that minted it,
         // so this one receives its own and nothing else. Sending the whole
@@ -877,33 +902,59 @@ export class StashboxClient {
         );
         if ("report" in found) return { report: found.report, rows: [] as Raw[] };
 
+        // The route answers a group per hash, so a record carrying two of the
+        // hashes asked comes back in two of them. Counted once per group, one
+        // record of one catalogue is reported as several.
+        const answered = new Map<string, Record<string, unknown>>();
+        for (const scene of found.value.read) {
+          const held = answered.get(String(scene.id));
+          if (held === undefined) {
+            answered.set(String(scene.id), scene);
+            continue;
+          }
+          // One record answered under two hashes is one record, and each copy
+          // of it carries the hashes its own group was matched on. Keeping the
+          // first copy alone drops the hash the second was reached by.
+          const prints = [...heldPrints(held), ...heldPrints(scene)];
+          const seen = new Set<string>();
+          held.fingerprints = prints.filter((one) => {
+            const at = `${one.algorithm} ${one.hash.toLowerCase()}`;
+            if (seen.has(at)) return false;
+            seen.add(at);
+            return true;
+          });
+        }
+        // This catalogue was put only the algorithms its own lookup searches.
+        // A record it answered with carries hashes of every algorithm, so
+        // reading those as matches attributes to it an answer to a question it
+        // never received.
+        const put = fingerprints.filter((one) => !request.notSearched.includes(one.algorithm));
+
         let count = 0;
         let unattributed = 0;
         const rows: Raw[] = [];
-        for (const scene of found.value.read) {
-          let reached = false;
-          for (const print of fingerprints) {
-            const carried =
-              (scene.fingerprints as { hash: string; algorithm: string }[] | undefined) ?? [];
-            // A hash is compared for what it is: the catalogues publish it in
-            // either case, and a comparison that reads two spellings of one
-            // hash as two hashes turns a match into an emptiness.
-            if (
-              !carried.some(
-                (one) =>
-                  one.hash.toLowerCase() === print.hash.toLowerCase() &&
-                  one.algorithm === print.algorithm,
-              )
-            )
-              continue;
-            rows.push({ source: ask.spec.id, scene, algorithm: print.algorithm, hash: print.hash });
-            reached = true;
-            count += 1;
-          }
+        for (const scene of answered.values()) {
+          const carried = heldPrints(scene);
+          // A hash is compared for what it is: the catalogues publish it in
+          // either case, and a comparison that reads two spellings of one
+          // hash as two hashes turns a match into an emptiness.
+          const reached = put.filter((print) =>
+            carried.some(
+              (one) =>
+                one.hash.toLowerCase() === print.hash.toLowerCase() &&
+                one.algorithm === print.algorithm,
+            ),
+          );
           // The catalogue answered with it and this client cannot say which
           // hash reached it, so it stands as no match and is counted apart
           // rather than dropped out of the answer entirely.
-          if (!reached) unattributed += 1;
+          if (reached.length === 0) {
+            unattributed += 1;
+            continue;
+          }
+          count += 1;
+          for (const print of reached)
+            rows.push({ source: ask.spec.id, scene, algorithm: print.algorithm, hash: print.hash });
         }
         return {
           report: {
@@ -911,7 +962,7 @@ export class StashboxClient {
             name: ask.spec.name,
             state: "answered" as const,
             count,
-            records: found.value.read.length,
+            records: answered.size,
             ...(unattributed > 0 ? { unattributed } : {}),
             ...(found.value.skipped > 0 ? { skipped: found.value.skipped } : {}),
             ...(request.notSearched.length > 0
@@ -927,81 +978,146 @@ export class StashboxClient {
     // reader meets is the same sequence whichever of them answers first.
     const raw: Raw[] = heard.flatMap((one) => one.rows);
 
-    // One file, one card. Two catalogues answering the same exact hash
-    // describe the same bytes, which is the strongest identity the data
-    // carries, and both records are already here: consolidating them costs no
-    // request. A perceptual hash states a likeness and joins nothing, so its
-    // records stay one card per catalogue.
+    // One record, one card. A record reached by three of the hashes asked is
+    // one record of one catalogue, and published once per hash it would report
+    // a caller's one file as three.
+    const records = new Map<string, Record<string, unknown>>();
+    const reachedBy = new Map<string, { hash: string; algorithm: string }[]>();
+    for (const one of raw) {
+      const key = `${one.source}:${String(one.scene.id)}`;
+      records.set(key, one.scene);
+      reachedBy.set(key, [
+        ...(reachedBy.get(key) ?? []),
+        { hash: one.hash, algorithm: one.algorithm },
+      ]);
+    }
+    const sourceOf = (key: string) => key.slice(0, key.indexOf(":")) as InstanceId;
+    const printsOf = (key: string, exact: boolean) =>
+      (reachedBy.get(key) ?? []).filter((one) => (one.algorithm === "PHASH") !== exact);
+
+    // Two catalogues answering one exact hash describe the same bytes, which is
+    // the strongest identity the data carries, and both records are already
+    // here: welding them costs no request. A perceptual hash states a likeness
+    // and joins nothing, so its records stay one card per catalogue.
     //
     // A catalogue mints one identifier per record it holds, so two of its
     // records carrying one hash are two records by its own account. A card
     // takes at most one reading per catalogue: the second record opens a card
     // of its own rather than disappearing behind the first.
-    const byHash = new Map<string, Raw[][]>();
-    for (const one of raw) {
-      const key =
-        one.algorithm === "PHASH"
-          ? `${one.algorithm} ${one.hash} ${one.source}`
-          : `${one.algorithm} ${one.hash}`;
-      const cards = byHash.get(key) ?? [];
-      const free = cards.find((group) => group.every((other) => other.source !== one.source));
-      if (free === undefined) cards.push([one]);
-      else free.push(one);
-      byHash.set(key, cards);
-    }
+    const above = new Map<string, string>();
+    const under = new Map<string, Map<InstanceId, string>>();
+    const root = (key: string): string => {
+      const up = above.get(key);
+      if (up === undefined || up === key) return key;
+      const top = root(up);
+      above.set(key, top);
+      return top;
+    };
+    for (const key of records.keys())
+      if (printsOf(key, true).length > 0) {
+        above.set(key, key);
+        under.set(key, new Map([[sourceOf(key), key]]));
+      }
+    const sharing = new Map<string, string[]>();
+    for (const key of records.keys())
+      for (const print of printsOf(key, true)) {
+        const at = `${print.algorithm} ${print.hash.toLowerCase()}`;
+        sharing.set(at, [...(sharing.get(at) ?? []), key]);
+      }
+    for (const together of sharing.values())
+      for (const key of together.slice(1)) {
+        const left = root(together[0] as string);
+        const right = root(key);
+        if (left === right) continue;
+        const one = under.get(left) as Map<InstanceId, string>;
+        const other = under.get(right) as Map<InstanceId, string>;
+        if ([...other.keys()].some((source) => one.has(source))) continue;
+        for (const [source, held] of other) one.set(source, held);
+        under.delete(right);
+        above.set(right, left);
+      }
 
-    const matches: FingerprintMatch[] = [...byHash.values()].flat().map((group) => {
-      const first = group[0] as Raw;
-      return {
-        scene: consolidate({
-          readings: group.map((one) => ({
-            source: one.source,
-            id: String(one.scene.id),
-            state: "answered" as const,
-            record: one.scene,
-          })),
-          prefer: prefer,
-          scalars: SHAPES.scene.scalars,
-          // A list a section carries is published only where that section was
-          // asked for. Stated otherwise, its zero denies something nobody
-          // looked for.
-          lists: SHAPES.scene.lists.filter(
-            (name) => BY_SECTION[name] === undefined || sections.includes(BY_SECTION[name]),
-          ),
-          perSource: SHAPES.scene.perSource,
-        }),
-        algorithm: first.algorithm,
-        hash: first.hash,
-        matchKind: first.algorithm === "PHASH" ? "perceptual_similarity" : "exact_file",
-      };
+    /** The hashes that reached a card, each naming the catalogues it reached it on. */
+    const reaching = (group: readonly string[], exact: boolean) => {
+      const by = new Map<string, { hash: string; algorithm: string; sources: InstanceId[] }>();
+      for (const key of group)
+        for (const print of printsOf(key, exact)) {
+          const at = `${print.algorithm} ${print.hash.toLowerCase()}`;
+          const entry = by.get(at) ?? { hash: print.hash, algorithm: print.algorithm, sources: [] };
+          if (!entry.sources.includes(sourceOf(key))) entry.sources.push(sourceOf(key));
+          by.set(at, entry);
+        }
+      const asked = (one: { hash: string; algorithm: string }) =>
+        fingerprints.findIndex(
+          (print) =>
+            print.algorithm === one.algorithm &&
+            print.hash.toLowerCase() === one.hash.toLowerCase(),
+        );
+      return [...by.values()].sort((one, other) => asked(one) - asked(other));
+    };
+
+    const cardOf = (group: readonly string[], exact: boolean): FingerprintMatch => ({
+      scene: consolidate({
+        readings: group.map((key) => ({
+          source: sourceOf(key),
+          id: String((records.get(key) as Record<string, unknown>).id),
+          state: "answered" as const,
+          record: records.get(key) as Record<string, unknown>,
+        })),
+        prefer: prefer,
+        scalars: SHAPES.scene.scalars,
+        // A list a section carries is published only where that section was
+        // asked for. Stated otherwise, its zero denies something nobody
+        // looked for.
+        lists: SHAPES.scene.lists.filter(
+          (name) => BY_SECTION[name] === undefined || sections.includes(BY_SECTION[name]),
+        ),
+        perSource: SHAPES.scene.perSource,
+      }),
+      matchedBy: reaching(group, exact),
+      matchKind: exact ? "exact_file" : "perceptual_similarity",
     });
 
-    // An algorithm is searched where a catalogue that answered puts it to its
-    // index. Where none of them does, a hash of that algorithm was asked about
-    // and never looked for, and reporting it beside the ones that were looked
-    // for and found nothing states a search nobody ran.
-    const searched = new Set<string>();
-    for (const one of reports) {
-      if (one.state !== "answered") continue;
-      const held = new Set(one.algorithmsNotSearched ?? []);
-      for (const print of fingerprints)
-        if (!held.has(print.algorithm)) searched.add(print.algorithm);
+    // The cards stand in the order the records arrived, which is the order the
+    // registry declares the catalogues in.
+    const opened = new Set<string>();
+    const matches: FingerprintMatch[] = [];
+    for (const one of raw) {
+      const key = `${one.source}:${String(one.scene.id)}`;
+      const exact = one.algorithm !== "PHASH";
+      const at = exact ? `exact ${root(key)}` : `alike ${key}`;
+      if (opened.has(at)) continue;
+      opened.add(at);
+      matches.push(
+        cardOf(
+          exact ? [...(under.get(root(key)) as Map<InstanceId, string>).values()] : [key],
+          exact,
+        ),
+      );
     }
+
+    // An algorithm is searched where a catalogue that answered puts it to its
+    // index, which is a fact per catalogue and per hash. Held as one fact
+    // about the batch, a hash never put to one catalogue disappears from the
+    // answer as soon as another hash of another algorithm was asked beside it.
+    const answering = reports.filter((one) => one.state === "answered");
+    const searchedBy = (one: Fingerprint) =>
+      answering.filter((report) => !(report.algorithmsNotSearched ?? []).includes(one.algorithm));
+    const neverPutTo = (one: Fingerprint) =>
+      answering.filter((report) => (report.algorithmsNotSearched ?? []).includes(one.algorithm));
     const reached = (one: Fingerprint) =>
       raw.some(
         (found) =>
           found.hash.toLowerCase() === one.hash.toLowerCase() && found.algorithm === one.algorithm,
       );
-    const missed = fingerprints.filter((one) => !reached(one));
 
     return {
       data: {
         matches,
         match_count: matches.length,
-        // Records, not matches and not files: two hashes of one record are two
-        // matches, and counting the matches would report a caller's one file as
-        // several. A perceptual hash reaches a record without naming any bytes,
-        // so it is counted apart from the records an exact hash named.
+        // Records, not files: a record two catalogues hold is one record here,
+        // and a perceptual hash reaches a record without naming any bytes, so
+        // it is counted apart from the records an exact hash named.
         records_named: new Set(
           matches
             .filter((one) => one.matchKind === "exact_file")
@@ -1017,12 +1133,19 @@ export class StashboxClient {
         // The hashes that reached nothing, which is what a caller asking "which
         // of my files are known?" is reading for. Left out, a set of hashes
         // where two matched and two did not reads as four identified.
-        unmatched: missed
-          .filter((one) => searched.has(one.algorithm))
+        unmatched: fingerprints
+          .filter((one) => !reached(one) && searchedBy(one).length > 0)
           .map((one) => ({ hash: one.hash, algorithm: one.algorithm })),
-        not_searched: missed
-          .filter((one) => !searched.has(one.algorithm))
-          .map((one) => ({ hash: one.hash, algorithm: one.algorithm })),
+        // The catalogues a hash was never put to, named per hash. A catalogue
+        // that never looked holds no evidence about the file behind it, and
+        // that stays true of it whatever the rest of the batch reached.
+        not_searched: fingerprints
+          .filter((one) => neverPutTo(one).length > 0)
+          .map((one) => ({
+            hash: one.hash,
+            algorithm: one.algorithm,
+            sources: neverPutTo(one).map((report) => report.source),
+          })),
         unattributed: reports.reduce((total, one) => total + (one.unattributed ?? 0), 0),
         asked: fingerprints.map((one) => ({ hash: one.hash, algorithm: one.algorithm })),
         perSource: orderByRegistry([...reports, ...unasked]),
@@ -1156,14 +1279,16 @@ function orderingOf(
   perSource: readonly SourceReport[],
   answering: readonly string[],
 ): string {
+  const apart =
+    "The catalogues share no measure to order them against one another, so nothing here ranks a row of one above a row of another";
   const together =
     answering.length > 1
-      ? `grouped by catalogue, in the order they answered: ${answering.join(", ")}. The catalogues share no measure to order them against one another, so nothing here ranks a row of one above a row of another`
+      ? `grouped by catalogue, in the order they answered: ${answering.join(", ")}. ${apart}`
       : undefined;
   const own =
     together === undefined
       ? "in the order the catalogue that answered holds them"
-      : `grouped by catalogue, each group in that catalogue's own order, ${together}`;
+      : `grouped by catalogue, in the order they answered: ${answering.join(", ")}, each group in that catalogue's own order. ${apart}`;
 
   const sort = input.sort as string | undefined;
   if (sort === undefined) return own;

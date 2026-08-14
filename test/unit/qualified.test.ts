@@ -199,6 +199,30 @@ describe("the prose of a search carries what its payload carries", () => {
     const said = renderRows(rows as never, "scene", []).text;
     expect(said).toContain("4312");
   });
+
+  it("says of a total the text route counted that the words are a union", () => {
+    const union = {
+      ...rows,
+      perSource: [{ ...rows.perSource[0], indexTotalOverAnyWord: true }],
+    };
+    const said = renderRows(union as never, "scene", []).text;
+    // A text index reads the words apart, so the total counts the rows
+    // carrying any of them. Read as a count for the phrase, six figures
+    // stand as a claim about how common the phrase is.
+    expect(said).toContain("any of the words");
+    expect(said).not.toContain("holds for this question");
+  });
+});
+
+/* ------------------------------------ the sentence that names the grouping */
+
+describe("the sentence naming how the groups stand", () => {
+  it("composes its grouping clause once", async () => {
+    const { client } = watching({ searchScenes: { count: 1, scenes: [ROW] }, searchScene: [ROW] });
+    const read = await client.searchScenes({ query: "sunset" });
+    expect(read.data.ordering).toContain("grouped by catalogue");
+    expect(read.data.ordering.match(/grouped by catalogue/g) ?? []).toHaveLength(1);
+  });
 });
 
 /* ------------------------------------------------------------- a folded record */

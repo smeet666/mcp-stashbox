@@ -18,17 +18,20 @@
  * catalogue published, so the union asserts nothing new, and picking one
  * catalogue's list would erase what the other holds.
  *
- * **A shared name is never a join.** An entry carrying a catalogue-minted
+ * **A shared name is never a join.** A value carrying a catalogue-minted
  * identifier is a record on the catalogue that minted it, and two catalogues
- * naming one thing mint two records. They are one entry only where the data
- * carries the join, and a name that matches is published as the resemblance it
- * is, beside two records a reader can follow separately.
+ * naming one thing mint two records. They are one only where the data carries
+ * the join: one identifier, or a link one catalogue publishes to the other's
+ * record. A name that matches is published as the resemblance it is, beside two
+ * records a reader can follow separately. This holds of a field carrying one
+ * value as much as of an entry in a list.
  *
  * **A count is never merged.** These catalogues index corpora that overlap by an
  * amount none of them publishes, so a sum would state a total nobody measured.
  * Counts stay one per catalogue, and a catalogue publishing none says so.
  */
 
+import { isUuid } from "../stashbox/identifiers.js";
 import type {
   Card,
   CardCount,
@@ -118,7 +121,7 @@ export function consolidate(shape: Consolidation): Card {
     // reader could not tell whether to change it.
     preferred: [...shape.prefer],
     read_from: answered.map((one) => one.source),
-    notes: notesFor(shape, answered),
+    notes: notesFor(shape, answered, fields),
   };
 }
 
@@ -178,16 +181,19 @@ function scalarOf(answered: readonly Answered[], name: string): CardValue {
 /**
  * What a published value is, apart from where it is held.
  *
- * Every record a catalogue names carries that catalogue's own identifier, and
- * two catalogues naming one studio mint two of them. Compared whole, the two
- * readings differ by an address and the card reports a disagreement between two
- * catalogues that said the same thing. Compared on what the value *is*, they
- * agree, which is the stronger fact and the true one.
+ * A value a catalogue minted an identifier for is that identifier's record, and
+ * two catalogues naming one studio mint two records. What they wrote in the name
+ * field is what an editor typed there, so it settles nothing: comparing on it
+ * would name a catalogue as having published an identifier it never minted, and
+ * drop the address a reader would chain to on that catalogue.
  *
- * A field a catalogue publishes no table for is left out of the comparison for
- * the same reason: a null that stands for "this catalogue counts none" is a
- * fact about the catalogue, and letting it split two readings would render a
- * capability as a difference in the world.
+ * A value nobody minted an identifier for is its own content, and two
+ * catalogues publishing one title, one hash or one address published one thing.
+ *
+ * A field a catalogue publishes no table for is left out of the comparison: a
+ * null that stands for "this catalogue counts none" is a fact about the
+ * catalogue, and letting it split two readings would render a capability as a
+ * difference in the world.
  */
 function identityOf(value: unknown): string {
   if (value === null || value === undefined) return "";
@@ -199,8 +205,12 @@ function identityOf(value: unknown): string {
   if (typeof held.value === "string" && typeof held.precision === "string") {
     return `${held.value} ${held.precision}`;
   }
+  const minted = identifierOf(held);
+  // The catalogue is left off the address: one identifier reached through two
+  // catalogues' prefixes is one record, and the prefix says which of them the
+  // reading came from rather than which record it is.
+  if (minted !== undefined) return `id ${minted.slice(minted.indexOf(":") + 1)}`;
   if (typeof held.name === "string") return held.name.trim().toLowerCase();
-  if (typeof held.id === "string") return held.id.slice(held.id.indexOf(":") + 1);
   // A shape with nothing naming it is compared whole, since there is nothing
   // else to compare it on.
   return JSON.stringify(
@@ -212,7 +222,16 @@ function identityOf(value: unknown): string {
 function same(a: unknown, b: unknown): boolean {
   if (a === b) return true;
   if (a === null || b === null) return false;
-  return identityOf(a) === identityOf(b);
+  if (identityOf(a) === identityOf(b)) return true;
+  // A link one catalogue publishes to another's record is a join an editor
+  // wrote, and it makes two addresses two readings of one record.
+  return linked(a, b) || linked(b, a);
+}
+
+/** Whether one reading names the other's record among the addresses it publishes. */
+function linked(one: unknown, other: unknown): boolean {
+  const id = identifierOf(other);
+  return id !== undefined && linksOf(one).includes(id);
 }
 
 /**
@@ -370,7 +389,11 @@ function holderOf(reading: Reading): CardHolder {
  * catalogues are missing from it, whether the policy fell back, and whether a
  * record named here is one its catalogue no longer holds as itself.
  */
-function notesFor(shape: Consolidation, answered: readonly Answered[]): string[] {
+function notesFor(
+  shape: Consolidation,
+  answered: readonly Answered[],
+  fields: Record<string, CardValue | CardEntry[]>,
+): string[] {
   const notes: string[] = [];
   const named = (sources: readonly string[]) => sources.join(", ");
 
@@ -413,6 +436,8 @@ function notesFor(shape: Consolidation, answered: readonly Answered[]): string[]
     );
   }
 
+  notes.push(...resemblances(fields));
+
   if (answered.length > 1) {
     notes.push(
       "A value here names the catalogues that published it. Two of them agreeing is evidence of its own, and where they disagree the reading nobody preferred is published beside the one that won.",
@@ -420,4 +445,39 @@ function notesFor(shape: Consolidation, answered: readonly Answered[]): string[]
   }
 
   return notes;
+}
+
+/**
+ * Every field holding a record that several catalogues minted their own of
+ * under one name, with the address each of them minted.
+ *
+ * Published as a value and the readings beside it, the field says the
+ * catalogues differ. What they differ about is worth a sentence: they wrote one
+ * name, no editor wrote the link that would make the records one, and a reader
+ * needs both addresses to read either.
+ */
+function resemblances(fields: Record<string, CardValue | CardEntry[]>): string[] {
+  const notes: string[] = [];
+  for (const [name, held] of Object.entries(fields)) {
+    if (Array.isArray(held) || held.disagreed === undefined) continue;
+    const called = nameOf(held.value);
+    if (called === null) continue;
+    const alike = held.disagreed.filter((one) => nameOf(one.value) === called);
+    if (alike.length === 0) continue;
+    const addresses = [held.value, ...alike.map((one) => one.value)].map(addressOf);
+    // An address this server cannot write is an address it does not send a
+    // reader to, and a note naming some of them would read as the whole set.
+    if (addresses.some((address) => address === undefined)) continue;
+    notes.push(
+      `Under ${name}, these catalogues each hold a record of their own under a name that matches: ${addresses.join(", ")}. None of them publishes a link to another's record, so nothing here establishes them as one record, and a reader reaches each of them at the identifier named.`,
+    );
+  }
+  return notes;
+}
+
+/** The address a reader is sent to, written only where it parses as one. */
+function addressOf(value: unknown): string | undefined {
+  const id = identifierOf(value);
+  if (id === undefined) return undefined;
+  return isUuid(id.slice(id.indexOf(":") + 1)) ? id : undefined;
 }

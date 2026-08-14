@@ -249,19 +249,104 @@ describe("an entry carrying no identifier", () => {
 
 /* ---------------------------------------------------------- the scalar path */
 
-describe("a scalar naming a record on each catalogue", () => {
-  it("agrees on what the two catalogues named, rather than on the addresses they minted", () => {
+const STUDIO_UUID = "915dd307-a440-4578-b83f-699b9706faea";
+const STUDIO_ON_TPDB = "tpdb:1dafafd3-da8f-47f3-aca2-e6bb9f354292";
+
+/** One studio at one identifier, which two catalogues address under their own prefix. */
+function studioAt(id: string, name = "Vixen"): Record<string, unknown> {
+  return { id, name, parent: null, status: "established" };
+}
+
+describe("a scalar whose value is a record two catalogues joined", () => {
+  it("stays one value where the two addresses name one identifier", () => {
     const stashdb = answered("stashdb", {
       id: "scene-a",
-      studio: { id: "stashdb:aaaa", name: "Tushy", parent: null, status: "established" },
+      studio: studioAt(`stashdb:${STUDIO_UUID}`),
+    });
+    // The two catalogues spell the name differently, so what joins them is the
+    // identifier alone.
+    const tpdb = answered("tpdb", {
+      id: "scene-b",
+      studio: studioAt(`tpdb:${STUDIO_UUID}`, "Vixen.com"),
+    });
+    const held = card([stashdb, tpdb]).fields.studio as CardValue;
+    expect(held.agreed_by).toEqual(["stashdb", "tpdb"]);
+    expect(held.disagreed).toBeUndefined();
+  });
+
+  it("stays one value where one catalogue publishes a link to the other's record", () => {
+    const stashdb = answered("stashdb", {
+      id: "scene-a",
+      studio: {
+        ...studioAt(`stashdb:${STUDIO_UUID}`),
+        alsoHeldAt: [{ source: "tpdb", id: STUDIO_ON_TPDB }],
+      },
     });
     const tpdb = answered("tpdb", {
       id: "scene-b",
-      studio: { id: "tpdb:bbbb", name: "Tushy", parent: null, status: "established" },
+      studio: studioAt(STUDIO_ON_TPDB, "Vixen.com"),
     });
-    expect((card([stashdb, tpdb]).fields.studio as CardValue).agreed_by).toEqual([
-      "stashdb",
-      "tpdb",
+    const held = card([stashdb, tpdb]).fields.studio as CardValue;
+    expect(held.agreed_by).toEqual(["stashdb", "tpdb"]);
+    expect(held.disagreed).toBeUndefined();
+  });
+});
+
+describe("a scalar whose value is a record each catalogue minted its own of", () => {
+  const stashdb = answered("stashdb", {
+    id: "scene-a",
+    studio: studioAt(`stashdb:${STUDIO_UUID}`),
+  });
+  const tpdb = answered("tpdb", { id: "scene-b", studio: studioAt(STUDIO_ON_TPDB) });
+
+  it("names only the catalogue that published the identifier the card carries", () => {
+    // Naming the other catalogue here credits it with an identifier it never
+    // published, and a reader chaining on that identifier asks it for a record
+    // it does not hold.
+    expect((card([stashdb, tpdb]).fields.studio as CardValue).agreed_by).toEqual(["stashdb"]);
+  });
+
+  it("publishes the other catalogue's record beside it, at the identifier it minted", () => {
+    const held = card([stashdb, tpdb]).fields.studio as CardValue;
+    expect(held.disagreed).toEqual([{ source: "tpdb", value: studioAt(STUDIO_ON_TPDB) }]);
+  });
+
+  it("says in words that a matching name establishes no identity between the two", () => {
+    const said = card([stashdb, tpdb]).notes.join(" ");
+    expect(said).toContain(`stashdb:${STUDIO_UUID}`);
+    expect(said).toContain(STUDIO_ON_TPDB);
+    expect(said).toMatch(/establishes/);
+  });
+
+  it("carries both readings under a written preference, whichever of them won", () => {
+    const held = card([stashdb, tpdb], ["tpdb", "stashdb"]).fields.studio as CardValue;
+    expect(held.agreed_by).toEqual(["tpdb"]);
+    expect(held.disagreed).toEqual([
+      { source: "stashdb", value: studioAt(`stashdb:${STUDIO_UUID}`) },
     ]);
+  });
+
+  it("qualifies nothing where the two catalogues named two different studios", () => {
+    const other = answered("tpdb", { id: "scene-b", studio: studioAt(STUDIO_ON_TPDB, "Tushy") });
+    const held = card([stashdb, other]);
+    expect((held.fields.studio as CardValue).agreed_by).toEqual(["stashdb"]);
+    expect(held.notes.join(" ")).not.toMatch(/one name/);
+  });
+
+  it("leaves a catalogue that published no studio out of the dispute", () => {
+    const quiet = answered("tpdb", { id: "scene-b", studio: null });
+    const held = card([stashdb, quiet]).fields.studio as CardValue;
+    expect(held.agreed_by).toEqual(["stashdb"]);
+    expect(held.disagreed).toBeUndefined();
+  });
+});
+
+describe("a scalar that is its own content", () => {
+  it("agrees on the value, since a title is what it holds and no record elsewhere", () => {
+    const stashdb = answered("stashdb", { id: "scene-a", title: "Riley Reid: Deeper" });
+    const tpdb = answered("tpdb", { id: "scene-b", title: "Riley Reid: Deeper" });
+    const held = card([stashdb, tpdb]).fields.title as CardValue;
+    expect(held.value).toBe("Riley Reid: Deeper");
+    expect(held.agreed_by).toEqual(["stashdb", "tpdb"]);
   });
 });
