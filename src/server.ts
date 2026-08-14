@@ -15,7 +15,6 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
-import { invalidInput } from "./errors.js";
 import { toolFailure } from "./tools/errorShape.js";
 import { TOOLS, type Catalogues } from "./tools/index.js";
 import { PKG_NAME, VERSION } from "./version.js";
@@ -60,23 +59,18 @@ export function createServer(client: Catalogues): McpServer {
       {
         title: tool.title,
         description: tool.description,
-        inputSchema: tool.declared,
+        inputSchema: tool.inputSchema,
         outputSchema: tool.outputSchema,
         annotations: tool.annotations,
       },
+      // The whole declaration is registered, refinements included, so the
+      // protocol layer enforces exactly what this server announces. A rule
+      // reading two arguments against each other is no field of a schema, and
+      // one applied in a second pass here would be a rule the published
+      // declaration does not carry.
       async (args: Record<string, unknown>) => {
         try {
-          // Read through the whole declaration rather than the shape the
-          // protocol layer publishes: a rule reading two arguments against
-          // each other is no field, and one announced without being applied
-          // is worse than none.
-          const read = tool.inputSchema.safeParse(args ?? {});
-          if (!read.success) {
-            return toolFailure(
-              invalidInput(read.error.issues.map((issue) => issue.message).join(" ")),
-            );
-          }
-          const rendered = await tool.run(client, read.data as Record<string, unknown>);
+          const rendered = await tool.run(client, args ?? {});
           return {
             content: [{ type: "text" as const, text: rendered.text }],
             structuredContent: rendered.structured,

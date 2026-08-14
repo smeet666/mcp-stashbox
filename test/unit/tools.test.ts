@@ -260,6 +260,38 @@ describe("each tool declares what the specification gives it", () => {
 
 /* --------------------------------------------------- what a schema costs */
 
+describe("the declaration the protocol enforces is the one it publishes", () => {
+  it("carries the rules that read two arguments against each other", () => {
+    // A rule of that kind is no field of a schema. Applied in a second pass
+    // behind the protocol layer, it would be a rule the published declaration
+    // does not carry, and a caller reading the contract could not find it.
+    for (const one of TOOLS.filter((tool) => tool.name.startsWith("search_"))) {
+      const shape = (one.declared as z.ZodObject<z.ZodRawShape>).shape;
+      if (shape.query === undefined) continue;
+      const typed = Object.keys(shape).find(
+        (name) => !["query", "sort", "direction", "page", "limit", "sources"].includes(name),
+      );
+      expect(typed, `${one.name} declares no typed argument`).toBeDefined();
+      const written = { query: "sunset", [typed ?? ""]: VALUE_FOR[typed ?? ""] };
+      // The object alone takes it; the whole declaration refuses it.
+      expect(one.declared.safeParse(written).success, `${one.name} object`).toBe(true);
+      expect(one.inputSchema.safeParse(written).success, `${one.name} declaration`).toBe(false);
+    }
+  });
+});
+
+/** A value each typed argument accepts, for the case above. */
+const VALUE_FOR: Record<string, unknown> = {
+  title: "sunset",
+  name: "vixen",
+  code: "X-1",
+  alias: "a",
+  date: "2019-04-12",
+  performer_ids: ["stashdb:94ef9c17-82c6-48b0-8dcc-063b69231960"],
+  category_id: "stashdb:94ef9c17-82c6-48b0-8dcc-063b69231960",
+  parent_id: "stashdb:94ef9c17-82c6-48b0-8dcc-063b69231960",
+};
+
 describe("a shape is declared once", () => {
   /** What a client is actually sent, which is what a session pays for. */
   const emitted = () =>

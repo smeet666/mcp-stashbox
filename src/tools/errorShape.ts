@@ -22,7 +22,10 @@ import { ISSUES_URL } from "../version.js";
  * What a caller reads when a tool could not answer.
  *
  * The code opens the line so it survives truncation and so a client reading the
- * text alone can still branch on it.
+ * text alone can still branch on it. This is the envelope a failure reaching a
+ * catalogue arrives in. An argument this server refuses never reaches one, and
+ * the protocol layer answers it as a request that could not be dispatched: the
+ * code travels in the message either way, and only here does it open the line.
  */
 export function toolFailure(error: unknown): CallToolResult {
   const ours = error instanceof StashboxError ? error : undefined;
