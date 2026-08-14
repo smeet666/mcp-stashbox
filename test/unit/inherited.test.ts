@@ -122,3 +122,28 @@ describe("a block of a card nobody asked for", () => {
     expect(Object.keys(card.data.fields)).toContain("appearance");
   });
 });
+
+describe("a catalogue nobody asked for the record itself", () => {
+  /** The identifier names a catalogue this install holds no key for. */
+  const asked = () =>
+    holding({ stashdb: PERFORMER }, { stashdb: "a key this test never sends anywhere" }).getCard(
+      "performer",
+      `fansdb:${A}`,
+    );
+
+  it("is stated as never asked where the card reads its links for the others", async () => {
+    const card = await asked();
+    expect(heldBy(card, "fansdb").state).toBe("absent");
+    // Nobody put the question to it, so what it publishes about its links is a
+    // reading this client never performed. Rendered as a catalogue that
+    // published nothing, a question nobody asked reads as an answer it gave.
+    expect(heldBy(card, "stashdb").reason ?? "").toContain("never asked");
+    expect(heldBy(card, "stashdb").reason ?? "").not.toContain("published nothing");
+  });
+
+  it("still leaves the link unknown, since nothing was read to establish one", async () => {
+    const card = await asked();
+    expect(heldBy(card, "stashdb").reason ?? "").toContain("unknown");
+    expect(heldBy(card, "stashdb").reason ?? "").not.toContain("publishes no link");
+  });
+});

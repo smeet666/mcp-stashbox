@@ -14,6 +14,7 @@
  */
 
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 
 import { TOOLS } from "../../src/tools/index.js";
 import { StashboxClient } from "../../src/stashbox/client.js";
@@ -214,6 +215,77 @@ describe("the other three rows leave their card fields to the record route", () 
     const row = await firstRow("search_tags", { name: "a name" }, "tags", TAG);
     for (const field of ["name", "category", "description"]) {
       expect(Object.keys(row), `a tag row lost ${field}`).toContain(field);
+    }
+  });
+
+  /* ------------------------------- what the schema says a row carries */
+
+  /**
+   * The reading the published schema declares for the rows of one search.
+   *
+   * A row of a scene and a row of a tag carry different fields, so each search
+   * declares the kind its own rows are. One shape covering all four would name
+   * every field of every kind as one any row might hold, which tells a client
+   * reading it nothing about what a scene row carries.
+   */
+  const reading = (name: string) => {
+    const declared = z.toJSONSchema(z.object(tool(name).outputSchema), {
+      io: "output",
+    }) as unknown as {
+      properties: {
+        results: { items: { properties: Record<string, unknown>; required?: string[] } };
+      };
+    };
+    return declared.properties.results.items;
+  };
+
+  const ROWS: [string, string, Record<string, unknown>, Record<string, unknown>, string][] = [
+    ["search_scenes", "scenes", { title: "a title" }, SCENE, "title"],
+    ["search_performers", "performers", { name: "a name" }, PERFORMER, "gender"],
+    ["search_studios", "studios", { name: "a name" }, STUDIO, "parent"],
+    ["search_tags", "tags", { name: "a name" }, TAG, "description"],
+  ];
+
+  for (const [name, container, written, record, marker] of ROWS) {
+    it(`${name} declares every field its rows carry`, async () => {
+      const row = await firstRow(name, written, container, record);
+      const declared = Object.keys(reading(name).properties);
+      expect(declared, `${name} declares a row that names no ${marker}`).toContain(marker);
+      for (const field of Object.keys(row)) {
+        expect(declared, `${name} answers with ${field} and declares nothing about it`).toContain(
+          field,
+        );
+      }
+    });
+
+    it(`${name} declares as carried only what its rows carry`, async () => {
+      // A field a schema requires and an answer never holds fails a client that
+      // validates what it is given, and one declared and never emitted is a
+      // promise a caller plans against.
+      const row = await firstRow(name, written, container, record);
+      for (const field of reading(name).required ?? []) {
+        expect(Object.keys(row), `${name} requires ${field} and answers without it`).toContain(
+          field,
+        );
+      }
+    });
+  }
+
+  it("declares the reading a row of a record its catalogue folded satisfies", async () => {
+    // A merged record still answers, and what it carries is a marker: the row
+    // names the record it was folded into and the fields around it stand as
+    // the marker holds them.
+    const row = await firstRow("search_performers", { name: "a name" }, "performers", {
+      ...PERFORMER,
+      deleted: true,
+      merged_into_id: OTHER,
+    });
+    expect(row.status).toBe("merged");
+    const declared = Object.keys(reading("search_performers").properties);
+    for (const field of Object.keys(row)) {
+      expect(declared, `a folded row carries ${field} and the schema declares nothing`).toContain(
+        field,
+      );
     }
   });
 });

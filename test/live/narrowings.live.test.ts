@@ -353,3 +353,37 @@ describe.skipIf(!ENABLED)(
     }, 90_000);
   },
 );
+
+describe.skipIf(!ENABLED)("live: what a card a fingerprint lookup opens states", () => {
+  it("names every catalogue and announces the fallback the preference took", async () => {
+    const scene = await client.getScene("stashdb:001659bc-3cfc-4b65-9419-958e91d9bcf4", [
+      "basic",
+      "fingerprints",
+    ]);
+    const carried = scene.data.fields.fingerprints;
+    const print = (Array.isArray(carried) ? carried[0]?.value : undefined) as
+      { hash: string; algorithm: "MD5" | "OSHASH" | "PHASH" } | undefined;
+    expect(print, "the record carried no fingerprint, so this case measures nothing").toBeDefined();
+    if (!print) return;
+
+    // The preference names a catalogue this suite holds no key for, so every
+    // value on every card was read from another one.
+    const read = await client.findByFingerprint({
+      fingerprints: [{ hash: print.hash, algorithm: print.algorithm }],
+      prefer: ["fansdb"],
+    });
+    expect(
+      read.data.matches.length,
+      "a hash of a record read here reached nothing",
+    ).toBeGreaterThan(0);
+    for (const match of read.data.matches) {
+      const named = match.scene.held_by.map((one) => one.source);
+      expect(named, "a card names a catalogue nobody read as absent from it").toContain("fansdb");
+      expect(new Set(named).size, "a catalogue stands twice on one card").toBe(named.length);
+      expect(
+        match.scene.notes.some((one) => one.includes("this call preferred")),
+        "a fallback was performed with nothing on the card announcing it",
+      ).toBe(true);
+    }
+  }, 90_000);
+});

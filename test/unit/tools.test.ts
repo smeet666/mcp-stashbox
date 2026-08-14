@@ -295,14 +295,128 @@ describe("an argument whose default decides the answer says so", () => {
     expect(said).toContain("all");
     expect(said).toContain("any");
     expect(said).toContain("default");
-    for (const governed of ["performer_ids", "studio_ids", "tag_ids"]) {
+    for (const governed of ["performer_ids", "tag_ids"]) {
       expect(said, `match says nothing about ${governed}`).toContain(governed);
     }
+  });
+
+  it("says a list of studios is read one way whatever match is written", () => {
+    // A scene carries one studio, so a request asking for every studio of a
+    // list answers nothing at all, and studio_ids travels as a union under
+    // both readings. Named among what match decides, it promises a narrowing
+    // no request carries.
+    const said = describedBy("search_scenes", "match");
+    expect(said).toContain("studio_ids");
+    expect(said).toMatch(/one studio/);
   });
 
   it("keeps the paging arguments beside it described", () => {
     expect(describedBy("search_scenes", "page")).not.toBe("");
     expect(describedBy("search_scenes", "limit")).not.toBe("");
+  });
+
+  it("describes page as what it decides, promising no report of its own", () => {
+    // A report naming page as a narrowing a catalogue did not receive is
+    // written by nothing here, and a caller who plans on reading one plans on
+    // a disclosure no answer carries.
+    const said = describedBy("search_scenes", "page");
+    expect(said).not.toMatch(/did not receive/);
+    expect(said).toContain("own order");
+  });
+
+  it("keeps limit saying the pages of two catalogues are never interleaved", () => {
+    expect(describedBy("search_scenes", "limit")).toContain("interleave");
+  });
+});
+
+/* ------------------------------------- what an answer carries, declared */
+
+/**
+ * A declared output no call produces is a promise a caller plans against.
+ *
+ * They plan for it: a field a schema names is a field a client branches on
+ * before a single answer has come back, and one that never arrives is read as a
+ * catalogue that answered without it rather than as a shape nothing emits.
+ */
+describe("every tool declares the answer it gives", () => {
+  /** The description a published output schema carries for one field. */
+  const describedAt = (name: string, field: string): string => {
+    const declared = z.toJSONSchema(z.object(tool(name).outputSchema), { io: "output" });
+    const found = (node: unknown): string | undefined => {
+      if (node === null || typeof node !== "object") return undefined;
+      const held = node as Record<string, unknown>;
+      const properties = held.properties as Record<string, Record<string, unknown>> | undefined;
+      const here = properties?.[field]?.description;
+      if (typeof here === "string") return here;
+      for (const value of Object.values(held)) {
+        const deeper = found(value);
+        if (deeper !== undefined) return deeper;
+      }
+      return undefined;
+    };
+    return found(declared) ?? "";
+  };
+
+  it("declares no per-catalogue report on a record route, which the card carries", () => {
+    // A record route answers with the card alone. What each catalogue did with
+    // the record is on the card itself, one entry per catalogue asked.
+    for (const name of ["get_scene", "get_performer", "get_studio", "get_tag"]) {
+      expect(Object.keys(tool(name).outputSchema).sort()).toEqual(["cached", "card"]);
+    }
+  });
+
+  it("says on the card where what each catalogue did is read", () => {
+    const said = describedAt("get_scene", "held_by");
+    expect(said).toContain("state");
+    expect(said).toContain("reason");
+  });
+
+  it("keeps the per-catalogue report on every answer that carries one", () => {
+    for (const name of [
+      "search_scenes",
+      "search_performers",
+      "search_studios",
+      "search_tags",
+      "find_by_fingerprint",
+    ]) {
+      expect(Object.keys(tool(name).outputSchema), `${name} lost its report`).toContain(
+        "per_source",
+      );
+    }
+  });
+
+  it("says index_total counts the question the catalogue received", () => {
+    // A narrowing a catalogue could not receive, and one it received short of
+    // what was written, leave it answering a wider question than the one
+    // asked. Called the total for this question, the number denies the
+    // disclosure standing beside it.
+    const said = describedAt("search_scenes", "index_total");
+    expect(said).toContain("received");
+    expect(said).not.toContain("for this question");
+  });
+
+  it("keeps the counts beside it saying what they count", () => {
+    expect(describedAt("search_scenes", "count")).toMatch(/[Nn]ever added/);
+    expect(describedAt("search_scenes", "index_total_over_any_word")).not.toBe("");
+  });
+
+  it("describes the window as what the answer was read at", () => {
+    // A words-only search carries a window while no catalogue was given a
+    // page: those routes take none. Called the page they paged through, it
+    // describes a paging nobody did.
+    const said = describedAt("search_scenes", "window");
+    expect(said).not.toMatch(/paged through/);
+    expect(said).toContain("read at");
+  });
+
+  it("describes each of the three narrowings a catalogue can report", () => {
+    for (const field of [
+      "narrowings_not_received",
+      "narrowings_naming_no_record",
+      "narrowings_received_in_part",
+    ]) {
+      expect(describedAt("search_scenes", field), `${field} is published undescribed`).not.toBe("");
+    }
   });
 });
 

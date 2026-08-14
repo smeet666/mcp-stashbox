@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "mcp-stashbox",
   "display_name": "Stash-box catalogues",
-  "version": "0.10.0",
+  "version": "1.0.0",
   "description": "MCP server for the public stash-box metadata catalogues. Search scenes, performers, studios and tags across the public stash-box catalogues.",
   "long_description": "Reads the public stash-box catalogues for scenes, performers, studios and tags. These catalogues hold metadata and no media: a record names where something was published and carries nothing of it.\n\nThe server asks every catalogue you have configured and keeps the seams visible. A catalogue that failed, one that was never asked and one that looked and found nothing are three different things, and every answer says which is which. Counts are never added across catalogues and rows are never ranked against each other, because they publish no score in common.\n\nThe fingerprint route is the reason to ask several at once. MD5 and OSHASH match the same file byte for byte; PHASH matches images that resemble each other, which covers a re-encode, a crop and a different scene from one shoot. Every match says which kind of claim it is, and a catalogue that counts no disputes over a fingerprint reports an unknown contest.",
   "author": {

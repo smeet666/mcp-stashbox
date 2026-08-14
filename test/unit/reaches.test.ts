@@ -263,3 +263,64 @@ describe("a record route reads the catalogue the caller named", () => {
     });
   }
 });
+
+/**
+ * The lists `match` decides the reading of, read off the request.
+ *
+ * The argument is described in the declaration because it decides a difference
+ * of an order of magnitude in what comes back, and a caller reads that
+ * description before they call. A list named there and sent under one modifier
+ * whatever they wrote is a narrowing the declaration promises and no request
+ * carries.
+ */
+describe("match decides the reading of the lists it names", () => {
+  const LISTS = ["performer_ids", "studio_ids", "tag_ids"];
+
+  /** The criteria one search sent, as the catalogue received them. */
+  async function criteria(written: Record<string, unknown>): Promise<string> {
+    const search = TOOLS.find((one) => one.name === "search_scenes");
+    if (search === undefined) throw new Error("no tool named search_scenes");
+    const { client, sent } = watching();
+    const read = search.inputSchema.parse(written);
+    await search.run(client as never, read as Record<string, unknown>);
+    return sent.join(" ");
+  }
+
+  const two = [`stashdb:${UUID}`, `stashdb:${OTHER}`];
+
+  it("asks for every identifier of a performer list and of a tag list under 'all'", async () => {
+    for (const list of ["performer_ids", "tag_ids"]) {
+      const sent = await criteria({ [list]: two, match: "all" });
+      expect(sent, `${list} was not sent as an intersection`).toContain("INCLUDES_ALL");
+    }
+  });
+
+  it("asks for any identifier of those lists under 'any'", async () => {
+    for (const list of ["performer_ids", "tag_ids"]) {
+      const sent = await criteria({ [list]: two, match: "any" });
+      expect(sent, `${list} was not sent as a union`).not.toContain("INCLUDES_ALL");
+      expect(sent).toContain("INCLUDES");
+    }
+  });
+
+  it("asks for any studio of a list under both readings, since a scene carries one", async () => {
+    // A scene names one studio, so a request for a row carrying every studio
+    // of a list describes a row nothing holds, whatever the caller meant.
+    for (const match of ["all", "any"]) {
+      const sent = await criteria({ studio_ids: two, match });
+      expect(sent, `a studio list was narrowed under match '${match}'`).not.toContain(
+        "INCLUDES_ALL",
+      );
+    }
+  });
+
+  it("declares the reading of every list it is written beside", async () => {
+    const shape = (
+      TOOLS.find((one) => one.name === "search_scenes")?.declared as z.ZodObject<z.ZodRawShape>
+    ).shape;
+    const said = (shape.match as { description?: string }).description ?? "";
+    for (const list of LISTS) {
+      expect(said, `match leaves ${list} unsaid`).toContain(list);
+    }
+  });
+});

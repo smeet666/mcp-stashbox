@@ -421,6 +421,15 @@ export interface Matches {
   }[];
 }
 
+/** The records behind one card, at the addresses their catalogues minted. */
+function addressesOf(match: Matches["matches"][number]): string[] {
+  return match.scene.held_by
+    .filter(
+      (one): one is typeof one & { id: string } => one.state === "answered" && one.id !== undefined,
+    )
+    .map((one) => one.id);
+}
+
 /**
  * What a fingerprint answer states, and what each kind of hash claims.
  *
@@ -467,7 +476,27 @@ export function renderMatches(result: Matches, cached: boolean): Rendered {
   const doubled = [...cardsPerHash].filter(([, cards]) => cards > 1).map(([hash]) => hash);
   if (doubled.length > 0) {
     notes.push(
-      `These hashes reached more than one record: ${doubled.join(", ")}. A catalogue mints one identifier per record it holds, so the records stand here one card each, and which of them holds the file the hash was computed from is a question the catalogues answer no way at all.`,
+      `These hashes reached more than one record: ${doubled.join(", ")}. A catalogue mints one identifier per record it holds, so each of those records opens an exact match of its own here, and which of them holds the file the hash was computed from is a question the catalogues answer no way at all.`,
+    );
+  }
+  // A record an exact hash and a perceptual hash both reached stands under two
+  // cards, since the two state different things about it. Counted off the
+  // cards, one record reads as two files identified.
+  const twice = [
+    ...new Set(
+      result.matches
+        .filter((one) => one.matchKind === "exact_file")
+        .flatMap((one) => addressesOf(one))
+        .filter((id) =>
+          result.matches
+            .filter((one) => one.matchKind === "perceptual_similarity")
+            .some((one) => addressesOf(one).includes(id)),
+        ),
+    ),
+  ];
+  if (twice.length > 0) {
+    notes.push(
+      `These records stand here twice, once under an exact hash that names the file and once under a perceptual hash that states a likeness: ${twice.join(", ")}. The two cards claim different things about one record, so the number of matches counts it twice where the records named count it once.`,
     );
   }
   const failed = result.perSource.filter((one) => one.state === "failed");
@@ -551,8 +580,10 @@ export function renderMatches(result: Matches, cached: boolean): Rendered {
       // Where a card holds a reading from more than one catalogue, a hash
       // reached it on some of them and a hash written bare would stand as a
       // hash every catalogue on the card answered.
-      const several =
-        (match?.scene.held_by.filter((who) => who.state === "answered").length ?? 0) > 1;
+      // A catalogue that answered the lookup and holds no record on this card
+      // stands among its holders as one that looked, so the readings the card
+      // carries are what says whether a hash needs a catalogue named beside it.
+      const several = (match?.scene.read_from.length ?? 0) > 1;
       const hashes = by
         .map(
           (print) =>

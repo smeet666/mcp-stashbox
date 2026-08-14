@@ -262,3 +262,52 @@ describe("a fingerprint lookup no catalogue answered", () => {
     expect(said).toContain("1 put to a catalogue");
   });
 });
+
+/* ------------------------- a reading written for lists a question carries none of */
+
+describe("the reading written for identifier lists", () => {
+  it("is named among the narrowings the catalogue never received", async () => {
+    const { client, sent } = watching();
+    const read = await client.searchScenes({
+      title: "sunset",
+      match: "any",
+      sources: ["stashdb"],
+    });
+    const stashdb = stashdbIn(read.data.perSource);
+    // Accepted and applied to nothing, it shapes no part of the request, and
+    // the answer to a question written with it is the answer to the question
+    // written without it.
+    expect(stashdb.state).toBe("answered");
+    expect(stashdb.narrowingsNotReceived ?? []).toContain("match");
+    expect(sent.join(" ")).not.toContain("INCLUDES");
+  });
+
+  it("is named nowhere where a list it decides the reading of was written", async () => {
+    const { client, sent } = watching();
+    const read = await client.searchScenes({
+      tagIds: [`stashdb:${MINE}`],
+      match: "any",
+      sources: ["stashdb"],
+    });
+    expect(stashdbIn(read.data.perSource).narrowingsNotReceived ?? []).not.toContain("match");
+    expect(sent.join(" ")).toContain("INCLUDES");
+  });
+
+  it("is named nowhere where nobody wrote it", async () => {
+    const { client } = watching();
+    const read = await client.searchScenes({ title: "sunset", sources: ["stashdb"] });
+    expect(stashdbIn(read.data.perSource).narrowingsNotReceived ?? []).not.toContain("match");
+  });
+
+  it("leaves the catalogue unasked where it is the whole of what was written", async () => {
+    const { client, sent } = watching();
+    const read = await client.searchScenes({ match: "any", sources: ["stashdb"] });
+    const stashdb = stashdbIn(read.data.perSource);
+    // Nothing written reached the request, so the first page of the whole
+    // index is what would come back, and it would reach a reader as the answer
+    // to a question they wrote a narrowing into.
+    expect(stashdb.state).toBe("absent");
+    expect(stashdb.reason ?? "").toContain("match");
+    expect(sent).toEqual([]);
+  });
+});

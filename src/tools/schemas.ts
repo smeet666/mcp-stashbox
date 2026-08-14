@@ -31,7 +31,9 @@ export const perSource = z.object({
   index_total: z
     .number()
     .optional()
-    .describe("What its own index holds for this question, the rows on this page included."),
+    .describe(
+      "What its own index holds for the question it received, the rows on this page included. A narrowing it could not receive, or received in part, leaves that question wider than the one written.",
+    ),
   index_total_over_any_word: z
     .boolean()
     .optional()
@@ -51,13 +53,18 @@ export const perSource = z.object({
     .array(z.string())
     .optional()
     .describe(
-      "Narrowings this catalogue cannot receive. This is the one field that says a catalogue cannot do something.",
+      "Narrowings that shaped no part of the request this catalogue received, whether its route declares no field for one or nothing written was left for one to decide.",
     ),
   narrowings_naming_no_record: z
     .array(z.string())
     .optional()
     .describe("Narrowings written only with identifiers another catalogue minted."),
-  narrowings_received_in_part: z.array(z.string()).optional(),
+  narrowings_received_in_part: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "Narrowings it received short of what was written, the rest of the list naming records another catalogue minted. It answered a wider question than the one asked.",
+    ),
   algorithms_not_searched: z
     .array(z.string())
     .optional()
@@ -151,7 +158,9 @@ export const card = z.object({
         reason: z.string().optional(),
       }),
     )
-    .describe("Every catalogue asked, with the identifier the record carries there."),
+    .describe(
+      "Every catalogue asked, with the identifier the record carries there. This is where what each of them did with the record is read: the state says which of the three it met, and the reason says why it was not asked or what went wrong.",
+    ),
   preferred: z
     .array(z.string())
     .describe(
@@ -167,38 +176,226 @@ export const card = z.object({
     .describe("What this answer does not establish, which is what makes it safe to act on."),
 });
 
-/** A row of a search, which names a record and is never consolidated. */
-const row = z
+/** A date a catalogue holds, at the precision an editor entered it. */
+const readDate = z.object({
+  value: z.string(),
+  precision: z
+    .enum(["day", "month", "year"])
+    .describe("How much of the date the catalogue holds: a month or a year can be all of it."),
+});
+
+/** What a row carries whatever kind of record it names. */
+const rowBase = {
+  id: z.string().describe("Written instance:uuid. The catalogue travels with the uuid."),
+  source: z.string(),
+  source_url: z
+    .string()
+    .describe("The address it was read from. Credit the catalogue and link it."),
+  retrieved_at: z.string().describe("The moment this client read it there."),
+  status: z
+    .enum(["established", "merged", "deleted"])
+    .describe(
+      "What the identifier addresses on that catalogue now. A folded record answers with a marker, which describes the record and never what it once named.",
+    ),
+  also_held_at: z
+    .array(z.object({ source: z.string(), id: z.string() }))
+    .describe(
+      "The same record on another catalogue, read from a link this one publishes to it. A shared name is no join.",
+    ),
+  linked_unfollowed: z
+    .array(z.object({ source: z.string(), url: z.string() }))
+    .describe(
+      "A link to another catalogue naming the record by something this client cannot address. The link is written, and following it is what failed.",
+    ),
+  pending_edits: z
+    .number()
+    .nullable()
+    .optional()
+    .describe("Edits open against it, null where its catalogue publishes no such count."),
+  pending_edits_unreadable: z
+    .boolean()
+    .optional()
+    .describe("The count of open edits came back in a shape this client could not read."),
+  rows_skipped: z
+    .number()
+    .optional()
+    .describe("Entries of this record's own lists that could not be read and are left out."),
+  rows_skipped_in: z.array(z.string()).optional().describe("Which of its lists lost them."),
+};
+
+/** A studio as a scene row names one. */
+const studioOnRow = z.object({
+  id: z.string(),
+  name: z.string().nullable(),
+  parent: z.string().nullable(),
+  status: z.enum(["established", "merged", "deleted"]),
+  parentWithdrawn: z.boolean().optional(),
+});
+
+/** Someone a scene credits, under their own name and the one the release printed. */
+const creditOnRow = z.object({
+  id: z.string(),
+  name: z.string().nullable(),
+  creditedAs: z.string().nullable().describe("The name this release printed, where it differs."),
+  disambiguation: z.string().nullable(),
+  status: z.enum(["established", "merged", "deleted"]),
+});
+
+/**
+ * A row of a search, which names a record and is never consolidated.
+ *
+ * The four kinds carry different fields, so each search declares the one its
+ * own rows are. A shape covering all four would name every field of every kind
+ * as one any row might hold, and a client reading it could tell neither what a
+ * scene row carries nor what it is safe to expect on a tag.
+ *
+ * Every one of them is open: a marker adds what it adds, and a block asked for
+ * beside the row travels with it.
+ */
+const sceneRow = z
   .object({
-    id: z.string().describe("Written instance:uuid. The catalogue travels with the uuid."),
-    source: z.string(),
-    source_url: z
-      .string()
-      .describe("The address it was read from. Credit the catalogue and link it."),
-    status: z.enum(["established", "merged", "deleted"]),
+    ...rowBase,
+    title: z.string().nullable(),
+    code: z.string().nullable().describe("The studio's own reference for the release."),
+    duration_seconds: z
+      .number()
+      .nullable()
+      .describe("The runtime that catalogue holds, which is what separates two cuts of one title."),
+    release_date: readDate.nullable(),
+    release_date_unreadable: z
+      .boolean()
+      .optional()
+      .describe(
+        "A release date was published in a shape this client could not read, so the null above is a reading that failed rather than a date nobody entered.",
+      ),
+    production_date_unreadable: z
+      .boolean()
+      .optional()
+      .describe("The same, for the production date, which get_scene answers with."),
+    studio: studioOnRow.nullable(),
+    performers: z.array(creditOnRow),
+    tags: z
+      .array(z.object({ id: z.string(), name: z.string().nullable() }))
+      .describe(
+        "Each tag with the identifier the next call takes. What its catalogue filed it under is a fact about the tag, which get_tag answers.",
+      ),
   })
   .loose();
 
-/** A page of rows, whatever kind of thing the rows are records of. */
-export const rowsOutput = {
-  results: z.array(row),
-  result_count: z.number().describe("How many rows this page carries."),
-  per_source: z.array(perSource),
-  ordering: z
-    .string()
-    .describe("How the rows were laid out, which a reader needs before reading the first."),
-  window: z
-    .object({ page: z.number(), limit: z.number() })
-    .optional()
-    .describe("The page a catalogue paged through, absent where none was given one."),
-  cached: z.boolean().optional().describe("Replayed from this client's store."),
-  notes: z.array(z.string()),
-};
+const performerRow = z
+  .object({
+    ...rowBase,
+    name: z.string().nullable(),
+    disambiguation: z
+      .string()
+      .nullable()
+      .describe("What its catalogue tells two people of one name apart by."),
+    aliases: z.array(z.string()),
+    gender: z.string().nullable(),
+    country: z.string().nullable(),
+    birth_date: readDate.nullable(),
+    death_date: readDate.nullable(),
+    birth_date_unreadable: z
+      .boolean()
+      .optional()
+      .describe(
+        "A birth date was published in a shape this client could not read, so the null above is a reading that failed rather than a date nobody entered.",
+      ),
+    death_date_unreadable: z.boolean().optional().describe("The same, for the date of death."),
+    career_start_year: z.number().nullable(),
+    career_end_year: z.number().nullable(),
+    scene_count: z
+      .number()
+      .nullable()
+      .describe(
+        "Scenes this one catalogue indexes them on, which measures its coverage and no career. Never added to another catalogue's.",
+      ),
+    merged_into: z
+      .string()
+      .nullable()
+      .describe("The record this one was folded into, where its catalogue publishes one."),
+    merged_ids: z
+      .array(z.string())
+      .describe("Identifiers folded into this record, each of which still addresses it."),
+  })
+  .loose();
 
-/** One record, consolidated. */
+const studioRow = z
+  .object({
+    ...rowBase,
+    name: z.string().nullable(),
+    aliases: z.array(z.string()),
+    parent: z
+      .object({
+        id: z.string(),
+        name: z.string().nullable(),
+        status: z.enum(["established", "merged", "deleted"]),
+      })
+      .nullable()
+      .describe("The studio this one sits under, where its catalogue records one."),
+    scene_count: z
+      .number()
+      .nullable()
+      .describe(
+        "Scenes this one catalogue indexes on it, null where it publishes no such count. Never added to another catalogue's.",
+      ),
+  })
+  .loose();
+
+const tagRow = z
+  .object({
+    ...rowBase,
+    name: z.string().nullable(),
+    description: z.string().nullable(),
+    aliases: z.array(z.string()),
+    category: z
+      .object({
+        id: z.string(),
+        name: z.string().nullable(),
+        group: z.string().nullable(),
+      })
+      .nullable()
+      .describe("The table its catalogue sorts the tag under, and the group that table covers."),
+  })
+  .loose();
+
+const ROW_OF = {
+  scene: sceneRow,
+  performer: performerRow,
+  studio: studioRow,
+  tag: tagRow,
+} as const;
+
+/** A page of rows of one kind, with what each catalogue did with the question. */
+export function rowsOutput(kind: keyof typeof ROW_OF) {
+  return {
+    results: z.array(ROW_OF[kind]),
+    result_count: z.number().describe("How many rows this page carries."),
+    per_source: z.array(perSource),
+    ordering: z
+      .string()
+      .describe("How the rows were laid out, which a reader needs before reading the first."),
+    window: z
+      .object({ page: z.number(), limit: z.number() })
+      .optional()
+      .describe(
+        "The page and the row limit this answer was read at, absent where no catalogue answered.",
+      ),
+    cached: z.boolean().optional().describe("Replayed from this client's store."),
+    notes: z.array(z.string()),
+  };
+}
+
+/**
+ * One record, consolidated.
+ *
+ * A record route answers with the card and nothing beside it. What each
+ * catalogue did with the record is on the card itself, one entry per catalogue
+ * on `held_by` and one per catalogue on every count, so a report of its own
+ * would repeat those and add nothing a caller cannot already read there.
+ */
 export const cardOutput = {
   card,
-  per_source: z.array(perSource).optional(),
   cached: z.boolean().optional(),
 };
 
@@ -249,7 +446,11 @@ export const fingerprintOutput = {
         ),
     }),
   ),
-  match_count: z.number().describe("One per record reached, whatever number of hashes reached it."),
+  match_count: z
+    .number()
+    .describe(
+      "One per card here. Every hash that reached a record names it on one card, and a record reached both by an exact hash and by a perceptual one stands as two, since the two claim different things about it. Read records_named for how many files were named, which counts each once.",
+    ),
   records_named: z
     .number()
     .describe(

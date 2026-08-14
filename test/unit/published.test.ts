@@ -258,6 +258,47 @@ describe("every answer validates against the schema its tool publishes", () => {
     });
   }
 
+  /**
+   * A row satisfies the reading its own search declares, and no other.
+   *
+   * Each search declares the kind of row it answers with. A declaration naming
+   * the same fields on all four kinds would satisfy every answer while telling
+   * a caller nothing about what a row of one kind holds, so every row is held
+   * here against the three readings it is not.
+   */
+  const rowReading = (name: string): Record<string, unknown> => {
+    const tool = TOOLS.find((one) => one.name === name);
+    if (tool === undefined) throw new Error(`no tool named ${name}`);
+    const declared = z.toJSONSchema(z.object(tool.outputSchema), {
+      io: "output",
+    }) as unknown as {
+      properties: { results: { items: Record<string, unknown> } };
+    };
+    return declared.properties.results.items;
+  };
+
+  const SEARCHES = ["search_scenes", "search_performers", "search_studios", "search_tags"];
+
+  for (const [name, args] of CALLS.filter(([one]) => SEARCHES.includes(one))) {
+    it(`${name} ${JSON.stringify(args).slice(0, 40)} answers rows of the kind it declares`, async () => {
+      const tool = TOOLS.find((one) => one.name === name);
+      if (tool === undefined) throw new Error(`no tool named ${name}`);
+      const read = tool.inputSchema.parse(args) as Record<string, unknown>;
+      const rendered = await tool.run(answering() as never, read);
+      const rows = (rendered.structured as { results: unknown[] }).results;
+
+      for (const row of rows) {
+        expect(faults(rowReading(name), row)).toEqual([]);
+        for (const other of SEARCHES.filter((one) => one !== name)) {
+          expect(
+            faults(rowReading(other), row).length,
+            `a row of ${name} satisfies the reading ${other} declares, so neither says what its rows hold`,
+          ).toBeGreaterThan(0);
+        }
+      }
+    });
+  }
+
   it("puts every tool to the test", () => {
     // A tool nobody called here publishes a schema nothing holds it to.
     expect([...new Set(CALLS.map(([name]) => name))].sort()).toEqual(
