@@ -18,6 +18,12 @@
  * catalogue published, so the union asserts nothing new, and picking one
  * catalogue's list would erase what the other holds.
  *
+ * **A shared name is never a join.** An entry carrying a catalogue-minted
+ * identifier is a record on the catalogue that minted it, and two catalogues
+ * naming one thing mint two records. They are one entry only where the data
+ * carries the join, and a name that matches is published as the resemblance it
+ * is, beside two records a reader can follow separately.
+ *
  * **A count is never merged.** These catalogues index corpora that overlap by an
  * amount none of them publishes, so a sum would state a total nobody measured.
  * Counts stay one per catalogue, and a catalogue publishing none says so.
@@ -34,6 +40,36 @@ import type {
 } from "../types.js";
 
 export type { Reading };
+
+/** One catalogue's record, named the way that catalogue names it. */
+export interface EntryAt {
+  source: string;
+  id: string;
+}
+
+/**
+ * One entry of a united list, with what is known about it on other catalogues.
+ *
+ * `published_by` names the catalogues that published this very record, so an
+ * entry another catalogue never published carries one name. What another
+ * catalogue holds is published beside it, under the two things it can be: a
+ * record joined to this one by a link somebody wrote, or a record whose name
+ * matches and which nothing else connects to it.
+ */
+export interface CardListEntry extends CardEntry {
+  /**
+   * The identifier this same record carries on another catalogue, read from a
+   * link one of them publishes to the other. A reader chains to either.
+   */
+  also_at?: EntryAt[];
+  /**
+   * A record another catalogue published under a name that matches. It is a
+   * resemblance and nothing more: the two are one thing only where an editor
+   * wrote that they are, and until then a reader who needs the other reads it
+   * at the identifier named here.
+   */
+  same_name_as?: EntryAt[];
+}
 
 /** What a card is built from: the readings, the policy, and the shape to read. */
 export interface Consolidation {
@@ -185,24 +221,122 @@ function same(a: unknown, b: unknown): boolean {
  *
  * The order carries a fact of its own: a reader meets the preferred catalogue's
  * reading first, and everything after it is what no preferred catalogue held.
+ *
+ * What counts as one entry is what the data joins. An entry a catalogue minted
+ * an identifier for is that record, and it meets another catalogue's entry only
+ * under that identifier or under a link published to it. An entry nobody minted
+ * an identifier for is what it holds, and two catalogues holding it published
+ * one thing.
  */
-function unionOf(answered: readonly Answered[], name: string): CardEntry[] {
-  const held = new Map<string, CardEntry>();
+function unionOf(answered: readonly Answered[], name: string): CardListEntry[] {
+  const held: CardListEntry[] = [];
+  /** Every address one entry answers to: the one it carries, and those linked to it. */
+  const addressed = new Map<string, CardListEntry>();
+  /** Entries that are their own content, keyed on that content. */
+  const byContent = new Map<string, CardListEntry>();
+
   for (const one of answered) {
     const value = one.record[name];
     if (!Array.isArray(value)) continue;
     for (const entry of value) {
-      // Two catalogues naming one tag mint two identifiers for it. Keyed on
-      // the address, the union would publish one thing twice and a caller
-      // counting the entries would count double.
-      const key = typeof entry === "string" ? entry : identityOf(entry);
-      const found = held.get(key);
-      if (found === undefined)
-        held.set(key, { value: entry as string, published_by: [one.source] });
-      else if (!found.published_by.includes(one.source)) found.published_by.push(one.source);
+      const id = identifierOf(entry);
+      if (id === undefined) {
+        // An entry nobody minted an identifier for is what it holds. Two
+        // catalogues publishing one alias published one alias.
+        const key = typeof entry === "string" ? entry : identityOf(entry);
+        const found = byContent.get(key);
+        if (found === undefined) byContent.set(key, place(held, entry, one.source));
+        else attribute(found, one.source);
+        continue;
+      }
+      const found = addressed.get(id);
+      const kept = found ?? place(held, entry, one.source);
+      if (found !== undefined) {
+        attribute(found, one.source);
+        // Reached through a link rather than under its own address: the
+        // identifier this catalogue minted is the one a reader chains to
+        // there, and dropping it leaves that catalogue's record unreachable.
+        if (identifierOf(found.value) !== id && !(found.also_at ?? []).some((at) => at.id === id)) {
+          (found.also_at ??= []).push({ source: one.source, id });
+        }
+      }
+      addressed.set(id, kept);
+      for (const link of linksOf(entry)) if (!addressed.has(link)) addressed.set(link, kept);
     }
   }
-  return [...held.values()];
+  return resembling(held);
+}
+
+/** A new entry of the union, in the order the catalogue that published it was read. */
+function place(held: CardListEntry[], value: unknown, source: string): CardListEntry {
+  const made: CardListEntry = { value: value as string, published_by: [source] };
+  held.push(made);
+  return made;
+}
+
+/** A catalogue that published this very record, named once however often it said it. */
+function attribute(entry: CardListEntry, source: string): void {
+  if (!entry.published_by.includes(source)) entry.published_by.push(source);
+}
+
+/** The identifier a catalogue minted for an entry, absent where it minted none. */
+function identifierOf(value: unknown): string | undefined {
+  if (value === null || typeof value !== "object") return undefined;
+  const held = (value as Record<string, unknown>).id;
+  return typeof held === "string" && held !== "" ? held : undefined;
+}
+
+/** The addresses an entry names for itself on other catalogues, which are joins. */
+function linksOf(value: unknown): string[] {
+  if (value === null || typeof value !== "object") return [];
+  const held = (value as { alsoHeldAt?: unknown }).alsoHeldAt;
+  if (!Array.isArray(held)) return [];
+  return held
+    .map((one) => (one as { id?: unknown }).id)
+    .filter((id): id is string => typeof id === "string" && id !== "");
+}
+
+/** What an entry is called, for the one comparison a name is allowed to decide. */
+function nameOf(value: unknown): string | null {
+  if (value === null || typeof value !== "object") return null;
+  const held = (value as Record<string, unknown>).name;
+  if (typeof held !== "string") return null;
+  const written = held.trim().toLowerCase();
+  return written === "" ? null : written;
+}
+
+/** The catalogue an identifier was minted on, which is the one it addresses. */
+function mintedOn(id: string, entry: CardListEntry): string {
+  const at = id.indexOf(":");
+  return at === -1 ? (entry.published_by[0] ?? "") : id.slice(0, at);
+}
+
+/**
+ * Every pair of entries two catalogues wrote one name for, named on both.
+ *
+ * A reader looking for one thing on the other catalogue needs to be told that
+ * something of that name is held there, and needs just as much to be told that
+ * nothing establishes the two as one. Both entries carry the other's address,
+ * so the pair reads the same from either side.
+ */
+function resembling(held: readonly CardListEntry[]): CardListEntry[] {
+  for (const one of held) {
+    const name = nameOf(one.value);
+    if (name === null) continue;
+    for (const other of held) {
+      if (other === one || nameOf(other.value) !== name) continue;
+      // What the reader is sent to read is an address, so an entry carrying
+      // none is nothing to send them to.
+      const id = identifierOf(other.value);
+      if (id === undefined) continue;
+      // A catalogue that published both of them holds two records apart under
+      // one name, which is its own reading and no resemblance between two
+      // catalogues.
+      if (other.published_by.some((source) => one.published_by.includes(source))) continue;
+      (one.same_name_as ??= []).push({ source: mintedOn(id, other), id });
+    }
+  }
+  return [...held];
 }
 
 /** A count as a catalogue published one, which is a whole number of things or nothing. */

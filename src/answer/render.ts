@@ -19,6 +19,7 @@
  * reaches one reaches both.
  */
 
+import type { CardListEntry, EntryAt } from "./card.js";
 import { instanceById, type Capability, type InstanceId } from "../stashbox/instances.js";
 import type {
   Card,
@@ -106,22 +107,37 @@ export function imageRows(images: readonly ImageRow[]): string[] {
   });
 }
 
-/** One fingerprint, with what the catalogue counted for it and what it did not. */
+/**
+ * One fingerprint, with what the catalogue counted for it and what it did not.
+ *
+ * The counts are what makes a hash weigh anything: one submitted five hundred
+ * times and one submitted once make the same claim, and only the counts tell
+ * them apart. A hash its catalogue counts a dispute on reads as a settled one
+ * wherever the dispute is left in the payload.
+ */
+export function fingerprintText(row: Partial<FingerprintRow>): string {
+  const counted = [
+    row.submissions === null || row.submissions === undefined
+      ? null
+      : `${row.submissions} submission(s)`,
+    row.reports === null || row.reports === undefined ? null : `${row.reports} report(s)`,
+    row.contested === true ? "contested" : null,
+    // Its own measurement: the runtime submitted with the hash, which the
+    // release's own runtime can differ from.
+    row.durationSeconds === null || row.durationSeconds === undefined
+      ? null
+      : `submitted for ${row.durationSeconds}s`,
+    row.userSubmitted === true ? "submitted by a person" : null,
+  ].filter((part): part is string => part !== null);
+  const about = counted.length === 0 ? "" : ` (${counted.join(", ")})`;
+  // The algorithm is one of a closed set this client reads; the hash is
+  // whatever the catalogue published, so it is flattened before it is placed.
+  return `${row.algorithm ?? ""} ${inline(row.hash ?? null) ?? ""}${about}`;
+}
+
+/** The fingerprints a record carries, one to a row. */
 export function fingerprintRows(rows: readonly FingerprintRow[]): string[] {
-  return rows.map((row) => {
-    const counted = [
-      row.submissions === null ? null : `${row.submissions} submission(s)`,
-      row.reports === null ? null : `${row.reports} report(s)`,
-      // Its own measurement: the runtime submitted with the hash, which the
-      // release's own runtime can differ from.
-      row.durationSeconds === null ? null : `submitted for ${row.durationSeconds}s`,
-      row.userSubmitted === true ? "submitted by a person" : null,
-    ].filter((part): part is string => part !== null);
-    const about = counted.length === 0 ? "" : ` (${counted.join(", ")})`;
-    // The algorithm is one of a closed set this client reads; the hash is
-    // whatever the catalogue published, so it is flattened before it is placed.
-    return `  - ${row.algorithm} ${inline(row.hash) ?? ""}${about}`;
-  });
+  return rows.map((row) => `  - ${fingerprintText(row)}`);
 }
 
 /** The tags a record carries, each with the category its catalogue placed it in. */
@@ -257,6 +273,18 @@ function creditsLine(value: unknown): string | null {
 /* ---------------------------------------------------------------- the card */
 
 /**
+ * The two things that differ between catalogues held out for one reason.
+ *
+ * A reason names the catalogue it belongs to and the setting that would read
+ * it. Both are lifted out to find the reasons that share a shape, and both are
+ * written back into the sentence that folds them: a shape printed with the two
+ * removed names neither what went unread nor what to set to read it. The marks
+ * are characters no catalogue publishes.
+ */
+const CATALOGUE = "\u0001";
+const VARIABLE = "\u0002";
+
+/**
  * A card as a reader meets it: every value with the catalogues that said it,
  * every disagreement stated rather than resolved in silence.
  */
@@ -284,15 +312,26 @@ export function renderCard(card: Card, kind: string, cached = false): Rendered {
   }
 
   // Catalogues held out for one reason are one fact. Written a line each, they
-  // push what the card holds off the top of a reader's view.
-  const alike = new Map<string, string[]>();
+  // push what the card holds off the top of a reader's view. What differs
+  // between them is the catalogue and the setting that would read it, so both
+  // are held apart from the shape they are folded on and printed back.
+  const alike = new Map<string, { names: string[]; variables: string[] }>();
   for (const one of card.held_by) {
     if (one.state !== "absent" || one.reason === undefined) continue;
-    const shared = one.reason.replace(catalogueOf(one.source).name, "").replace(/STASHBOX_\w+/, "");
-    alike.set(shared, [...(alike.get(shared) ?? []), catalogueOf(one.source).name]);
+    const who = catalogueOf(one.source).name;
+    const shape = one.reason
+      .split(who)
+      .join(CATALOGUE)
+      .replace(/STASHBOX_\w+/g, VARIABLE);
+    const group = alike.get(shape) ?? { names: [], variables: [] };
+    group.names.push(who);
+    for (const variable of one.reason.match(/STASHBOX_\w+/g) ?? []) {
+      if (!group.variables.includes(variable)) group.variables.push(variable);
+    }
+    alike.set(shape, group);
   }
   const folded = new Set(
-    [...alike.entries()].filter(([, names]) => names.length > 1).flatMap(([, names]) => names),
+    [...alike.values()].filter((group) => group.names.length > 1).flatMap((one) => one.names),
   );
 
   const held = card.held_by
@@ -313,9 +352,16 @@ export function renderCard(card: Card, kind: string, cached = false): Rendered {
       return `  - ${who}: not asked${one.reason === undefined ? "" : `: ${inline(one.reason) ?? ""}`}`;
     });
 
-  for (const [shared, names] of alike) {
-    if (names.length < 2) continue;
-    held.push(`  - ${names.join(", ")}: not asked:${shared.replace(/\s+/g, " ")}`);
+  for (const [shape, group] of alike) {
+    if (group.names.length < 2) continue;
+    const said = shape
+      .split(CATALOGUE)
+      .join("each of them")
+      .split(VARIABLE)
+      .join(group.variables.join(", "))
+      .replace(/\s+/g, " ")
+      .trim();
+    held.push(`  - ${group.names.join(", ")}: not asked: ${inline(said) ?? ""}`);
   }
 
   const body = joinLines([
@@ -345,6 +391,163 @@ export function renderCard(card: Card, kind: string, cached = false): Rendered {
         read_from: card.read_from,
         notes,
       },
+    },
+  };
+}
+
+/* ------------------------------------------------------------ the matches */
+
+/** What a set of hashes reached, and what every catalogue did with them. */
+export interface Matches {
+  matches: { scene: Card; algorithm: string; hash: string; matchKind: string }[];
+  match_count: number;
+  records_named: number;
+  resemblances: number;
+  unattributed: number;
+  unmatched: { hash: string; algorithm: string }[];
+  not_searched: { hash: string; algorithm: string }[];
+  asked: { hash: string; algorithm: string }[];
+  perSource: {
+    source: string;
+    name?: string;
+    state: string;
+    count?: number;
+    algorithmsNotSearched?: string[];
+    reason?: string;
+  }[];
+}
+
+/**
+ * What a fingerprint answer states, and what each kind of hash claims.
+ *
+ * The distinction decides the whole answer. An MD5 and an OSHASH are computed
+ * from the bytes of a file, so a match on one names the file. A PHASH states a
+ * likeness, which a re-encode, a crop and another scene from one shoot all
+ * satisfy: rendered under one word, a resemblance reaches a reader as an
+ * identity and a caller acts on a file they never had.
+ *
+ * Every block opens with the hash that reached it. The answer is a mapping from
+ * a hash to a record, the blocks stand in no order a caller wrote, and a reader
+ * working from the prose alone would have to guess which hash produced which.
+ */
+export function renderMatches(result: Matches, cached: boolean): Rendered {
+  const notes: string[] = [];
+  if (result.matches.some((one) => one.matchKind === "perceptual_similarity")) {
+    notes.push(
+      "A perceptual hash states a likeness. A record it reaches may hold a re-encode, a crop, or another scene from one shoot, so a match of that kind establishes a resemblance and says nothing about the bytes of either file.",
+    );
+  }
+  if (result.matches.some((one) => one.matchKind === "exact_file")) {
+    notes.push(
+      "An MD5 and an OSHASH are computed from the bytes of a file, so a match on one of them names the file the hash was taken from, and two catalogues answering one of them describe the same bytes.",
+    );
+  }
+  // One catalogue holding two records under one exact hash contradicts itself,
+  // and it is the catalogue that says so by minting two identifiers. Folded
+  // into one card, one of the two disappears; left unsaid, a reader takes the
+  // two cards for two files.
+  const doubled = [
+    ...new Set(
+      result.matches
+        .filter(
+          (one) =>
+            one.matchKind === "exact_file" &&
+            result.matches.filter(
+              (other) => other.algorithm === one.algorithm && other.hash === one.hash,
+            ).length > 1,
+        )
+        .map((one) => `${one.algorithm} ${inline(one.hash) ?? ""}`),
+    ),
+  ];
+  if (doubled.length > 0) {
+    notes.push(
+      `These hashes reached more than one record: ${doubled.join(", ")}. A catalogue mints one identifier per record it holds, so the records stand here one card each, and which of them holds the file the hash was computed from is a question the catalogues answer no way at all.`,
+    );
+  }
+  const failed = result.perSource.filter((one) => one.state === "failed");
+  if (failed.length > 0) {
+    notes.push(
+      `These catalogues could not answer, so this holds no record of theirs and states nothing about what they hold: ${failed.map((one) => inline(one.name ?? one.source) ?? one.source).join(", ")}.`,
+    );
+  }
+  if (result.unmatched.length > 0) {
+    notes.push(
+      `These hashes reached no record on any catalogue that answered: ${result.unmatched.map((one) => `${one.algorithm} ${inline(one.hash) ?? ""}`).join(", ")}. Each of them is a file the catalogues that answered do not know, and the catalogues named below as unasked say nothing about them either way.`,
+    );
+  }
+  if (result.not_searched.length > 0) {
+    notes.push(
+      `No catalogue that answered searches the algorithm these hashes were computed with, so they were never put to one: ${result.not_searched.map((one) => `${one.algorithm} ${inline(one.hash) ?? ""}`).join(", ")}. Nothing here is evidence about the files behind them, either way.`,
+    );
+  }
+  if (result.unattributed > 0) {
+    notes.push(
+      `${result.unattributed} record(s) the catalogues answered with carry none of the hashes asked. Which hash reached them is unknown, so they stand here as no match and are counted apart.`,
+    );
+  }
+  if (result.unmatched.length > 0 && result.matches.length === 0) {
+    notes.push(
+      "The catalogues that answered hold no record carrying the hashes they were put, so each of them looked and found nothing.",
+    );
+  }
+  if (cached) {
+    notes.push(
+      "This answer was replayed from this client's store, so no catalogue was asked for it.",
+    );
+  }
+
+  const cards = result.matches.map((one) => renderCard(one.scene, "scene"));
+  // Every catalogue asked, and every one that was not, as every other answer
+  // states them. Left to the payload, a caller reading the prose has no signal
+  // that three of five catalogues were never asked, and "no match" reads as
+  // "no catalogue holds this file".
+  const reports = result.perSource.map((one) => {
+    const who = inline(one.name ?? one.source) ?? one.source;
+    if (one.state === "answered") {
+      const also = [
+        one.count === undefined ? null : `${one.count} match(es)`,
+        (one.algorithmsNotSearched ?? []).length === 0
+          ? null
+          : `does not search ${(one.algorithmsNotSearched ?? []).join(", ")}, so those were never put to it`,
+      ].filter((part): part is string => part !== null);
+      return `  - ${who}: answered${also.length === 0 ? "" : `, ${also.join("; ")}`}`;
+    }
+    if (one.state === "failed")
+      return `  - ${who}: could not answer: ${inline(one.reason ?? "") ?? ""}`;
+    return `  - ${who}: not asked: ${inline(one.reason ?? "") ?? ""}`;
+  });
+
+  const body = [
+    `${result.asked.length} fingerprint(s) asked, ${result.match_count} match(es). ${result.records_named} record(s) named by an exact hash; ${result.resemblances} match(es) on a perceptual hash, which names no file.`,
+    `Asked: ${result.asked.map((one) => `${one.algorithm} ${inline(one.hash) ?? ""}`).join(", ")}`,
+    `\nCatalogues:\n${reports.join("\n")}`,
+    ...cards.map((one, at) => {
+      const match = result.matches[at];
+      const hash = match === undefined ? "" : `${match.algorithm} ${inline(match.hash) ?? ""}`;
+      const claim = match?.matchKind === "exact_file" ? "names these bytes" : "resembles this";
+      return `\n${hash} ${claim}:\n${one.text}`;
+    }),
+  ].join("\n");
+
+  return {
+    text: `${body}${notesBlock(notes)}`,
+    structured: {
+      matches: result.matches.map((one, at) => ({
+        scene: (cards[at]?.structured as { card: unknown }).card,
+        algorithm: one.algorithm,
+        hash: one.hash,
+        match_kind: one.matchKind,
+      })),
+      match_count: result.match_count,
+      records_named: result.records_named,
+      resemblances: result.resemblances,
+      unattributed: result.unattributed,
+      unmatched: result.unmatched,
+      not_searched: result.not_searched,
+      asked: result.asked,
+      per_source: result.perSource,
+      ...(cached ? { cached: true } : {}),
+      notes,
     },
   };
 }
@@ -479,8 +682,7 @@ function spelled(value: unknown): string | null {
     return inline(held.value);
   }
   if (typeof held.url === "string") return linksText([held as never]);
-  if (typeof held.hash === "string")
-    return inline(`${String(held.algorithm)} ${String(held.hash)}`);
+  if (typeof held.hash === "string") return fingerprintText(held as Partial<FingerprintRow>);
   if (typeof held.name === "string" || typeof held.id === "string") {
     // The identifier travels with the name: a reader who wants this record's
     // scenes calls the next tool with it, and a name is what that tool
@@ -532,10 +734,43 @@ function unionBlock(name: string, entries: readonly CardEntry[]): string | null 
     .map((entry) => {
       const value = spelled(entry.value);
       const by = entry.published_by.map((held) => catalogueOf(held).name).join(", ");
-      return value === null ? null : `  - ${value} (${by})`;
+      // A block of forty entries carries the same facts in fewer words: what a
+      // reader takes from a row is the other catalogue's address and that
+      // nothing joins the two, and both survive the shortening.
+      return value === null ? null : `  - ${value} (${by}${elsewhere(entry, name, true)})`;
     })
     .filter((row): row is string => row !== null);
   return `${spelt(name)}:\n${rows.join("\n")}`;
+}
+
+/**
+ * What another catalogue holds under this entry, and what that is worth.
+ *
+ * Two entries of one name, printed one after the other with nothing said, read
+ * as one record written twice. They are two records, and the prose says which
+ * of the two things joins them: a link an editor wrote, or a name that matches
+ * and establishes nothing. A reader chains to either address from here.
+ */
+function elsewhere(entry: CardEntry, name: string, brief: boolean): string {
+  const held = entry as CardListEntry;
+  const thing = oneOf(spelt(name).toLowerCase());
+  const at = (one: EntryAt) => `${inline(one.id) ?? ""} on ${catalogueOf(one.source).name}`;
+  // The claim is worded the one way in both forms: a resemblance qualified
+  // unlike its neighbour reads as a resemblance of another kind. What a long
+  // block shortens is the lead-in to it.
+  const parts = [
+    ...(held.also_at ?? []).map((one) =>
+      brief
+        ? `also at ${at(one)}`
+        : `the same ${thing} is at ${at(one)}, joined to this one by a link a catalogue published`,
+    ),
+    ...(held.same_name_as ?? []).map((one) =>
+      brief
+        ? `same name at ${at(one)}, which nothing here establishes as the same ${thing}`
+        : `${catalogueOf(one.source).name} publishes a ${thing} of that name at ${inline(one.id) ?? ""}, which nothing here establishes as the same ${thing}`,
+    ),
+  ];
+  return parts.length === 0 ? "" : `; ${parts.join("; ")}`;
 }
 
 /**
@@ -552,11 +787,16 @@ function unionLine(name: string, entries: readonly CardEntry[]): string | null {
     .map((entry) => {
       const value = spelled(entry.value);
       const by = entry.published_by.map((one) => catalogueOf(one).name).join(", ");
-      return value === null ? null : `${value} (${by})`;
+      return value === null ? null : `${value} (${by}${elsewhere(entry, name, false)})`;
     })
     .filter((entry): entry is string => entry !== null)
     .join("; ");
   return each === "" ? null : `${spelt(name)}: ${each}`;
+}
+
+/** One of what a field holds, named as a reader names a single one of them. */
+function oneOf(field: string): string {
+  return /ses$/.test(field) ? field.slice(0, -2) : field.replace(/s$/, "");
 }
 
 /** A field of a card as a reader names the thing it holds. */

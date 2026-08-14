@@ -56,6 +56,7 @@ import {
   type Fingerprint,
   type Kind,
   type RecordKind,
+  type SceneSection,
 } from "./queries.js";
 import {
   arrayUnder,
@@ -176,10 +177,15 @@ interface Raw {
 export interface FingerprintResult {
   matches: FingerprintMatch[];
   match_count: number;
-  scenes_matched: number;
+  /** Distinct records an exact hash named. A perceptual match names none. */
+  records_named: number;
+  /** Matches a perceptual hash reached, which establish a likeness and no file. */
+  resemblances: number;
   unattributed: number;
-  /** The hashes asked that reached no record anywhere. */
+  /** The hashes put to a catalogue that answered, which reached no record. */
   unmatched: { hash: string; algorithm: string }[];
+  /** The hashes no catalogue that answered searches, so none was put to one. */
+  not_searched: { hash: string; algorithm: string }[];
   asked: { hash: string; algorithm: string }[];
   perSource: SourceReport[];
 }
@@ -347,12 +353,20 @@ export class StashboxClient {
     const asks: typeof chosen.asks = [];
 
     for (const ask of chosen.asks) {
-      if (typed && !ask.spec.facetedSearch) {
+      // A catalogue whose faceted routes ignore what is written to them is
+      // asked through its text route, and that route reads a term. A question
+      // carrying none reaches it by no route at all, so it is never asked:
+      // put to it anyway, what comes back is a request it cannot take, and a
+      // failure reported there states something about the catalogue that the
+      // exchange does not carry.
+      if (!ask.spec.facetedSearch && input.query === undefined) {
         unasked.push({
           source: ask.spec.id,
           name: ask.spec.name,
           state: "absent",
-          reason: `${ask.spec.name} answers a search of words alone: its faceted routes do not apply the narrowings written to them, so a question narrowed on typed arguments was never put to it.`,
+          reason: typed
+            ? `${ask.spec.name} answers a search of words alone: its faceted routes do not apply the narrowings written to them, so a question narrowed on typed arguments was never put to it.`
+            : `${ask.spec.name} answers a search of words alone, and this question carries none, so there was no route to put it to and it was never asked.`,
         });
         continue;
       }
@@ -488,13 +502,12 @@ export class StashboxClient {
               limit: (input.limit as number | undefined) ?? ROWS_PER_PAGE,
             },
           }),
-      ordering:
-        // Grouped rather than interleaved, and the groups arrive in the order
-        // the catalogues answered: they share no measure to order them
-        // together by, so nothing here ranks one against another.
-        answering.length > 1
-          ? `grouped by catalogue, each group in that catalogue's own order, in the order they answered: ${answering.join(", ")}. The catalogues share no measure to order them against one another, so nothing here ranks a row of one above a row of another`
-          : "in the order the catalogue that answered holds them",
+      // Grouped rather than interleaved, and the groups arrive in the order
+      // the catalogues answered: they share no measure to order them together
+      // by, so nothing here ranks one against another. Within a group stands
+      // the order that catalogue applied, which is the one written where it
+      // received it and its own where it did not.
+      ordering: orderingOf(input, perSource, answering),
     };
     // An answer holding a failure is a statement about one exchange. Kept, it
     // would become a statement about the catalogue for a whole lifetime.
@@ -825,12 +838,16 @@ export class StashboxClient {
     );
 
     const prefer = (input.prefer as InstanceId[] | undefined) ?? INSTANCES.map((one) => one.id);
+    const sections = (input.sections as string[] | undefined) ?? ["basic"];
+    // The hashes a record carries are what says which of the hashes asked
+    // reached it, so they are read whether or not a caller asked for the
+    // block. What the block decides is whether they are published.
+    const read = [...new Set([...sections, "fingerprints"])] as SceneSection[];
     const reports: SourceReport[] = [];
-    const raw: Raw[] = [];
 
-    const answered = await Promise.all(
+    const heard = await Promise.all(
       asks.map(async (ask) => {
-        const request = fingerprintRequest(ask.spec, fingerprints);
+        const request = fingerprintRequest(ask.spec, fingerprints, read);
         const at = this.#now();
         const found = await this.#ask(
           ask.spec,
@@ -858,10 +875,11 @@ export class StashboxClient {
             return { read, skipped };
           },
         );
-        if ("report" in found) return found.report;
+        if ("report" in found) return { report: found.report, rows: [] as Raw[] };
 
         let count = 0;
         let unattributed = 0;
+        const rows: Raw[] = [];
         for (const scene of found.value.read) {
           let reached = false;
           for (const print of fingerprints) {
@@ -878,7 +896,7 @@ export class StashboxClient {
               )
             )
               continue;
-            raw.push({ source: ask.spec.id, scene, algorithm: print.algorithm, hash: print.hash });
+            rows.push({ source: ask.spec.id, scene, algorithm: print.algorithm, hash: print.hash });
             reached = true;
             count += 1;
           }
@@ -888,34 +906,51 @@ export class StashboxClient {
           if (!reached) unattributed += 1;
         }
         return {
-          source: ask.spec.id,
-          name: ask.spec.name,
-          state: "answered" as const,
-          count,
-          records: found.value.read.length,
-          ...(unattributed > 0 ? { unattributed } : {}),
-          ...(found.value.skipped > 0 ? { skipped: found.value.skipped } : {}),
-          ...(request.notSearched.length > 0 ? { algorithmsNotSearched: request.notSearched } : {}),
+          report: {
+            source: ask.spec.id,
+            name: ask.spec.name,
+            state: "answered" as const,
+            count,
+            records: found.value.read.length,
+            ...(unattributed > 0 ? { unattributed } : {}),
+            ...(found.value.skipped > 0 ? { skipped: found.value.skipped } : {}),
+            ...(request.notSearched.length > 0
+              ? { algorithmsNotSearched: request.notSearched }
+              : {}),
+          },
+          rows,
         };
       }),
     );
-    reports.push(...answered);
+    reports.push(...heard.map((one) => one.report));
+    // The catalogues are read in the order the registry declares, so what a
+    // reader meets is the same sequence whichever of them answers first.
+    const raw: Raw[] = heard.flatMap((one) => one.rows);
 
     // One file, one card. Two catalogues answering the same exact hash
     // describe the same bytes, which is the strongest identity the data
     // carries, and both records are already here: consolidating them costs no
     // request. A perceptual hash states a likeness and joins nothing, so its
     // records stay one card per catalogue.
-    const byHash = new Map<string, Raw[]>();
+    //
+    // A catalogue mints one identifier per record it holds, so two of its
+    // records carrying one hash are two records by its own account. A card
+    // takes at most one reading per catalogue: the second record opens a card
+    // of its own rather than disappearing behind the first.
+    const byHash = new Map<string, Raw[][]>();
     for (const one of raw) {
       const key =
         one.algorithm === "PHASH"
           ? `${one.algorithm} ${one.hash} ${one.source}`
           : `${one.algorithm} ${one.hash}`;
-      byHash.set(key, [...(byHash.get(key) ?? []), one]);
+      const cards = byHash.get(key) ?? [];
+      const free = cards.find((group) => group.every((other) => other.source !== one.source));
+      if (free === undefined) cards.push([one]);
+      else free.push(one);
+      byHash.set(key, cards);
     }
 
-    const matches: FingerprintMatch[] = [...byHash.values()].map((group) => {
+    const matches: FingerprintMatch[] = [...byHash.values()].flat().map((group) => {
       const first = group[0] as Raw;
       return {
         scene: consolidate({
@@ -926,7 +961,14 @@ export class StashboxClient {
             record: one.scene,
           })),
           prefer: prefer,
-          ...SHAPES.scene,
+          scalars: SHAPES.scene.scalars,
+          // A list a section carries is published only where that section was
+          // asked for. Stated otherwise, its zero denies something nobody
+          // looked for.
+          lists: SHAPES.scene.lists.filter(
+            (name) => BY_SECTION[name] === undefined || sections.includes(BY_SECTION[name]),
+          ),
+          perSource: SHAPES.scene.perSource,
         }),
         algorithm: first.algorithm,
         hash: first.hash,
@@ -934,34 +976,52 @@ export class StashboxClient {
       };
     });
 
+    // An algorithm is searched where a catalogue that answered puts it to its
+    // index. Where none of them does, a hash of that algorithm was asked about
+    // and never looked for, and reporting it beside the ones that were looked
+    // for and found nothing states a search nobody ran.
+    const searched = new Set<string>();
+    for (const one of reports) {
+      if (one.state !== "answered") continue;
+      const held = new Set(one.algorithmsNotSearched ?? []);
+      for (const print of fingerprints)
+        if (!held.has(print.algorithm)) searched.add(print.algorithm);
+    }
+    const reached = (one: Fingerprint) =>
+      raw.some(
+        (found) =>
+          found.hash.toLowerCase() === one.hash.toLowerCase() && found.algorithm === one.algorithm,
+      );
+    const missed = fingerprints.filter((one) => !reached(one));
+
     return {
       data: {
         matches,
         match_count: matches.length,
-        // Files, not matches: two hashes of one file are two matches and one
-        // file, and counting the matches would report a caller's one file as
-        // several.
-        scenes_matched: new Set(
-          matches.map((one) =>
-            one.scene.held_by
-              .filter((held) => held.state === "answered")
-              .map((held) => held.id)
-              .sort()
-              .join("+"),
-          ),
+        // Records, not matches and not files: two hashes of one record are two
+        // matches, and counting the matches would report a caller's one file as
+        // several. A perceptual hash reaches a record without naming any bytes,
+        // so it is counted apart from the records an exact hash named.
+        records_named: new Set(
+          matches
+            .filter((one) => one.matchKind === "exact_file")
+            .map((one) =>
+              one.scene.held_by
+                .filter((held) => held.state === "answered")
+                .map((held) => held.id)
+                .sort()
+                .join("+"),
+            ),
         ).size,
+        resemblances: matches.filter((one) => one.matchKind === "perceptual_similarity").length,
         // The hashes that reached nothing, which is what a caller asking "which
         // of my files are known?" is reading for. Left out, a set of hashes
         // where two matched and two did not reads as four identified.
-        unmatched: fingerprints
-          .filter(
-            (one) =>
-              !raw.some(
-                (found) =>
-                  found.hash.toLowerCase() === one.hash.toLowerCase() &&
-                  found.algorithm === one.algorithm,
-              ),
-          )
+        unmatched: missed
+          .filter((one) => searched.has(one.algorithm))
+          .map((one) => ({ hash: one.hash, algorithm: one.algorithm })),
+        not_searched: missed
+          .filter((one) => !searched.has(one.algorithm))
           .map((one) => ({ hash: one.hash, algorithm: one.algorithm })),
         unattributed: reports.reduce((total, one) => total + (one.unattributed ?? 0), 0),
         asked: fingerprints.map((one) => ({ hash: one.hash, algorithm: one.algorithm })),
@@ -1080,6 +1140,54 @@ function unfollowed(reading: Reading, source: InstanceId): string | undefined {
 function alsoAt(record: Record<string, unknown>): { source: InstanceId; uuid: string }[] {
   const held = (record.alsoHeldAt as { source: InstanceId; id: string }[] | undefined) ?? [];
   return held.map((one) => ({ source: one.source, uuid: one.id.slice(one.source.length + 1) }));
+}
+
+/**
+ * The order the rows stand in, per catalogue where the catalogues differ.
+ *
+ * An order a caller wrote reaches some catalogues and not others: a route that
+ * reads words alone takes none, and the answer names it as an order that
+ * catalogue never received. A sentence calling every row a catalogue's own
+ * order describes an unsorted read of rows that carry the order that was asked
+ * for, and a reader who needs the first row acts on the wrong one.
+ */
+function orderingOf(
+  input: Record<string, unknown>,
+  perSource: readonly SourceReport[],
+  answering: readonly string[],
+): string {
+  const together =
+    answering.length > 1
+      ? `grouped by catalogue, in the order they answered: ${answering.join(", ")}. The catalogues share no measure to order them against one another, so nothing here ranks a row of one above a row of another`
+      : undefined;
+  const own =
+    together === undefined
+      ? "in the order the catalogue that answered holds them"
+      : `grouped by catalogue, each group in that catalogue's own order, ${together}`;
+
+  const sort = input.sort as string | undefined;
+  if (sort === undefined) return own;
+  const answered = perSource.filter((one) => one.state === "answered");
+  const applied = answered.filter((one) => !(one.narrowingsNotReceived ?? []).includes("sort"));
+  const ignored = answered.filter((one) => (one.narrowingsNotReceived ?? []).includes("sort"));
+  if (applied.length === 0 && ignored.length === 0) return own;
+
+  const named = (rows: readonly SourceReport[]) =>
+    rows.map((one) => one.name ?? one.source).join(", ");
+  const way = input.direction as string | undefined;
+  // A direction nobody wrote is the catalogue's own, and naming one here would
+  // state a way the request never carried.
+  const spelt =
+    way === undefined
+      ? `${sort}, each catalogue the way it orders by`
+      : `${sort}, ${way === "asc" ? "ascending" : "descending"}`;
+  const parts = [
+    applied.length === 0 ? null : `sorted by ${spelt}, which ${named(applied)} applied`,
+    ignored.length === 0
+      ? null
+      : `in the order ${named(ignored)} holds them, which did not receive the order this call wrote: the route it answers on takes none`,
+  ].filter((part): part is string => part !== null);
+  return together === undefined ? parts.join("; ") : `${parts.join("; ")}, and ${together}`;
 }
 
 /** Every report the registry declares a catalogue for, in the order it declares them. */

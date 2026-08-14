@@ -79,10 +79,27 @@ const cardValue = z.object({
     ),
 });
 
+/** One catalogue's record, named the way that catalogue names it. */
+const entryAt = z.object({ source: z.string(), id: z.string() });
+
 /** One entry of a united list, naming every catalogue that published it. */
 const cardEntry = z.object({
   value: z.unknown(),
-  published_by: z.array(z.string()).describe("Every catalogue that published this entry."),
+  published_by: z
+    .array(z.string())
+    .describe(
+      "Every catalogue that published this very record. A shared name is no join, so an entry one catalogue minted names that one.",
+    ),
+  also_at: z
+    .array(entryAt)
+    .optional()
+    .describe("What this same record is called on another catalogue, from a link joining the two."),
+  same_name_as: z
+    .array(entryAt)
+    .optional()
+    .describe(
+      "A record another catalogue published under a matching name. A resemblance, never a join.",
+    ),
 });
 
 /** One record, read on every catalogue that holds it. */
@@ -210,11 +227,16 @@ export const fingerprintOutput = {
         ),
     }),
   ),
-  match_count: z.number(),
-  scenes_matched: z
+  match_count: z.number().describe("One per hash that reached one record."),
+  records_named: z
     .number()
     .describe(
-      "Distinct files behind the matches. Two hashes of one file are two matches and one file.",
+      "Distinct records an exact hash named. Two hashes reaching one record count once, and a perceptual match names no record.",
+    ),
+  resemblances: z
+    .number()
+    .describe(
+      "Matches a perceptual hash reached, each a likeness and no claim about any file's bytes.",
     ),
   unattributed: z
     .number()
@@ -224,7 +246,12 @@ export const fingerprintOutput = {
   unmatched: z
     .array(z.object({ hash: z.string(), algorithm: z.string() }))
     .describe(
-      "The hashes asked that reached no record on any catalogue that answered. A catalogue named as unasked says nothing about them either way.",
+      "The hashes put to a catalogue that answered, which reached no record there. A catalogue named as unasked says nothing about them either way.",
+    ),
+  not_searched: z
+    .array(z.object({ hash: z.string(), algorithm: z.string() }))
+    .describe(
+      "Hashes whose algorithm no answering catalogue searches, so none was put to one. Nobody looked for them, which is no evidence about the files behind them.",
     ),
   asked: z.array(z.object({ hash: z.string(), algorithm: z.string() })),
   per_source: z.array(perSource),

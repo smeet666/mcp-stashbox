@@ -15,7 +15,7 @@
 import { z } from "zod";
 
 import { describeSources } from "../answer/sources.js";
-import { renderCard, renderRows } from "../answer/render.js";
+import { renderCard, renderMatches, renderRows, type Matches } from "../answer/render.js";
 import type { Rendered } from "../answer/text.js";
 import { MOST_IDENTIFIERS } from "../stashbox/narrowings.js";
 import { SORTS } from "../stashbox/queries.js";
@@ -240,6 +240,18 @@ const tagSearchInput = exclusiveQuery(tagSearchObject, ["name", "category_id"]);
 
 const CODE = "[invalid_input]";
 
+/**
+ * What a list of blocks decides, said in the words a caller plans a call from.
+ *
+ * The record's own fields are read on every call: a caller reading that this
+ * argument chooses what comes back would narrow a card they pay for whole, and
+ * plan the rest of their session on a page that never gets smaller. What the
+ * argument decides is the heavy blocks beside those fields, each of which costs
+ * a request of its own or hundreds of rows.
+ */
+const BLOCKS =
+  "The blocks read beside the record's own fields, which come back whatever is written here. Each name adds a block, and 'basic' asks for those fields alone.";
+
 const fingerprintEntry = strictInput({
   hash: text("hash", "one fingerprint as the catalogues store it"),
   algorithm: oneOf("algorithm", "how that hash was computed", ["MD5", "OSHASH", "PHASH"]),
@@ -258,6 +270,15 @@ const fingerprintShape = {
       MOST_IDENTIFIERS,
       `${CODE} fingerprints takes at most ${MOST_IDENTIFIERS} entries in one call. A longer list asks every configured catalogue about each of them at once, which is a run of reads rather than a lookup.`,
     ),
+  // One call answers a card per record reached, so a block written per match
+  // reaches a reader as many times as there are matches.
+  sections: severalOf("sections", "the blocks read beside the card", [
+    "basic",
+    "fingerprints",
+    "images",
+  ])
+    .optional()
+    .describe(BLOCKS),
   ...held,
 };
 
@@ -317,9 +338,28 @@ function cardTool(
     annotations: { readOnlyHint: true, openWorldHint: true },
     run: async (client, args) => {
       const read = await client.getCard(kind, String(args.id), asWritten(args));
-      return renderCard(read.data as never, kind, read.cached);
+      const card = read.data as { fields: Record<string, unknown>; notes: string[] };
+      noteUnboundedBlocks(card);
+      return renderCard(card as never, kind, read.cached);
     },
   };
+}
+
+/**
+ * What a block of many rows owes a reader beyond the rows.
+ *
+ * The studios a catalogue credits a performer on run to hundreds of rows on a
+ * long career, and the field publishes no page: the table is read whole and
+ * nothing here caps or samples it. A long list published without that sentence
+ * is a claim of completeness the data does not carry, and a reader who takes it
+ * for the head of a table looks elsewhere for the rest of what is already here.
+ */
+function noteUnboundedBlocks(card: { fields: Record<string, unknown>; notes: string[] }): void {
+  const studios = card.fields.studios;
+  if (!Array.isArray(studios) || studios.length === 0) return;
+  card.notes.push(
+    `The studios block holds ${studios.length} row(s), and they are every studio the catalogues that answered credit this performer on: the table each of them publishes carries no page of its own, so it is read whole and nothing here caps or samples it.`,
+  );
 }
 
 /**
@@ -395,123 +435,6 @@ function rowNotes(
   return notes;
 }
 
-/**
- * What a fingerprint answer states, and what each kind of hash claims.
- *
- * The distinction decides the whole answer. An MD5 and an OSHASH are computed
- * from the bytes of a file, so a match on one names the file. A PHASH states a
- * likeness, which a re-encode, a crop and another scene from one shoot all
- * satisfy: rendered under one word, a resemblance reaches a reader as an
- * identity and a caller acts on a file they never had.
- */
-function renderMatches(
-  result: {
-    matches: { scene: never; algorithm: string; hash: string; matchKind: string }[];
-    match_count: number;
-    scenes_matched: number;
-    unattributed: number;
-    unmatched: { hash: string; algorithm: string }[];
-    asked: { hash: string; algorithm: string }[];
-    perSource: {
-      source: string;
-      name?: string;
-      state: string;
-      count?: number;
-      algorithmsNotSearched?: string[];
-      reason?: string;
-    }[];
-  },
-  cached: boolean,
-): Rendered {
-  const notes: string[] = [];
-  if (result.matches.some((one) => one.matchKind === "perceptual_similarity")) {
-    notes.push(
-      "A perceptual hash states a likeness. A record it reaches may hold a re-encode, a crop, or another scene from one shoot, so a match of that kind establishes a resemblance and says nothing about the bytes of either file.",
-    );
-  }
-  if (result.matches.some((one) => one.matchKind === "exact_file")) {
-    notes.push(
-      "An MD5 and an OSHASH are computed from the bytes of a file, so a match on one of them names the file the hash was taken from, and two catalogues answering one of them describe the same bytes.",
-    );
-  }
-  const failed = result.perSource.filter((one) => one.state === "failed");
-  if (failed.length > 0) {
-    notes.push(
-      `These catalogues could not answer, so this holds no record of theirs and states nothing about what they hold: ${failed.map((one) => one.name ?? one.source).join(", ")}.`,
-    );
-  }
-  if (result.unmatched.length > 0) {
-    notes.push(
-      `These hashes reached no record on any catalogue that answered: ${result.unmatched.map((one) => `${one.algorithm} ${one.hash}`).join(", ")}. Each of them is a file the catalogues that answered do not know, and the catalogues named below as unasked say nothing about them either way.`,
-    );
-  }
-  if (result.unattributed > 0) {
-    notes.push(
-      `${result.unattributed} record(s) the catalogues answered with carry none of the hashes asked. Which hash reached them is unknown, so they stand here as no match and are counted apart.`,
-    );
-  }
-  if (result.matches.length === 0 && result.perSource.some((one) => one.state === "answered")) {
-    notes.push(
-      "The catalogues that answered hold no record carrying the fingerprints asked, so each of them looked and found nothing.",
-    );
-  }
-  if (cached) {
-    notes.push(
-      "This answer was replayed from this client's store, so no catalogue was asked for it.",
-    );
-  }
-
-  const cards = result.matches.map((one) => renderCard(one.scene, "scene"));
-  // Every catalogue asked, and every one that was not, as every other answer
-  // states them. Left to the payload, a caller reading the prose has no signal
-  // that three of five catalogues were never asked, and "no match" reads as
-  // "no catalogue holds this file".
-  const reports = result.perSource.map((one) => {
-    const who = one.name ?? one.source;
-    if (one.state === "answered") {
-      const also = [
-        one.count === undefined ? null : `${one.count} match(es)`,
-        (one.algorithmsNotSearched ?? []).length === 0
-          ? null
-          : `does not search ${(one.algorithmsNotSearched ?? []).join(", ")}, so those were never put to it`,
-      ].filter((part): part is string => part !== null);
-      return `  - ${who}: answered${also.length === 0 ? "" : `, ${also.join("; ")}`}`;
-    }
-    if (one.state === "failed") return `  - ${who}: could not answer: ${one.reason ?? ""}`;
-    return `  - ${who}: not asked: ${one.reason ?? ""}`;
-  });
-
-  const body = [
-    `${result.asked.length} fingerprint(s) asked, ${result.match_count} match(es) on ${result.scenes_matched} file(s).`,
-    `Asked: ${result.asked.map((one) => `${one.algorithm} ${one.hash}`).join(", ")}`,
-    `\nCatalogues:\n${reports.join("\n")}`,
-    ...cards.map((one, at) => {
-      const match = result.matches[at];
-      return `\n${match?.algorithm ?? ""} ${match?.matchKind === "exact_file" ? "names these bytes" : "resembles this"}:\n${one.text}`;
-    }),
-  ].join("\n");
-
-  return {
-    text: `${body}${notes.length === 0 ? "" : `\n\n${notes.map((one) => `Note: ${one}`).join("\n")}`}`,
-    structured: {
-      matches: result.matches.map((one, at) => ({
-        scene: (cards[at]?.structured as { card: unknown }).card,
-        algorithm: one.algorithm,
-        hash: one.hash,
-        match_kind: one.matchKind,
-      })),
-      match_count: result.match_count,
-      scenes_matched: result.scenes_matched,
-      unattributed: result.unattributed,
-      unmatched: result.unmatched,
-      asked: result.asked,
-      per_source: result.perSource,
-      ...(cached ? { cached: true } : {}),
-      notes,
-    },
-  };
-}
-
 export const TOOLS: Tool[] = [
   {
     name: "get_sources",
@@ -573,19 +496,25 @@ export const TOOLS: Tool[] = [
     "searchTags",
   ),
   cardTool("get_scene", "Get one scene", "scene", "scene", {
-    sections: severalOf("sections", "the blocks each answer carries", [
+    sections: severalOf("sections", "the blocks read beside the card", [
       "basic",
       "fingerprints",
       "images",
-    ]).optional(),
+    ])
+      .optional()
+      .describe(BLOCKS),
   }),
   cardTool("get_performer", "Get one performer", "performer", "performer", {
-    sections: severalOf("sections", "the blocks each answer carries", [
+    sections: severalOf("sections", "the blocks read beside the card", [
       "basic",
       "appearance",
       "images",
       "studios",
-    ]).optional(),
+    ])
+      .optional()
+      .describe(
+        `${BLOCKS} 'studios' is the whole table of studios they are credited on, which runs to hundreds of rows.`,
+      ),
   }),
   cardTool("get_studio", "Get one studio", "studio", "studio"),
   cardTool("get_tag", "Get one tag", "tag", "tag"),
@@ -600,22 +529,7 @@ export const TOOLS: Tool[] = [
     annotations: { readOnlyHint: true, openWorldHint: true },
     run: async (client, args) => {
       const read = (await client.findByFingerprint(asWritten(args))) as {
-        data: {
-          matches: { scene: never; algorithm: string; hash: string; matchKind: string }[];
-          match_count: number;
-          scenes_matched: number;
-          unattributed: number;
-          unmatched: { hash: string; algorithm: string }[];
-          asked: { hash: string; algorithm: string }[];
-          perSource: {
-            source: string;
-            name?: string;
-            state: string;
-            count?: number;
-            algorithmsNotSearched?: string[];
-            reason?: string;
-          }[];
-        };
+        data: Matches;
         cached: boolean;
       };
       return renderMatches(read.data, read.cached);

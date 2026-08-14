@@ -15,7 +15,14 @@
  * claim here is a claim with a date on it.
  */
 
-import { CAPABILITIES, INSTANCES, supports, type InstanceId } from "../stashbox/instances.js";
+import {
+  CAPABILITIES,
+  FACETED_SEARCH,
+  INSTANCES,
+  supports,
+  type InstanceId,
+  type InstanceSpec,
+} from "../stashbox/instances.js";
 
 /** One catalogue, as `get_sources` publishes it. */
 export interface SourceDescription {
@@ -54,14 +61,21 @@ export function describeSources(held: { configured: readonly InstanceId[] }): So
     identifier_prefix: spec.id,
     key_configured: held.configured.includes(spec.id),
     env_var: spec.envVar,
-    answers: CAPABILITIES.filter((capability) => supports(spec, capability)),
-    lacks: CAPABILITIES.filter((capability) => !supports(spec, capability)),
+    answers: [
+      ...CAPABILITIES.filter((capability) => supports(spec, capability)),
+      ...(spec.facetedSearch ? [FACETED_SEARCH] : []),
+    ],
+    lacks: [
+      ...CAPABILITIES.filter((capability) => !supports(spec, capability)),
+      ...(spec.facetedSearch ? [] : [FACETED_SEARCH]),
+    ],
     measured_at: spec.measuredAt,
   }));
 
   const notes: string[] = [
     "What a catalogue answers is what it was measured answering, on the day named beside it. A key held for it is a fact about this install and changes none of that.",
     "Counts from two catalogues are never added. They index corpora that overlap by an amount none of them publishes, so one thing held by both is a record on each.",
+    ...INSTANCES.filter((spec) => !spec.facetedSearch).map(limitOnItsSearches),
   ];
 
   const reachable = sources.filter((one) => one.key_configured);
@@ -72,4 +86,16 @@ export function describeSources(held: { configured: readonly InstanceId[] }): So
   }
 
   return { sources, notes };
+}
+
+/**
+ * The searches a catalogue answers, said with the limit measured on them.
+ *
+ * The table is what a caller plans a session from, so a capability listed there
+ * with its limit left to the answer of a call already cost them the call. This
+ * sentence names the searches, the form they take, and the word the same row
+ * carries among what the catalogue lacks.
+ */
+function limitOnItsSearches(spec: InstanceSpec): string {
+  return `${spec.name} answers a search of words alone: its faceted routes do not apply the narrowings written to them, so a question written with typed arguments reports it as never asked. The searches listed for it are that text form, which is why ${FACETED_SEARCH} is among what it lacks.`;
 }

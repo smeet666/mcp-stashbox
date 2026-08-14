@@ -41,15 +41,19 @@ function watching(answer?: unknown) {
 /* ------------------------------------------------- a reason that fits the call */
 
 describe("a catalogue left out is told why in the words of this call", () => {
-  it("asks the catalogue where the caller narrowed on nothing at all", async () => {
+  it("names the missing words where a catalogue's only route reads words", async () => {
     const { client } = watching();
     const read = await client.searchScenes({});
     const tpdb = read.data.perSource.find((one) => one.source === "tpdb");
-    // A question narrowed on nothing asks for a page of the whole index, which
-    // every catalogue answers. Leaving one out for a narrowing nobody wrote
-    // states something about the call that the call does not carry.
-    expect(tpdb?.state).not.toBe("absent");
+    // Its one scene route takes a term and nothing else, so a question written
+    // without one reaches it by no route at all. Reported as a failure, that
+    // reads as a catalogue that answered unreadably; it was never asked.
+    expect(tpdb?.state).toBe("absent");
+    expect(tpdb?.state).not.toBe("failed");
+    // The reason is the question carrying no words, and not a narrowing the
+    // caller never wrote.
     expect(tpdb?.reason ?? "").not.toContain("narrowed on typed arguments");
+    expect(tpdb?.reason ?? "").toContain("words");
   });
 
   it("names the narrowing where the caller did write one", async () => {
@@ -57,6 +61,57 @@ describe("a catalogue left out is told why in the words of this call", () => {
     const read = await client.searchScenes({ title: "sunset" });
     const tpdb = read.data.perSource.find((one) => one.source === "tpdb");
     expect(tpdb?.reason ?? "").toContain("narrowed on typed arguments");
+  });
+});
+
+/* -------------------------------------------------- the order rows came back in */
+
+/** One scene as a catalogue answers a faceted page with. */
+const ROW = {
+  id: UUID,
+  title: "Sunset",
+  deleted: false,
+  urls: [],
+  performers: [],
+  tags: [],
+  release_date: "1997-04-12",
+};
+
+describe("the sentence naming the order rows stand in", () => {
+  it("states the order that was asked for where the catalogue applied it", async () => {
+    const { client } = watching({ queryScenes: { count: 1, scenes: [ROW] } });
+    const read = await client.searchScenes({
+      tag_ids: [`stashdb:${UUID}`],
+      sort: "date",
+      direction: "asc",
+      sources: ["stashdb"],
+    });
+    // The rows came back sorted, and a sentence calling them the catalogue's
+    // own order describes an unsorted read of rows that carry an order.
+    expect(read.data.ordering).toContain("date");
+    expect(read.data.ordering).toContain("ascending");
+    expect(read.data.ordering).toContain("StashDB");
+    expect(read.data.ordering).not.toContain("in the order the catalogue that answered holds them");
+  });
+
+  it("says so where the catalogue that answered never received it", async () => {
+    const { client } = watching({ searchScenes: { count: 1, scenes: [ROW] } });
+    const read = await client.searchScenes({
+      query: "sunset",
+      sort: "date",
+      direction: "asc",
+      sources: ["stashdb"],
+    });
+    // A route that reads words alone takes no order. Reported as sorted, the
+    // rows would be read as a ranking the catalogue never applied.
+    expect(read.data.ordering).toContain("StashDB");
+    expect(read.data.ordering).toContain("did not receive");
+  });
+
+  it("names the catalogue's own order where nobody asked for one", async () => {
+    const { client } = watching({ queryScenes: { count: 1, scenes: [ROW] } });
+    const read = await client.searchScenes({ sources: ["stashdb"] });
+    expect(read.data.ordering).toBe("in the order the catalogue that answered holds them");
   });
 });
 

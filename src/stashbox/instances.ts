@@ -55,6 +55,19 @@ export const CAPABILITIES = [
 
 export type Capability = (typeof CAPABILITIES)[number];
 
+/**
+ * The typed narrowing, named as the table names a capability.
+ *
+ * A capability answers what a catalogue does and cannot qualify it. One
+ * catalogue takes a search of scenes and of performers and answers only the
+ * text form of either: its faceted routes accept a request carrying narrowings
+ * and answer rows that ignore them, which `facetedSearch` records. A table
+ * listing those searches with nothing beside them states a capability a caller
+ * plans a typed call against, and the limit reaches them once the call comes
+ * back. The word is declared here so the table publishes what was measured.
+ */
+export const FACETED_SEARCH = "faceted_search";
+
 export type InstanceId = "stashdb" | "tpdb" | "fansdb" | "pmv" | "javstash";
 
 export interface InstanceSpec {

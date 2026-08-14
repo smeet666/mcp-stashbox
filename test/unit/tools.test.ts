@@ -243,7 +243,7 @@ describe("each tool declares what the specification gives it", () => {
     ["get_scene", ["id", "sections", "sources", "prefer"]],
     ["get_studio", ["id", "sources", "prefer"]],
     ["get_tag", ["id", "sources", "prefer"]],
-    ["find_by_fingerprint", ["fingerprints", "sources", "prefer"]],
+    ["find_by_fingerprint", ["fingerprints", "sections", "sources", "prefer"]],
   ];
 
   for (const [name, args] of expected) {
