@@ -707,11 +707,13 @@ export class StashboxClient {
           ? `The catalogues named in this call left ${spec.name} out, so it was never asked.`
           : !supports(spec, ROUTE[kind])
             ? `${spec.name} answers no ${kind} of its own, so it was never asked.`
-            : first.reading.state !== "answered"
-              ? `${from} published nothing here, so whether it links this record to one on ${spec.name} is unknown and nothing here reached it. That is a reading that carried no link rather than a link nobody wrote.`
-              : link !== undefined
-                ? `${from} links this record to one on ${spec.name} at ${link}, and that address names the record by something this client cannot address, so nothing here reached it. The link is written; following it is what failed.`
-                : `${from} publishes no link from this record to one on ${spec.name}, so nothing here reached it. That is a link nobody wrote rather than a record ${spec.name} lacks.`;
+            : first.reading.state === "absent"
+              ? `${from} was never asked, so no link it publishes from this record was read and whether it links this record to one on ${spec.name} is unknown. That is a reading nobody performed rather than a link nobody wrote.`
+              : first.reading.state === "failed"
+                ? `${from} could not answer, so whether it links this record to one on ${spec.name} is unknown and nothing here reached it. That is a reading that carried no link rather than a link nobody wrote.`
+                : link !== undefined
+                  ? `${from} links this record to one on ${spec.name} at ${link}, and that address names the record by something this client cannot address, so nothing here reached it. The link is written; following it is what failed.`
+                  : `${from} publishes no link from this record to one on ${spec.name}, so nothing here reached it. That is a link nobody wrote rather than a record ${spec.name} lacks.`;
       readings.push({ source: spec.id, state: "absent", reason });
     }
 
@@ -1112,14 +1114,64 @@ export class StashboxClient {
       return [...by.values()].sort((one, other) => asked(one) - asked(other));
     };
 
+    // What became of each catalogue on this lookup, read once for every card
+    // built out of it.
+    const became = new Map<InstanceId, SourceReport>(
+      [...reports, ...unasked].map((one) => [one.source, one]),
+    );
+
+    /**
+     * Every catalogue the registry declares, as a reading of this card.
+     *
+     * A card carrying only the catalogues a hash reached cannot tell one that
+     * looked and holds no record here from one nobody asked, and it states no
+     * policy for a reader to check: the preference is applied whether or not
+     * the catalogue it names answered, and a fallback nobody announced reads as
+     * the preferred catalogue's own answer.
+     */
+    const readingsFor = (group: readonly string[]): Reading[] => {
+      const held = new Map(group.map((key) => [sourceOf(key), key]));
+      return INSTANCES.map((spec): Reading => {
+        const key = held.get(spec.id);
+        if (key !== undefined) {
+          const record = records.get(key) as Record<string, unknown>;
+          return {
+            source: spec.id,
+            id: String(record.id),
+            state: "answered",
+            record,
+          };
+        }
+        const report = became.get(spec.id);
+        if (report?.state === "failed") {
+          return {
+            source: spec.id,
+            state: "failed",
+            ...(report.error === undefined ? {} : { error: report.error }),
+            ...(report.reason === undefined ? {} : { reason: report.reason }),
+          };
+        }
+        if (report?.state === "answered") {
+          // It looked. What it holds stands on the cards its own records
+          // opened, and this one carries none of them, which is a reading of
+          // this card rather than a claim about what the catalogue holds.
+          return {
+            source: spec.id,
+            state: "answered",
+            reason: `${spec.name} answered the fingerprint lookup, and no record of its own stands on this card.`,
+          };
+        }
+        return {
+          source: spec.id,
+          state: "absent",
+          ...(report?.reason === undefined ? {} : { reason: report.reason }),
+        };
+      });
+    };
+
     const cardOf = (group: readonly string[], exact: boolean): FingerprintMatch => ({
       scene: consolidate({
-        readings: group.map((key) => ({
-          source: sourceOf(key),
-          id: String((records.get(key) as Record<string, unknown>).id),
-          state: "answered" as const,
-          record: records.get(key) as Record<string, unknown>,
-        })),
+        readings: readingsFor(group),
         prefer: prefer,
         scalars: SHAPES.scene.scalars,
         // A list a section carries is published only where that section was
@@ -1179,7 +1231,10 @@ export class StashboxClient {
             .filter((one) => one.matchKind === "exact_file")
             .map((one) =>
               one.scene.held_by
-                .filter((held) => held.state === "answered")
+                // A catalogue that answered and holds no record on this card
+                // carries no identifier here, and counting its silence would
+                // make one record on two cards two records.
+                .filter((held) => held.state === "answered" && held.id !== undefined)
                 .map((held) => held.id)
                 .sort()
                 .join("+"),

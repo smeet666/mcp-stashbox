@@ -109,7 +109,7 @@ function paging(kind: keyof typeof SORTS) {
     page: wholeNumber("page", "the page to read", 1, 1000)
       .optional()
       .describe(
-        "The page of each catalogue's own order. A route that reads words alone takes no page, and the answer reports it as one that catalogue did not receive.",
+        "Which page of its own order every catalogue asked is read at, counted from 1. A search written with words alone reads the first rows each text index answers with, since those routes take no page.",
       ),
     limit: wholeNumber("limit", "how many rows one page carries", 1, 100)
       .optional()
@@ -198,7 +198,7 @@ const sceneSearchShape = {
   match: oneOf("match", "how a list of identifiers is read", ["all", "any"])
     .optional()
     .describe(
-      "How the lists of identifiers are read, and the only arguments it governs: performer_ids, studio_ids, tag_ids. 'all', the default, asks for scenes carrying every identifier of a list; 'any' for scenes carrying at least one, which answers counts an order of magnitude wider. The lists narrow against each other as an intersection either way.",
+      "How performer_ids and tag_ids are read, which are the only arguments it governs. 'all', the default, asks for scenes carrying every identifier of a list; 'any' for scenes carrying at least one, which answers counts an order of magnitude wider. A scene names one studio, so studio_ids asks for any of its identifiers under both readings. The lists narrow against each other as an intersection either way.",
     ),
   ...paging("scenes"),
 };
@@ -357,7 +357,7 @@ function searchTool(
     description: `Search ${what} across every configured stash-box catalogue. Two exclusive paths: 'query' runs each catalogue's own text index, which reads the words as a union, and the typed arguments narrow as an intersection. Writing both is refused. ${SEARCH_TAIL}`,
     inputSchema: built.schema,
     declared: built.declared,
-    outputSchema: rowsOutput,
+    outputSchema: rowsOutput(what.slice(0, -1) as "scene" | "performer" | "studio" | "tag"),
     annotations: { readOnlyHint: true, openWorldHint: true },
     run: async (client, args) => {
       const read = await client[call](asWritten(args));

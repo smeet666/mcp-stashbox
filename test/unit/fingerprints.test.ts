@@ -63,6 +63,33 @@ function reading(answers: Partial<Record<string, Record<string, unknown>[][]>>) 
   });
 }
 
+/**
+ * A client one of whose catalogues refuses the exchange.
+ *
+ * A catalogue that could not answer and one nobody asked are two states a card
+ * has to keep apart, and a case needs both of them on one answer to measure it.
+ */
+function refusing(
+  answers: Partial<Record<string, Record<string, unknown>[][]>>,
+  failing: readonly string[],
+) {
+  return new StashboxClient({
+    keys: { stashdb: "a key this test never sends anywhere", tpdb: "another" },
+    transport: {
+      request: async (spec) => {
+        if (failing.includes(spec.id)) throw new Error(`${spec.name} could not be reached`);
+        return { findScenesBySceneFingerprints: answers[spec.id] ?? [] } as never;
+      },
+    },
+  });
+}
+
+/** The notes a card carries, which is where a policy applied is stated. */
+const notesOf = (match: { scene: { notes: string[] } } | undefined) => match?.scene.notes ?? [];
+
+/** Whether any note of a card says what a case is reading for. */
+const saying = (notes: readonly string[], said: string) => notes.some((one) => one.includes(said));
+
 /* ------------------------------------- the blocks a card carries per match */
 
 describe("the heavy blocks of a card a hash reached", () => {
@@ -297,10 +324,14 @@ describe("a batch mixing an algorithm one catalogue does not search", () => {
     const read = await reading(answers).findByFingerprint(asked);
     for (const one of read.data.matches) {
       if (one.matchKind !== "perceptual_similarity") continue;
+      // A catalogue stands on a card as a reading of it only where it carries
+      // the identifier it minted for the record. Named without one, it looked
+      // and holds nothing here, which is the other fact the card owes.
       const held = one.scene.held_by
-        .filter((who) => who.state === "answered")
+        .filter((who) => who.state === "answered" && who.id !== undefined)
         .map((who) => who.source);
       expect(held).not.toContain("tpdb");
+      expect(one.scene.held_by.map((who) => who.source)).toContain("tpdb");
     }
   });
 
@@ -434,5 +465,140 @@ describe("a fingerprint a record carries", () => {
     });
     const said = renderMatches(read.data, read.cached).text;
     expect(said).toContain("12 submission(s)");
+  });
+});
+
+/* ------------------------- what a card states about the catalogues behind it */
+
+describe("a card a hash reached", () => {
+  const answers = {
+    stashdb: [[scene(ELSEWHERE, "A", [{ hash: OSHASH, algorithm: "OSHASH" }])]],
+    tpdb: [[]],
+  };
+  const asked = { fingerprints: [{ hash: OSHASH, algorithm: "OSHASH" }] };
+
+  it("names every catalogue the registry declares, whatever became of it", async () => {
+    const read = await reading(answers).findByFingerprint(asked);
+    // A card holding only the catalogues that answered cannot tell one that
+    // looked and holds nothing from one nobody asked, and those are two of the
+    // three states every other answer of this server keeps apart.
+    const named = read.data.matches[0]?.scene.held_by.map((one) => one.source) ?? [];
+    expect(named).toEqual(["stashdb", "tpdb", "fansdb", "pmv", "javstash"]);
+  });
+
+  it("states the catalogues nobody asked", async () => {
+    const read = await reading(answers).findByFingerprint(asked);
+    const said = notesOf(read.data.matches[0]).find((one) => one.includes("never asked")) ?? "";
+    expect(said).toContain("fansdb");
+    // A catalogue that answered the lookup was asked, whatever it held.
+    expect(said).not.toContain("tpdb");
+  });
+
+  it("states the catalogues that could not answer", async () => {
+    const read = await refusing(answers, ["tpdb"]).findByFingerprint(asked);
+    const said =
+      notesOf(read.data.matches[0]).find((one) => one.includes("could not answer")) ?? "";
+    expect(said).toContain("tpdb");
+  });
+
+  it("names a catalogue that looked and holds no record here as one that answered", async () => {
+    const read = await reading(answers).findByFingerprint(asked);
+    const tpdb = read.data.matches[0]?.scene.held_by.find((one) => one.source === "tpdb");
+    expect(tpdb?.state).toBe("answered");
+  });
+
+  it("announces the fallback where the catalogue it preferred was never asked", async () => {
+    const read = await reading(answers).findByFingerprint({ ...asked, prefer: ["fansdb"] });
+    // A fallback performed in silence reads as the preferred catalogue's own
+    // answer, and every value on this card was read from another.
+    const said =
+      notesOf(read.data.matches[0]).find((one) => one.includes("preferred is fansdb")) ?? "";
+    expect(said).toContain("never asked");
+    expect(said).toContain("stashdb");
+  });
+
+  it("announces the fallback where the catalogue it preferred could not answer", async () => {
+    const read = await refusing(answers, ["tpdb"]).findByFingerprint({
+      ...asked,
+      prefer: ["tpdb", "stashdb"],
+    });
+    const said =
+      notesOf(read.data.matches[0]).find((one) => one.includes("preferred is tpdb")) ?? "";
+    expect(said).toContain("could not answer");
+  });
+
+  it("announces no fallback where the catalogue it preferred answered", async () => {
+    const read = await reading(answers).findByFingerprint({ ...asked, prefer: ["stashdb"] });
+    expect(saying(notesOf(read.data.matches[0]), "this call preferred")).toBe(false);
+  });
+
+  it("states the policy applied, whichever catalogues answered under it", async () => {
+    const read = await reading(answers).findByFingerprint({ ...asked, prefer: ["fansdb"] });
+    expect(read.data.matches[0]?.scene.preferred).toEqual(["fansdb"]);
+    expect(read.data.matches[0]?.scene.read_from).toEqual(["stashdb"]);
+  });
+});
+
+/* --------------------------- one record an exact and a perceptual hash reached */
+
+describe("one record two kinds of hash reached", () => {
+  const answers = {
+    stashdb: [
+      [scene(ELSEWHERE, "A", [{ hash: OSHASH, algorithm: "OSHASH" }])],
+      [scene(ELSEWHERE, "A", [{ hash: PHASH, algorithm: "PHASH" }])],
+    ],
+    tpdb: [[], []],
+  };
+  const asked = {
+    fingerprints: [
+      { hash: OSHASH, algorithm: "OSHASH" },
+      { hash: PHASH, algorithm: "PHASH" },
+    ],
+  };
+
+  it("stands as a card per kind, since the two make different claims about it", async () => {
+    const read = await reading(answers).findByFingerprint(asked);
+    expect(read.data.matches.map((one) => one.matchKind)).toEqual([
+      "exact_file",
+      "perceptual_similarity",
+    ]);
+    expect(read.data.match_count).toBe(2);
+    expect(read.data.records_named).toBe(1);
+  });
+
+  it("says the record stands on two cards, so the cards are no count of records", async () => {
+    const read = await reading(answers).findByFingerprint(asked);
+    const said = renderMatches(read.data, read.cached).text;
+    expect(said).toContain("stand here twice");
+    expect(said).toContain(`stashdb:${ELSEWHERE}`);
+  });
+
+  it("says nothing of the kind where each record stands on one card", async () => {
+    const read = await reading({
+      stashdb: [[scene(ELSEWHERE, "A", [{ hash: OSHASH, algorithm: "OSHASH" }])]],
+      tpdb: [[]],
+    }).findByFingerprint({ fingerprints: [{ hash: OSHASH, algorithm: "OSHASH" }] });
+    expect(renderMatches(read.data, read.cached).text).not.toContain("stand here twice");
+  });
+
+  it("never says two records stand one card each while each of them stands twice", async () => {
+    const read = await reading({
+      stashdb: [
+        [
+          scene(CHAPTER_THREE, "Being Riley Chapter 3", [{ hash: OSHASH, algorithm: "OSHASH" }]),
+          scene(CHAPTER_TWO, "Being Riley Chapter 2", [{ hash: OSHASH, algorithm: "OSHASH" }]),
+        ],
+        [
+          scene(CHAPTER_THREE, "Being Riley Chapter 3", [{ hash: PHASH, algorithm: "PHASH" }]),
+          scene(CHAPTER_TWO, "Being Riley Chapter 2", [{ hash: PHASH, algorithm: "PHASH" }]),
+        ],
+      ],
+      tpdb: [[], []],
+    }).findByFingerprint(asked);
+    const said = renderMatches(read.data, read.cached).text;
+    expect(said).toContain("reached more than one record");
+    // Four cards stand for two records, and a sentence saying each record
+    // stands once contradicts what the reader is looking at.
+    expect(said).not.toContain("one card each");
   });
 });

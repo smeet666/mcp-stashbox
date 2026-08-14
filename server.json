@@ -19,12 +19,12 @@
     "url": "https://github.com/smeet666/mcp-stashbox",
     "source": "github"
   },
-  "version": "0.10.0",
+  "version": "1.0.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "mcp-stashbox",
-      "version": "0.10.0",
+      "version": "1.0.0",
       "transport": {
         "type": "stdio"
       },
@@ -94,7 +94,7 @@
     {
       "registryType": "mcpb",
       "identifier": "https://github.com/smeet666/mcp-stashbox/releases/download/v0.8.0/mcp-stashbox-0.8.0.mcpb",
-      "version": "0.10.0",
+      "version": "1.0.0",
       "fileSha256": "0000000000000000000000000000000000000000000000000000000000000000",
       "transport": {
         "type": "stdio"

@@ -447,6 +447,16 @@ export function sceneQueryInput(spec: InstanceSpec, narrowing: SceneNarrowing): 
     unreceived,
     "tag_ids",
   );
+  // The reading of a list travels on the performer and tag criteria alone: a
+  // scene carries one studio, so a list of them is read as a union whatever
+  // was written. A request carrying neither criterion reaches the catalogue
+  // with nothing that reading decided, and the answer names it among what the
+  // route did not receive rather than accepting it in silence.
+  const decided = ["performers", "tags"].some((name) => {
+    const criterion = input[name];
+    return typeof criterion === "object" && criterion !== null && "modifier" in criterion;
+  });
+  if (narrowing.match !== undefined && !decided) unreceived.push("match");
   ordering(spec, input, narrowing.sort, narrowing.direction, "date");
   input.page = narrowing.page;
   input.per_page = narrowing.limit;

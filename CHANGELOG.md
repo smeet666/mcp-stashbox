@@ -5,6 +5,47 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] - 2026-08-14
+
+The interface is settled: ten tools, four kinds of record, six error codes, and
+one rule the whole thing answers to — nothing is stated that the data does not
+carry. A catalogue that failed, one that was never asked and one that looked and
+found nothing stay three different facts, per catalogue, in every answer.
+
+Six rounds of adversarial use decided this number. They found thirty-five faults
+between them, every one a version of the same fault: something the data did not
+carry, said anyway. The last round found two, both in one tool, and the round
+before it four. What made the rate fall was not the fixes but three mechanisms
+that make a whole class of them fail on their own — the narrowings suite that
+compares a narrowed answer against an unnarrowed one, the capability suite that
+reads all five catalogues by introspection rather than skipping the three this
+install holds no key for, and one record per catalogue holding what the caller
+wrote beside what the request carried.
+
+### Fixed
+
+- A fingerprint card named the catalogues that published a value and none of the
+  ones that did not, so a preference applied by fallback was applied in silence.
+  Every card states the policy, which catalogues failed and which were never
+  asked, whichever route built it.
+- `match_count` declared it counted records and counted cards. A record reached
+  by an exact hash and by a perceptual one stands as two cards, since the two
+  claim different things about it, and the answer says so and names the records
+  it counted twice. `records_named` counts each file once.
+- A catalogue with no key was named as the reason a link went unread, where the
+  truth is that nobody asked it and what it publishes is unknown.
+- `match` written with no list for it to govern decided nothing and went
+  unreported. It governs `performer_ids` and `tag_ids`; a studio list is read as
+  "any" whatever it says, which the argument now states.
+
+### Changed
+
+- Every search declares the rows it answers with, per kind, so a client reading
+  the schema sees what a row carries. The record routes no longer declare a
+  per-catalogue report they never emit: a card carries that on `held_by`.
+- `index_total` says it counts the question the catalogue received, `window` says
+  what it is, and `page` no longer promises a disclosure no call produces.
+
 ## [0.10.0] - 2026-08-14
 
 A round of adversarial use aimed at the combinations rather than the surfaces:
