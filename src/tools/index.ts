@@ -17,6 +17,7 @@ import { z } from "zod";
 import { describeSources } from "../answer/sources.js";
 import { renderCard, renderMatches, renderRows, type Matches } from "../answer/render.js";
 import type { Rendered } from "../answer/text.js";
+import { instanceById } from "../stashbox/instances.js";
 import { MOST_IDENTIFIERS } from "../stashbox/narrowings.js";
 import { SORTS } from "../stashbox/queries.js";
 import {
@@ -113,7 +114,7 @@ function paging(kind: keyof typeof SORTS) {
     limit: wholeNumber("limit", "how many rows one page carries", 1, 100)
       .optional()
       .describe(
-        "How many rows one page of one catalogue carries. An answer holding several catalogues carries up to this many from each of them, since their pages are their own and nothing here interleaves them into one.",
+        "How many rows one page of one catalogue carries. An answer holding several carries up to this many from each: their pages are their own and nothing here interleaves them into one.",
       ),
     sources: catalogues("sources").optional(),
   };
@@ -124,12 +125,25 @@ const held = {
   prefer: catalogues("prefer")
     .optional()
     .describe(
-      "The order the catalogues are preferred in where they disagree on a field. Left out, the order the registry declares stands. Every card states the order that was applied.",
+      "The order the catalogues are preferred in where they disagree on a field. Left out, the registry's own order stands, and every card states the order applied.",
     ),
 };
 
 const WORDS =
   "Words for the catalogue's own text index, which reads them as a union. It is exclusive with the typed arguments, which narrow as an intersection.";
+
+/**
+ * A narrowing every faceted input declares and no route reads.
+ *
+ * Measured on 2026-08-14: written into a request, each of these answers the
+ * count, the page and the first row of a request carrying no narrowing at all,
+ * while its siblings cut the count to a fraction of the corpus. The answer
+ * names it after the fact as a narrowing the route did not receive, and a
+ * caller reads the argument list before they call, so the declaration says it
+ * too.
+ */
+const APPLIED_BY_NOBODY =
+  "No catalogue's faceted route applies it, though every faceted input declares it: a request carrying it answers as wide as one carrying none, so it is never sent and the answer names it as a narrowing nobody received.";
 
 /**
  * The readings a performer's gender and ethnicity are recorded under.
@@ -168,7 +182,9 @@ const sceneSearchShape = {
   query: text("query", "a string of words").optional().describe(WORDS),
   title: text("title", "words a title carries").optional(),
   code: text("code", "the studio's own reference for the release").optional(),
-  alias: text("alias", "another title the release is known by").optional(),
+  alias: text("alias", "another title the release is known by")
+    .optional()
+    .describe(APPLIED_BY_NOBODY),
   date: calendarDay("date", "the release date to compare against").optional(),
   date_compare: oneOf("date_compare", "how the date is read", ["on", "before", "after"])
     .optional()
@@ -179,7 +195,11 @@ const sceneSearchShape = {
   studio_ids: identifiers("studio_ids").optional(),
   parent_studio_id: identifier("parent_studio_id").optional(),
   tag_ids: identifiers("tag_ids").optional(),
-  match: oneOf("match", "how a list of identifiers is read", ["all", "any"]).optional(),
+  match: oneOf("match", "how a list of identifiers is read", ["all", "any"])
+    .optional()
+    .describe(
+      "How the lists of identifiers are read, and the only arguments it governs: performer_ids, studio_ids, tag_ids. 'all', the default, asks for scenes carrying every identifier of a list; 'any' for scenes carrying at least one, which answers counts an order of magnitude wider. The lists narrow against each other as an intersection either way.",
+    ),
   ...paging("scenes"),
 };
 
@@ -203,7 +223,7 @@ const sceneSearchInput = datedTogether(
 const performerSearchShape = {
   query: text("query", "a string of words").optional().describe(WORDS),
   name: text("name", "words a name carries").optional(),
-  alias: text("alias", "another name they are known by").optional(),
+  alias: text("alias", "another name they are known by").optional().describe(APPLIED_BY_NOBODY),
   disambiguation: text(
     "disambiguation",
     "the text telling two people of one name apart",
@@ -217,18 +237,12 @@ const performerSearchShape = {
   country: countryCode("country").optional(),
   ethnicity: oneOf("ethnicity", "the ethnicity the catalogue records", ETHNICITIES).optional(),
   birth_year: wholeNumber("birth_year", "the year of birth", 1800, 2200).optional(),
-  career_start_year: wholeNumber(
-    "career_start_year",
-    "the year a career opened",
-    1800,
-    2200,
-  ).optional(),
-  career_end_year: wholeNumber(
-    "career_end_year",
-    "the year a career closed",
-    1800,
-    2200,
-  ).optional(),
+  career_start_year: wholeNumber("career_start_year", "the year a career opened", 1800, 2200)
+    .optional()
+    .describe(APPLIED_BY_NOBODY),
+  career_end_year: wholeNumber("career_end_year", "the year a career closed", 1800, 2200)
+    .optional()
+    .describe(APPLIED_BY_NOBODY),
   performed_with: identifier("performed_with").optional(),
   studio_id: identifier("studio_id").optional(),
   ...paging("performers"),
@@ -322,7 +336,7 @@ const fingerprintShape = {
 const fingerprintInput = strictInput(fingerprintShape);
 
 const SEARCH_TAIL =
-  "A catalogue that failed, one never asked and one that looked and found nothing are three different states, and the answer says which is which per catalogue. Counts belong to the catalogue that published them and are never added.";
+  "The answer says per catalogue which of three it met: a failure, a catalogue nobody asked, and an emptiness it established. Counts are never added across them.";
 
 const CARD_TAIL =
   "The answer is one card, read on every catalogue that holds the record and reached by the link each of them publishes to the same record elsewhere. Every value names the catalogues that said it, and where they disagree the reading nobody preferred is published beside the one that won. Name 'sources' to read one catalogue alone.";
@@ -347,13 +361,12 @@ function searchTool(
     annotations: { readOnlyHint: true, openWorldHint: true },
     run: async (client, args) => {
       const read = await client[call](asWritten(args));
-      const rows = read.data as never as Parameters<typeof renderRows>[0] & { notes?: string[] };
-      return renderRows(
-        rows,
-        what.slice(0, -1),
-        rowNotes(rows, what.slice(0, -1), read.cached),
-        read.cached,
-      );
+      const answered = read.data as never as Parameters<typeof renderRows>[0] & {
+        notes?: string[];
+      };
+      const kind = what.slice(0, -1);
+      const rows = { ...answered, rows: answered.rows.map((row) => asRow(kind, row as never)) };
+      return renderRows(rows, kind, rowNotes(rows, kind, read.cached), read.cached);
     },
   };
 }
@@ -383,6 +396,57 @@ function cardTool(
 }
 
 /**
+ * The fields a record route answers with and a row leaves to it.
+ *
+ * A search answers with identifiers and a record route answers with the record.
+ * A row carrying the whole card spends a caller's page on the answer rather
+ * than on the question: measured on 2026-08-14 over twenty scenes read from one
+ * catalogue, the synopses, the link lists and the editing stamps came to a
+ * fifth of the payload, and none of them separates two releases. What stays is
+ * what a row is read for, which is picking one record out of twenty and calling
+ * the route that reads it whole.
+ */
+const LEFT_TO_THE_CARD: Record<string, readonly string[]> = {
+  scene: ["details", "urls", "created", "updated", "director", "productionDate"],
+  performer: ["urls", "created", "updated"],
+  studio: ["urls", "images"],
+  tag: [],
+};
+
+/**
+ * One row, cut to what names the record.
+ *
+ * Anything the reading puts on a record travels unless it is named above, so a
+ * field added to a record reaches a caller until somebody decides it does not
+ * belong on a row. The reverse default would drop the sentence a reading writes
+ * about what it could not read, which is the half of an answer this server
+ * exists to keep.
+ */
+function asRow(kind: string, row: Record<string, unknown>): Record<string, unknown> {
+  const left = LEFT_TO_THE_CARD[kind] ?? [];
+  const held: Record<string, unknown> = {};
+  for (const [name, value] of Object.entries(row)) {
+    if (left.includes(name)) continue;
+    held[name] = name === "tags" && Array.isArray(value) ? value.map(taggedAs) : value;
+  }
+  return held;
+}
+
+/**
+ * A tag as a row names one.
+ *
+ * The identifier travels with the name because the next call takes it and
+ * refuses the name. What the catalogue filed the tag under and what its record
+ * says of itself are facts about the tag rather than about the record this row
+ * is, they are repeated on every tag of every row, and get_tag answers them.
+ */
+function taggedAs(tag: unknown): unknown {
+  const one = tag as { id?: unknown; name?: unknown };
+  if (typeof one !== "object" || one === null) return tag;
+  return { id: one.id, name: one.name };
+}
+
+/**
  * What a block of many rows owes a reader beyond the rows.
  *
  * The studios a catalogue credits a performer on run to hundreds of rows on a
@@ -394,9 +458,27 @@ function cardTool(
 function noteUnboundedBlocks(card: { fields: Record<string, unknown>; notes: string[] }): void {
   const studios = card.fields.studios;
   if (!Array.isArray(studios) || studios.length === 0) return;
+  const publishing = named(publishersOf(studios));
   card.notes.push(
-    `The studios block holds ${studios.length} row(s), and they are every studio the catalogues that answered credit this performer on: the table each of them publishes carries no page of its own, so it is read whole and nothing here caps or samples it.`,
+    `The studios block holds ${studios.length} row(s), published by ${publishing}, and they are every studio ${publishing} credits this performer on: the table it publishes carries no page of its own, so it is read whole and nothing here caps or samples it. A catalogue that answered without publishing this table contributed no row to it.`,
   );
+}
+
+/** The catalogues that published at least one entry of a united list. */
+function publishersOf(entries: readonly unknown[]): string[] {
+  const sources = new Set<string>();
+  for (const entry of entries) {
+    const published = (entry as { published_by?: unknown }).published_by;
+    if (!Array.isArray(published)) continue;
+    for (const source of published) if (typeof source === "string") sources.add(source);
+  }
+  return [...sources];
+}
+
+/** The catalogues, in the words they call themselves, as a reader reads a list. */
+function named(sources: readonly string[]): string {
+  const spelt = sources.map((source) => instanceById(source)?.name ?? source);
+  return spelt.length === 0 ? "no catalogue" : spelt.join(", ");
 }
 
 /**

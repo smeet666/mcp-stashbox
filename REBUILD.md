@@ -138,6 +138,13 @@ For a scene there is a second join, stronger than a link: an **MD5 or an
 OSHASH** names the bytes of a file, so two records carrying one exact hash
 describe one file. A PHASH states a likeness and joins nothing.
 
+One record is reached by several hashes at once, and by a different set of them
+on each catalogue that holds it. So a match carries `matched_by[]`, one entry
+per hash that reached it naming the catalogues it reached it on, rather than one
+hash and one algorithm: a single pair would have to name one of the hashes and
+drop the rest, and the dropped ones are the evidence that the record is the file
+asked about.
+
 ## The surface
 
 ### The shapes, written once and referenced
@@ -147,8 +154,36 @@ inlining it per tool. Inlining is what made the tool list cost about 25,000
 tokens per session, more than half of it the same description strings repeated.
 
 **`Row`** — what a search answers with. `id` written `instance:uuid`, `source`,
-`source_url`, `status` (`established` | `merged` | `deleted`), and the three to
-five fields that identify the record. Never consolidated.
+`source_url`, `retrieved_at`, `status` (`established` | `merged` | `deleted`),
+whatever the marker adds where a record was folded or withdrawn, and the fields
+that identify the record. Never consolidated.
+
+A row names a record and the record route reads it. Handing back the whole card
+per row spends the caller's page on the answer rather than on the question, and
+it is spent twenty times over. Measured on 2026-08-14, twenty scene rows read
+from one catalogue: 71,594 bytes of payload, of which the synopses, the link
+lists and the editing stamps are 15,311, and none of the four separates two
+releases. Those are read off `get_scene`, and the row carries what a caller
+picks one record out of twenty by:
+
+| Row       | Beyond the fields above                                                                                         | Left to the record route                                          |
+| --------- | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| scene     | `title` `code` `studio` `release_date` `duration_seconds` `performers[]` `tags[]`                               | `details` `urls` `director` `production_date` `created` `updated` |
+| performer | `name` `disambiguation` `aliases[]` `gender` `country` `birth_date` `death_date` the career years `scene_count` | `urls` `created` `updated`                                        |
+| studio    | `name` `aliases[]` `parent` `scene_count`                                                                       | `urls` `images`                                                   |
+| tag       | `name` `description` `aliases[]` `category`                                                                     | nothing: the record is this short                                 |
+
+`duration_seconds` costs four characters and is what separates two cuts of one
+title, so it is on a scene row although it names nothing. A tag on a scene row
+carries its `id` and its `name`: the identifier travels with the name because
+the next call takes it and refuses the name, and what the catalogue filed the
+tag under is a fact about the tag that `get_tag` answers.
+
+Measured after the cut, the same twenty rows on the wire: a scene search 74,533
+bytes where it was 114,000, a performer search 19,135 where it was 28,582, a
+studio search 15,409 where it was 25,214, a tag search unchanged at 26,067. What
+is left of the scene page is its tags, which the row carries by this table, and
+a caller who wants a cheaper page writes `limit`.
 
 **`Card`** — what a record route answers with, consolidated across the
 catalogues that hold the record.
@@ -166,18 +201,18 @@ not asked where it was not.
 
 ### The ten tools
 
-| Tool                  | Arguments                                                                                                                                                                                                                                   | Answers with                                                                                                                                                              |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `get_sources`         | none                                                                                                                                                                                                                                        | `sources[]`: `id`, `name`, `web_url`, `key_configured`, `env_var`, `answers[]`, `publishes[]`, `lacks[]`. Reaches no catalogue.                                           |
-| `search_scenes`       | `query` (exclusive) · `title` `code` `alias` · `date` + `date_compare` (`on`\|`before`\|`after`) · `performer_ids[]` `studio_ids[]` `parent_studio_id` `tag_ids[]` · `match` (`all`\|`any`) · `sort` `direction` `page` `limit` `sources[]` | `results[]` of `Row` + `title` `studio` `date` `code` `performers[]` `tags[]` · `per_source[]` · `window` · `ordering` · `notes[]`                                        |
-| `search_performers`   | `query` (exclusive) · `name` `alias` `disambiguation` · `gender` `country` `ethnicity` · `birth_year` `career_start_year` `career_end_year` · `performed_with` `studio_id` · `sort` `direction` `page` `limit` `sources[]`                  | `results[]` of `Row` + `name` `disambiguation` `aliases[]` `gender` `country` `birth_date` · `per_source[]` · `window` · `ordering` · `notes[]`                           |
-| `search_studios`      | `query` (exclusive) · `name` · `parent_id` `has_parent` · `sort` `direction` `page` `limit` `sources[]`                                                                                                                                     | `results[]` of `Row` + `name` `parent` · `per_source[]` · `window` · `notes[]`                                                                                            |
-| `search_tags`         | `query` (exclusive) · `name` · `category_id` · `sort` `direction` `page` `limit` `sources[]`                                                                                                                                                | `results[]` of `Row` + `name` `category` `description` · `per_source[]` · `window` · `notes[]`                                                                            |
-| `get_scene`           | `id` · `sections[]` (`basic`\|`fingerprints`\|`images`) · `sources[]` · `prefer[]`                                                                                                                                                          | `Card`: `title` `code` `date` `duration` `director` `studio` `performers[]` `tags[]` `urls[]`, and the sections asked for                                                 |
-| `get_performer`       | `id` · `sections[]` (`basic`\|`appearance`\|`images`\|`studios`) · `sources[]` · `prefer[]`                                                                                                                                                 | `Card`: `name` `disambiguation` `aliases[]` `gender` `country` `birth_date` `death_date` `career` `urls[]`, the sections asked for, and `scene_count[]` **per catalogue** |
-| `get_studio`          | `id` · `sources[]` · `prefer[]`                                                                                                                                                                                                             | `Card`: `name` `parent` `aliases[]` `urls[]`. Measured: a studio declares no count of the scenes indexed on it and no list of open edits, so neither is published         |
-| `get_tag`             | `id` · `sources[]` · `prefer[]`                                                                                                                                                                                                             | `Card`: `name` `aliases[]` `category` `description`                                                                                                                       |
-| `find_by_fingerprint` | `fingerprints[]` (`{hash, algorithm}`, 1 to 25) · `sections[]` (`basic`\|`fingerprints`\|`images`) · `sources[]` · `prefer[]`                                                                                                               | `matches[]` of `{ scene: Card, algorithm, match_kind, fingerprint }` · `asked[]` · `unattributed` · `per_source[]`                                                        |
+| Tool                  | Arguments                                                                                                                                                                                                                                                   | Answers with                                                                                                                                                                                |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `get_sources`         | none                                                                                                                                                                                                                                                        | `sources[]`: `id`, `name`, `web_url`, `identifier_prefix`, `key_configured`, `env_var`, `answers[]`, `lacks[]`, `evidence`, `measured_at`, and `notes[]`. Reaches no catalogue.             |
+| `search_scenes`       | `query` (exclusive) · `title` `code` `alias` · `date` + `date_compare` (`on`\|`before`\|`after`) · `performer_ids[]` `studio_ids[]` `parent_studio_id` `tag_ids[]` · `match` (`all`\|`any`, standing `all`) · `sort` `direction` `page` `limit` `sources[]` | `results[]` of the scene `Row` · `result_count` · `per_source[]` · `window` · `ordering` · `notes[]`                                                                                        |
+| `search_performers`   | `query` (exclusive) · `name` `alias` `disambiguation` · `gender` `country` `ethnicity` · `birth_year` `career_start_year` `career_end_year` · `performed_with` `studio_id` · `sort` `direction` `page` `limit` `sources[]`                                  | `results[]` of the performer `Row` · `result_count` · `per_source[]` · `window` · `ordering` · `notes[]`                                                                                    |
+| `search_studios`      | `query` (exclusive) · `name` · `parent_id` `has_parent` · `sort` `direction` `page` `limit` `sources[]`                                                                                                                                                     | `results[]` of the studio `Row` · `result_count` · `per_source[]` · `window` · `ordering` · `notes[]`                                                                                       |
+| `search_tags`         | `query` (exclusive) · `name` · `category_id` · `sort` `direction` `page` `limit` `sources[]`                                                                                                                                                                | `results[]` of the tag `Row` · `result_count` · `per_source[]` · `window` · `ordering` · `notes[]`                                                                                          |
+| `get_scene`           | `id` · `sections[]` (`basic`\|`fingerprints`\|`images`) · `sources[]` · `prefer[]`                                                                                                                                                                          | `Card`: `title` `details` `code` `releaseDate` `productionDate` `durationSeconds` `director` `studio` `performers[]` `tags[]` `urls[]`, and the sections asked for                          |
+| `get_performer`       | `id` · `sections[]` (`basic`\|`appearance`\|`images`\|`studios`) · `sources[]` · `prefer[]`                                                                                                                                                                 | `Card`: `name` `disambiguation` `aliases[]` `gender` `country` `birth_date` `death_date` `career` `urls[]`, the sections asked for, and `counts.scene_count[]`, one entry **per catalogue** |
+| `get_studio`          | `id` · `sources[]` · `prefer[]`                                                                                                                                                                                                                             | `Card`: `name` `parent` `aliases[]` `urls[]`. Measured: a studio declares no count of the scenes indexed on it and no list of open edits, so neither is published                           |
+| `get_tag`             | `id` · `sources[]` · `prefer[]`                                                                                                                                                                                                                             | `Card`: `name` `aliases[]` `category` `description`                                                                                                                                         |
+| `find_by_fingerprint` | `fingerprints[]` (`{hash, algorithm}`, 1 to 25) · `sections[]` (`basic`\|`fingerprints`\|`images`) · `sources[]` · `prefer[]`                                                                                                                               | `matches[]` of `{ scene: Card, matched_by[], match_kind }` · `match_count` `records_named` `resemblances` `unattributed` · `unmatched[]` `not_searched[]` `asked[]` · `per_source[]`        |
 
 ### The four rules the surface applies
 
@@ -199,6 +234,34 @@ of rows would run one request per row per catalogue.
 `id` → `get_scene`. A performer's scenes are `search_scenes(performer_ids)`,
 which pages and filters, so no record route carries a block that runs a search
 of its own.
+
+### `match`, and the argument list saying what it decides
+
+`match` chooses the modifier a list of identifiers is sent under: `all` writes
+`INCLUDES_ALL` and `any` writes `INCLUDES`, on `performer_ids`, `studio_ids` and
+`tag_ids`, and on nothing else. It leaves the intersection between one list and
+another alone. **The standing reading is `all`**, and one measured call answers
+1,282 rows of an index under it where `any` answers 22,074 of the same index.
+
+An argument deciding a difference of that size is one a caller has to be able to
+read about before they call, so it is described in the declaration with its
+standing reading named. A description a caller reads once, at the opening of a
+session, is the only place that reaches them in time.
+
+### The narrowings every input declares and no route applies
+
+Measured on 2026-08-14 against StashDB: `queryScenes` written with `alias`, and
+`queryPerformers` written with `alias`, `career_start_year` or
+`career_end_year`, each answer the count, the page and the first row of a
+request carrying no narrowing at all, while their siblings cut the count to a
+fraction of the corpus. The field is in the schema and the resolver reads none
+of it.
+
+Two halves are owed for that, and one without the other is worth little. The
+answer names the argument as a narrowing the route did not receive, and a page
+narrowed on nothing is never handed over as the answer to it. **And the
+declaration says so too**, because a caller reads the argument list before they
+call and would otherwise spend a call to learn it.
 
 ### Preference, where two catalogues disagree
 

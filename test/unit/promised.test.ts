@@ -197,6 +197,25 @@ describe("a block of many rows says what it holds", () => {
     expect(rendered.text).toContain("300");
   });
 
+  it("names the catalogues that published the block, not every one that answered", async () => {
+    // One catalogue publishes this table and another answers the same record
+    // without it. A note crediting the block to the catalogues that answered
+    // credits it to one that lists it among what it lacks.
+    const { client } = watching(performerHolding(4));
+    const read = tool("get_performer").inputSchema.parse({
+      id: `stashdb:${UUID}`,
+      sections: ["basic", "studios"],
+      sources: ["stashdb"],
+    });
+    const rendered = await tool("get_performer").run(client as never, read as never);
+
+    const notes = (rendered.structured as { card: { notes: string[] } }).card.notes.join(" ");
+    expect(notes).toContain("StashDB");
+    expect(notes, "the note credits the block to every catalogue that answered").not.toContain(
+      "the catalogues that answered credit",
+    );
+  });
+
   it("says nothing of a block the call never asked for", async () => {
     const { client } = watching(performerHolding(0));
     const read = tool("get_performer").inputSchema.parse({ id: `stashdb:${UUID}` });

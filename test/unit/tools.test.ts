@@ -258,6 +258,54 @@ describe("each tool declares what the specification gives it", () => {
   });
 });
 
+/* ------------------------------------- what a refusal says a tool does take */
+
+describe("a refusal names what the tool takes instead", () => {
+  it("says a tool taking nothing takes nothing, rather than listing an emptiness", () => {
+    // A sentence that ends "It takes: ." lists nothing and reads as a list
+    // somebody forgot to fill in, which sends a caller looking for the
+    // arguments this tool would take.
+    const said = refusal(tool("get_sources").inputSchema, { limit: 3 });
+    expect(said).toContain("[invalid_input]");
+    expect(said).toContain("limit");
+    expect(said).not.toContain("It takes: .");
+    expect(said).toContain("takes no argument at all");
+  });
+
+  it("enumerates what a tool with arguments takes", () => {
+    const said = refusal(tool("search_scenes").inputSchema, { nonsense: 1 });
+    expect(said).toContain("It takes: query, title");
+  });
+});
+
+/* --------------------------------------- what a caller reads before calling */
+
+describe("an argument whose default decides the answer says so", () => {
+  const describedBy = (name: string, argument: string) => {
+    const shape = (tool(name).declared as z.ZodObject<z.ZodRawShape>).shape;
+    return (shape[argument] as { description?: string } | undefined)?.description ?? "";
+  };
+
+  it("describes match, names its default, and names the arguments it governs", () => {
+    // Measured: one call answers 1282 rows of an index under 'all' and 22074
+    // under 'any'. A caller who cannot read which of the two stands by default
+    // plans a session on a number the argument decided for them.
+    const said = describedBy("search_scenes", "match");
+    expect(said, "match is published with no description at all").not.toBe("");
+    expect(said).toContain("all");
+    expect(said).toContain("any");
+    expect(said).toContain("default");
+    for (const governed of ["performer_ids", "studio_ids", "tag_ids"]) {
+      expect(said, `match says nothing about ${governed}`).toContain(governed);
+    }
+  });
+
+  it("keeps the paging arguments beside it described", () => {
+    expect(describedBy("search_scenes", "page")).not.toBe("");
+    expect(describedBy("search_scenes", "limit")).not.toBe("");
+  });
+});
+
 /* --------------------------------------------------- what a schema costs */
 
 describe("the declaration the protocol enforces is the one it publishes", () => {

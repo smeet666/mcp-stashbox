@@ -229,7 +229,14 @@ export function strictInput<Shape extends z.ZodRawShape>(shape: Shape): z.ZodObj
   }) as z.ZodObject<Shape>;
 }
 
-/** What a caller reads when they wrote an argument this tool does not declare. */
+/**
+ * What a caller reads when they wrote an argument this tool does not declare.
+ *
+ * A tool that declares nothing is refused in its own words. Enumerating an
+ * empty list writes a sentence that names no argument at all, and a caller
+ * reads it as a list somebody left unfilled and goes looking for the arguments
+ * this tool takes.
+ */
 function unknownArgumentMessage(unknown: readonly string[], declared: readonly string[]): string {
   const named = unknown
     .map((key) => {
@@ -237,7 +244,11 @@ function unknownArgumentMessage(unknown: readonly string[], declared: readonly s
       return near === undefined ? key : `${key} (did you mean ${near}?)`;
     })
     .join(", ");
-  return `${CODE} This tool does not take ${named}. It takes: ${declared.join(", ")}. An argument that is read and dropped produces an answer computed without it, which reads as the answer to the question that was asked.`;
+  const instead =
+    declared.length === 0
+      ? "It takes no argument at all, and answers the same thing every time it is called."
+      : `It takes: ${declared.join(", ")}.`;
+  return `${CODE} This tool does not take ${named}. ${instead} An argument that is read and dropped produces an answer computed without it, which reads as the answer to the question that was asked.`;
 }
 
 /**

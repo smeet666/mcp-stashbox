@@ -491,6 +491,14 @@ export function renderMatches(result: Matches, cached: boolean): Rendered {
       `${result.unattributed} record(s) the catalogues answered with carry none of the hashes asked. Which hash reached them is unknown, so they stand here as no match and are counted apart.`,
     );
   }
+  // A lookup nobody performed and a lookup that found nothing read alike once
+  // the counts are the only thing on the page, and only the second is evidence
+  // about the files behind the hashes.
+  if (!result.perSource.some((one) => one.state === "answered")) {
+    notes.push(
+      "No catalogue answered this question, so its emptiness is the question reaching none of them and is no evidence that what you asked about does not exist.",
+    );
+  }
   if (result.unmatched.length > 0 && result.matches.length === 0) {
     notes.push(
       "The catalogues that answered hold no record carrying the hashes they were put, so each of them looked and found nothing.",
@@ -523,8 +531,18 @@ export function renderMatches(result: Matches, cached: boolean): Rendered {
     return `  - ${who}: not asked: ${inline(one.reason ?? "") ?? ""}`;
   });
 
+  // A hash reaches a catalogue that answered and searches the algorithm it was
+  // computed with. Counting what was written instead reports a lookup nobody
+  // performed as a lookup that found nothing.
+  const put = result.asked.filter((one) =>
+    result.perSource.some(
+      (who) =>
+        who.state === "answered" && !(who.algorithmsNotSearched ?? []).includes(one.algorithm),
+    ),
+  );
+
   const body = [
-    `${result.asked.length} fingerprint(s) asked, ${result.match_count} match(es). ${result.records_named} record(s) named by an exact hash; ${result.resemblances} match(es) on a perceptual hash, which names no file.`,
+    `${result.asked.length} fingerprint(s) written, ${put.length} put to a catalogue that answered, ${result.match_count} match(es). ${result.records_named} record(s) named by an exact hash; ${result.resemblances} match(es) on a perceptual hash, which names no file.`,
     `Asked: ${result.asked.map((one) => `${one.algorithm} ${inline(one.hash) ?? ""}`).join(", ")}`,
     `\nCatalogues:\n${reports.join("\n")}`,
     ...cards.map((one, at) => {
@@ -592,6 +610,7 @@ export interface Rows {
     indexTotalOverAnyWord?: boolean;
     skipped?: number;
     narrowingsNotReceived?: string[];
+    narrowingsReceivedInPart?: string[];
     algorithmsNotSearched?: string[];
     reason?: string;
     [key: string]: unknown;
@@ -614,13 +633,22 @@ export function renderRows(result: Rows, what: string, notes: string[], cached =
     if (one.state === "answered") {
       // Everything the payload carries about what this catalogue did: a
       // client showing the text block alone must lose none of it.
+      // A narrowing this catalogue never received, and a list it received short
+      // of what was written, both leave it answering a question of its own. Its
+      // total counts that question, and called the total for this one it stands
+      // beside the disclosure that denies it.
+      const narrower =
+        (one.narrowingsNotReceived ?? []).length > 0 ||
+        (one.narrowingsReceivedInPart ?? []).length > 0;
       const also = [
         one.indexTotal === undefined
           ? null
           : `of ${String(one.indexTotal)} its own index holds for ${
               one.indexTotalOverAnyWord === true
                 ? "rows carrying any of the words asked, which is how its text index reads them"
-                : "this question"
+                : narrower
+                  ? "the question it received"
+                  : "this question"
             }`,
         one.skipped === undefined
           ? null
@@ -628,6 +656,11 @@ export function renderRows(result: Rows, what: string, notes: string[], cached =
         (one.narrowingsNotReceived ?? []).length === 0
           ? null
           : `did not receive: ${(one.narrowingsNotReceived ?? []).join(", ")}`,
+        (one.narrowingsReceivedInPart ?? []).length === 0
+          ? null
+          : `received in part, the rest of what was written naming records of other catalogues: ${(
+              one.narrowingsReceivedInPart ?? []
+            ).join(", ")}`,
         (one.algorithmsNotSearched ?? []).length === 0
           ? null
           : `does not search ${(one.algorithmsNotSearched ?? []).join(", ")}`,

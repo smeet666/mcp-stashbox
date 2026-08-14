@@ -154,6 +154,12 @@ function written(argument: string): Record<string, unknown> {
 
 const searches = TOOLS.filter((one) => one.name.startsWith("search_"));
 
+/** What one tool says about each argument it declares, or nothing where it says none. */
+function describedBy(tool: (typeof TOOLS)[number], argument: string): string {
+  const shape = (tool.declared as z.ZodObject<z.ZodRawShape>).shape;
+  return (shape[argument] as { description?: string } | undefined)?.description ?? "";
+}
+
 describe("every narrowing a search declares reaches the catalogue", () => {
   for (const tool of searches) {
     const inert = ANSWERED_BY_NO_ROUTE[tool.name] ?? [];
@@ -208,6 +214,27 @@ describe("every narrowing a search declares reaches the catalogue", () => {
         expect(stashdb?.narrowings_not_received ?? []).toContain(argument);
         expect(stashdb?.reason ?? "").toContain(argument);
         expect((rendered.structured as { results: unknown[] }).results).toEqual([]);
+      });
+    }
+
+    for (const argument of inert) {
+      it(`${tool.name} declares ${argument} as one no route applies`, () => {
+        // The answer names it after the fact, and a caller reads the argument
+        // list before calling. An argument published with nothing saying so is
+        // one a caller spends a call to discover.
+        const said = describedBy(tool, argument);
+        expect(said, `${argument} is published with no description at all`).not.toBe("");
+        expect(said.toLowerCase()).toContain("no catalogue's faceted route applies");
+      });
+    }
+
+    for (const argument of declared.filter((name) => !inert.includes(name))) {
+      it(`${tool.name} says nothing of the kind about ${argument}`, () => {
+        // The sentence belongs to the narrowings nothing applies. Written over
+        // one a catalogue does narrow on, it refuses a call that would have
+        // answered.
+        const said = describedBy(tool, argument);
+        expect(said.toLowerCase()).not.toContain("no catalogue's faceted route applies");
       });
     }
 

@@ -211,6 +211,67 @@ describe.skipIf(!ENABLED)("live: every tag narrowing reaches a catalogue", () =>
   }
 });
 
+/** A tag on another catalogue, which no record of the one asked here carries. */
+const A_FOREIGN_TAG = "tpdb:83f9360b-ea69-484d-b534-12b42f81ab67";
+
+describe.skipIf(!ENABLED)("live: what a catalogue was asked is what the answer states", () => {
+  it("asks nobody a question part of which names another catalogue's records", async () => {
+    // The count for the part that survives is what a catalogue answers when the
+    // rest of the question left quietly, and that page reaches a caller as the
+    // answer to all of it.
+    const alone = await client.searchScenes({ studioIds: [A_STUDIO], limit: 1 });
+    const surviving = new Map(
+      alone.data.perSource
+        .filter((one) => one.state === "answered" && one.indexTotal !== undefined)
+        .map((one) => [one.source, one.indexTotal]),
+    );
+    const both = await client.searchScenes({
+      studioIds: [A_STUDIO],
+      tagIds: [A_FOREIGN_TAG],
+      limit: 1,
+    });
+    expect(refusals(both.data.perSource)).toEqual([]);
+    const answering = both.data.perSource.filter(
+      (one) => one.state === "answered" && one.indexTotal === surviving.get(one.source),
+    );
+    expect(
+      answering.map((one) => `${one.name ?? one.source}: ${String(one.indexTotal)}`),
+      "a catalogue answered the part of the question it could receive, and the answer hands that page over as the answer to the whole of it",
+    ).toEqual([]);
+    // The catalogue that answered the surviving part is the one this question
+    // leaves nothing to narrow on, and it says which narrowing did that.
+    for (const source of surviving.keys()) {
+      const one = both.data.perSource.find((report) => report.source === source);
+      expect(one?.narrowingsNamingNoRecord ?? [], `${source} was left out unexplained`).toContain(
+        "tag_ids",
+      );
+    }
+  }, 90_000);
+
+  it("states the direction a call wrote with no order beside it", async () => {
+    const read = await client.searchScenes({ title: "sunset", direction: "desc", limit: 3 });
+    const answering = read.data.perSource.filter((one) => one.state === "answered");
+    expect(
+      answering.length,
+      "no catalogue answered, so this case measures nothing",
+    ).toBeGreaterThan(0);
+    // The direction reaches the catalogue's route and the rows come back the
+    // way it ran them. Called the catalogue's own order, the first row is read
+    // as the one it holds first.
+    expect(read.data.ordering).toContain("descending");
+
+    const other = await client.searchScenes({ title: "sunset", direction: "asc", limit: 3 });
+    const held = (rows: readonly unknown[]) =>
+      rows.map((row) => String((row as { id: string }).id)).join(" ");
+    if (answering.some((one) => (one.indexTotal ?? 0) > 3)) {
+      expect(
+        held(read.data.rows),
+        "the two directions answered with one page, so nothing here reads the direction as applied",
+      ).not.toBe(held(other.data.rows));
+    }
+  }, 90_000);
+});
+
 describe.skipIf(!ENABLED)("live: the fingerprint route reaches a catalogue", () => {
   const cases: [string, { hash: string; algorithm: "MD5" | "OSHASH" | "PHASH" }[]][] = [
     ["one OSHASH", [{ hash: "3c30b044619b6487", algorithm: "OSHASH" }]],

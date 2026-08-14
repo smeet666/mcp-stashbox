@@ -36,7 +36,16 @@ import { consolidate } from "../answer/card.js";
 import { Cache, cacheKey } from "./cache.js";
 import { createHttpTransport, type GraphQLRequest, type HttpTransport } from "./graphql.js";
 import { parseId } from "./identifiers.js";
-import { identifierList, singleIdentifier } from "./narrowings.js";
+import {
+  askedOfFacets,
+  askedOfWords,
+  disclosed,
+  identifierList,
+  singleIdentifier,
+  unaskedFor,
+  type Asked,
+  type OrderSent,
+} from "./narrowings.js";
 import {
   INSTANCES,
   instanceById,
@@ -85,6 +94,7 @@ const BY_SECTION: Record<string, string> = {
   images: "images",
   fingerprints: "fingerprints",
   studios: "studios",
+  appearance: "appearance",
 };
 
 /** The kinds of record, and what each is read and consolidated as. */
@@ -339,8 +349,8 @@ export class StashboxClient {
     build: (spec: InstanceSpec) => GraphQLRequest & {
       faceted: boolean;
       operation: string;
-      unreceived?: string[];
-      receivedInPart?: string[];
+      /** What this catalogue was asked, beside what the caller wrote for it. */
+      asked: Asked;
       wordsApart?: boolean;
     },
     reader: (value: unknown, spec: InstanceSpec, at: string) => { record: T | null },
@@ -384,37 +394,20 @@ export class StashboxClient {
         });
         continue;
       }
-      // A catalogue whose share of the identifiers written is empty has
-      // nothing to narrow on. Asked anyway, it answers a page of its whole
-      // index, and that page reaches a reader as the answer to a question
-      // narrowed on a record it has never held.
-      const share = typed ? shareOf(input, ask.spec.id) : undefined;
-      if (share !== undefined && share.namingNoRecord.length > 0 && !anyIdentifierLeft(share)) {
-        unasked.push({
-          source: ask.spec.id,
-          name: ask.spec.name,
-          state: "absent",
-          narrowingsNamingNoRecord: share.namingNoRecord,
-          reason: `Every identifier written for ${ask.spec.name} names a record another catalogue minted (${share.namingNoRecord.join(", ")}), so it was left with nothing to narrow on and was never asked. Its first page would answer any question put to it.`,
-        });
-        continue;
-      }
-      // A catalogue's faceted input can declare a field its route reads
-      // nothing of: the request is accepted, the narrowing shapes no part of
-      // the answer, and a page of the whole index comes back. Where every
-      // narrowing written lands there, the request left carries paging alone,
-      // so the catalogue is named as never asked rather than handed a page it
-      // narrowed nothing to build.
+      // What the caller wrote and what the request carries, told apart once.
+      // A narrowing answered by no record this catalogue holds and one its own
+      // route reads nothing of both leave it a page of its whole index to
+      // answer with, and that page reaches a reader as the answer to the
+      // question they narrowed.
       const request = build(ask.spec);
-      const left = typed ? narrowingsIn(request) : ["narrowed by the words themselves"];
-      if (left.length === 0) {
-        const missed = request.unreceived ?? [];
+      const why = unaskedFor(ask.spec.name, request.asked);
+      if (why !== undefined) {
         unasked.push({
           source: ask.spec.id,
           name: ask.spec.name,
           state: "absent",
-          narrowingsNotReceived: missed,
-          reason: `${ask.spec.name} receives none of the narrowings written for it (${missed.join(", ")}): its own route takes each of them and reads nothing of any, so it was never asked. Its first page would answer any question put to it.`,
+          ...disclosed(request.asked),
+          reason: why,
         });
         continue;
       }
@@ -491,17 +484,12 @@ export class StashboxClient {
           name: ask.spec.name,
           state: "answered",
           count: found.value.read.length,
-          // A narrowing this catalogue's own input declares no field for is a
-          // limit it has, and the rows here were never narrowed by it.
-          ...(request.unreceived !== undefined && request.unreceived.length > 0
-            ? { narrowingsNotReceived: request.unreceived }
-            : {}),
-          // A list shorn of another catalogue's identifiers narrowed on a
+          // The same difference the decision to ask was taken on: a narrowing
+          // this catalogue's route declares no field for is a limit it has, and
+          // a list shorn of another catalogue's identifiers narrowed on a
           // fraction of what was written, which is neither the whole question
           // nor a limit of this catalogue.
-          ...(request.receivedInPart !== undefined && request.receivedInPart.length > 0
-            ? { narrowingsReceivedInPart: request.receivedInPart }
-            : {}),
+          ...disclosed(request.asked),
           ...(found.value.skipped > 0 ? { skipped: found.value.skipped } : {}),
           ...(found.value.total === undefined ? {} : { indexTotal: found.value.total }),
           // A total counted over words the index reads apart counts the rows
@@ -547,7 +535,7 @@ export class StashboxClient {
       // by, so nothing here ranks one against another. Within a group stands
       // the order that catalogue applied, which is the one written where it
       // received it and its own where it did not.
-      ordering: orderingOf(input, perSource, answering),
+      ordering: orderingOf(perSource, answering, built),
     };
     // An answer holding a failure is a statement about one exchange. Kept, it
     // would become a statement about the catalogue for a whole lifetime.
@@ -609,7 +597,12 @@ export class StashboxClient {
           // publishes counts the rows carrying any of them. Rendered as a
           // total for the phrase, six figures stand as a claim about how
           // common the phrase is.
-          return { ...built, faceted: built.paged, unreceived, wordsApart: true };
+          return {
+            ...built,
+            faceted: built.paged,
+            asked: askedOfWords(unreceived),
+            wordsApart: true,
+          };
         }
         // Every identifier a caller wrote names the catalogue that minted it,
         // so this one receives its own and nothing else. Sending the whole
@@ -629,8 +622,11 @@ export class StashboxClient {
         return {
           ...built,
           faceted: true,
-          unreceived: shaped.unreceived,
-          receivedInPart: held.receivedInPart,
+          asked: askedOfFacets(
+            held,
+            shaped.unreceived,
+            (built.variables?.input ?? undefined) as Record<string, unknown> | undefined,
+          ),
         };
       },
       reader as never,
@@ -697,19 +693,25 @@ export class StashboxClient {
     // search. A card holding only the catalogues that were read cannot tell a
     // catalogue asked and lacking the record from one nobody asked, and the
     // reasons for the second are three different facts a caller acts on.
+    // What a catalogue publishes about its links is read off the record it
+    // answered with, so a reading that failed carries no link either way. The
+    // key this install holds is the reason only where a link was there to
+    // follow: where none is written, setting it changes nothing about this
+    // record, and naming it sends a reader to do exactly that.
+    const from = instanceById(first.reading.source)?.name ?? first.reading.source;
     for (const spec of INSTANCES) {
       if (readings.some((one) => one.source === spec.id)) continue;
-      const apiKey = this.#config.keys[spec.id];
+      const link = unfollowed(first.reading, spec.id);
       const reason =
-        apiKey === undefined
-          ? `No key is configured for ${spec.name}, so it was never asked. Set ${spec.envVar} to read it.`
-          : named !== undefined && !named.includes(spec.id)
-            ? `The catalogues named in this call left ${spec.name} out, so it was never asked.`
-            : !supports(spec, ROUTE[kind])
-              ? `${spec.name} answers no ${kind} of its own, so it was never asked.`
-              : unfollowed(first.reading, spec.id) !== undefined
-                ? `${instanceById(first.reading.source)?.name ?? first.reading.source} links this record to one on ${spec.name} at ${unfollowed(first.reading, spec.id)}, and that address names the record by something this client cannot address, so nothing here reached it. The link is written; following it is what failed.`
-                : `${instanceById(first.reading.source)?.name ?? first.reading.source} publishes no link from this record to one on ${spec.name}, so nothing here reached it. That is a link nobody wrote rather than a record ${spec.name} lacks.`;
+        named !== undefined && !named.includes(spec.id)
+          ? `The catalogues named in this call left ${spec.name} out, so it was never asked.`
+          : !supports(spec, ROUTE[kind])
+            ? `${spec.name} answers no ${kind} of its own, so it was never asked.`
+            : first.reading.state !== "answered"
+              ? `${from} published nothing here, so whether it links this record to one on ${spec.name} is unknown and nothing here reached it. That is a reading that carried no link rather than a link nobody wrote.`
+              : link !== undefined
+                ? `${from} links this record to one on ${spec.name} at ${link}, and that address names the record by something this client cannot address, so nothing here reached it. The link is written; following it is what failed.`
+                : `${from} publishes no link from this record to one on ${spec.name}, so nothing here reached it. That is a link nobody wrote rather than a record ${spec.name} lacks.`;
       readings.push({ source: spec.id, state: "absent", reason });
     }
 
@@ -740,7 +742,13 @@ export class StashboxClient {
       // to the catalogue that answered, so they travel on its holder rather
       // than being put to a vote: two clock readings a fraction apart would
       // otherwise be published as a disagreement and dilute a real one.
-      scalars: [...shape.scalars, "mergedInto"],
+      // A block a section carries is published only where that section was
+      // asked for, whether it holds one value or a list of them. Published
+      // otherwise, a block nobody read carries a null that reads exactly as a
+      // field every catalogue left empty.
+      scalars: [...shape.scalars, "mergedInto"].filter(
+        (name) => BY_SECTION[name] === undefined || asked.has(BY_SECTION[name]),
+      ),
       // A list a section carries is published only where that section was
       // asked for. Stated otherwise, its zero denies something nobody looked
       // for.
@@ -1282,11 +1290,6 @@ function shareOf(
   return { share, namingNoRecord, receivedInPart };
 }
 
-/** Whether any identifier narrowing survived this catalogue's share of the list. */
-function anyIdentifierLeft(held: { share: Record<string, unknown> }): boolean {
-  return IDENTIFIER_ARGUMENTS.some((name) => held.share[name] !== undefined);
-}
-
 /**
  * Every identifier a caller wrote, each naming the catalogue that minted it.
  *
@@ -1312,22 +1315,6 @@ function namedIdentifiers(
       : singleIdentifier(published, String(written), configured).entries[0]?.given;
   }
   return held;
-}
-
-/** The keys of a faceted input that decide the page rather than what is on it. */
-const PAGING = new Set(["page", "per_page", "sort", "direction"]);
-
-/**
- * The narrowings a built request actually carries.
- *
- * A faceted input holding paging and an order alone asks for the first page of
- * a whole index. Answered, that page reaches a reader as the answer to whatever
- * the caller narrowed on, so this is what tells the two apart.
- */
-function narrowingsIn(request: { variables?: Record<string, unknown> }): string[] {
-  const input = request.variables?.input as Record<string, unknown> | undefined;
-  if (input === undefined) return ["read on a route that takes no input"];
-  return Object.keys(input).filter((name) => !PAGING.has(name));
 }
 
 /** The name a caller wrote, for a narrowing this client names in one word. */
@@ -1357,53 +1344,82 @@ function alsoAt(record: Record<string, unknown>): { source: InstanceId; uuid: st
 }
 
 /**
- * The order the rows stand in, per catalogue where the catalogues differ.
+ * The order the rows stand in, read off what each catalogue was sent.
  *
  * An order a caller wrote reaches some catalogues and not others: a route that
  * reads words alone takes none, and the answer names it as an order that
- * catalogue never received. A sentence calling every row a catalogue's own
- * order describes an unsorted read of rows that carry the order that was asked
- * for, and a reader who needs the first row acts on the wrong one.
+ * catalogue never received. A direction written without a field to order by
+ * reaches the catalogue all the same, and the rows come back the way it ran:
+ * a sentence calling those the catalogue's own order sends a reader who needs
+ * the first row to the wrong one.
+ *
+ * One sentence states one order of the catalogues. Naming them as a list beside
+ * the order they answered in states two, and a reader has no way to tell which
+ * of them the rows stand in.
  */
 function orderingOf(
-  input: Record<string, unknown>,
   perSource: readonly SourceReport[],
   answering: readonly string[],
+  built: ReadonlyMap<InstanceId, { asked: Asked }>,
 ): string {
   const apart =
     "The catalogues share no measure to order them against one another, so nothing here ranks a row of one above a row of another";
-  const together =
-    answering.length > 1
-      ? `grouped by catalogue, in the order they answered: ${answering.join(", ")}. ${apart}`
-      : undefined;
-  const own =
-    together === undefined
-      ? "in the order the catalogue that answered holds them"
-      : `grouped by catalogue, in the order they answered: ${answering.join(", ")}, each group in that catalogue's own order. ${apart}`;
-
-  const sort = input.sort as string | undefined;
-  if (sort === undefined) return own;
   const answered = perSource.filter((one) => one.state === "answered");
-  const applied = answered.filter((one) => !(one.narrowingsNotReceived ?? []).includes("sort"));
-  const ignored = answered.filter((one) => (one.narrowingsNotReceived ?? []).includes("sort"));
-  if (applied.length === 0 && ignored.length === 0) return own;
+  // A catalogue that answered is what puts rows in an order. Where none did,
+  // there is no row here and no catalogue that laid one anywhere.
+  if (answered.length === 0) {
+    return "in no order at all: no catalogue answered, so no catalogue laid a row anywhere";
+  }
 
-  const named = (rows: readonly SourceReport[]) =>
-    rows.map((one) => one.name ?? one.source).join(", ");
-  const way = input.direction as string | undefined;
-  // A direction nobody wrote is the catalogue's own, and naming one here would
-  // state a way the request never carried.
-  const spelt =
-    way === undefined
-      ? `${sort}, each catalogue the way it orders by`
-      : `${sort}, ${way === "asc" ? "ascending" : "descending"}`;
-  const parts = [
-    applied.length === 0 ? null : `sorted by ${spelt}, which ${named(applied)} applied`,
-    ignored.length === 0
+  const way = (order: OrderSent | undefined) =>
+    order?.direction === undefined
       ? null
-      : `in the order ${named(ignored)} holds them, which did not receive the order this call wrote: the route it answers on takes none`,
-  ].filter((part): part is string => part !== null);
-  return together === undefined ? parts.join("; ") : `${parts.join("; ")}, and ${together}`;
+      : order.direction.toUpperCase() === "ASC"
+        ? "ascending"
+        : "descending";
+  /** What one catalogue did with the order, in words that name no catalogue. */
+  const clauseOf = (asked: Asked | undefined): string | null => {
+    const run = way(asked?.order);
+    const sort = asked?.order?.sort;
+    if (sort !== undefined) {
+      return `sorted by ${sort.toLowerCase()}${run === null ? ", the way it orders by" : `, ${run}`}`;
+    }
+    if (run !== null) {
+      // A direction reached it with no field to order by, so it ran the order
+      // the catalogue itself keeps.
+      return `in its own order, taken ${run}, which is the direction this call wrote applied to the order it keeps`;
+    }
+    if ((asked?.notReceived ?? []).some((one) => one === "sort" || one === "direction")) {
+      return "in its own order, which did not receive the order this call wrote: the route it answers on takes none";
+    }
+    return null;
+  };
+
+  const clauses = answered.map((one) => ({
+    who: one.name ?? one.source,
+    clause: clauseOf(built.get(one.source)?.asked),
+  }));
+  const uniform = clauses.every((one) => one.clause === clauses[0]?.clause);
+
+  if (answering.length > 1) {
+    const groups = `grouped by catalogue, in the order they answered: ${answering.join(", ")}`;
+    if (uniform) {
+      const shared = clauses[0]?.clause;
+      return shared === undefined || shared === null
+        ? `${groups}, each group in that catalogue's own order. ${apart}`
+        : `${groups}, each group ${shared}. ${apart}`;
+    }
+    const each = clauses.map((one) => `${one.who} ${one.clause ?? "in its own order"}`).join("; ");
+    return `${groups}. Within them: ${each}. ${apart}`;
+  }
+
+  const one = clauses[0];
+  if (one === undefined || one.clause === null) {
+    return "in the order the catalogue that answered holds them";
+  }
+  return one.clause.startsWith("sorted by")
+    ? `${one.clause}, which ${one.who} applied`
+    : `${one.clause.replace("in its own order", `in the order ${one.who} holds them`)}`;
 }
 
 /** Every report the registry declares a catalogue for, in the order it declares them. */

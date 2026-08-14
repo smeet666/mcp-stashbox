@@ -186,9 +186,18 @@ describe("a hash carrying no information", () => {
 /* --------------------------------- what became of the catalogues not read */
 
 describe("a card says what became of every catalogue, not only the ones read", () => {
+  /** One performer, carrying no link to a record on any other catalogue. */
+  const UNLINKED = {
+    id: A,
+    name: "Tawny Swain",
+    deleted: false,
+    aliases: [],
+    urls: [],
+    images: [],
+  };
+
   it("names a catalogue the record publishes no link to", async () => {
-    const { client } = watching();
-    const card = await client.getCard("performer", `stashdb:${A}`);
+    const card = await holding({ stashdb: UNLINKED }).getCard("performer", `stashdb:${A}`);
     const named = card.data.held_by.map((one) => one.source);
     // A card built from one identifier reached one catalogue. A reader cannot
     // tell "asked and lacks it" from "never asked" unless both are named, and
@@ -200,11 +209,15 @@ describe("a card says what became of every catalogue, not only the ones read", (
     expect(tpdb?.reason ?? "").toMatch(/link|publishes no/i);
   });
 
-  it("tells that apart from a catalogue no key is held for", async () => {
-    const { client } = watching();
-    const card = await client.getCard("performer", `stashdb:${A}`);
+  it("names what stopped the reading rather than a setting that would change nothing", async () => {
+    const card = await holding({ stashdb: UNLINKED }).getCard("performer", `stashdb:${A}`);
     const fansdb = card.data.held_by.find((one) => one.source === "fansdb");
-    expect(fansdb?.reason ?? "").toContain("STASHBOX_FANSDB_KEY");
+    // This install holds no key for that catalogue, and nothing links this
+    // record to a record there either. A reason naming the key sends a reader
+    // to set a variable that would reach this record no better.
+    expect(fansdb?.state).toBe("absent");
+    expect(fansdb?.reason ?? "").toContain("publishes no link");
+    expect(fansdb?.reason ?? "").not.toContain("STASHBOX_FANSDB_KEY");
   });
 });
 
