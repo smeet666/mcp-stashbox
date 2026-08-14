@@ -5,6 +5,51 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2026-08-14
+
+A round of adversarial use aimed at the combinations rather than the surfaces:
+two narrowings written together, an argument written without its partner, a
+`sources` list that empties the world, a link followed under a failed read. What
+it found shared one cause, and the cause is what this version changes.
+
+### Changed
+
+- What a catalogue was asked is derived from what reached the wire. Every
+  disclosure used to be written per code path, so a narrowing dropped on a path
+  nobody had considered went unreported. One record per catalogue holds what the
+  caller wrote beside what the request carries, read off the variables sent, and
+  the gate deciding whether a catalogue still has a question left, the three
+  published narrowings fields and the ordering sentence all derive from it.
+- A row carries the fields that name its record. Twenty scenes weigh 74.5 KB
+  where they weighed 114, twenty performers 19.1 KB where they weighed 28.6.
+  What a row drops, the record route answers with.
+
+### Fixed
+
+- A question narrowed on two identifier lists, one of them naming another
+  catalogue's records, answered the surviving half and reported its count as the
+  total for the question asked. The narrowing that reached nobody is named, and
+  a catalogue left answering a wider question than the one written is not asked.
+- A direction written without a sort reordered the rows while the answer
+  described the order the catalogue keeps. It is stated as what it is: the
+  direction this call wrote, applied to that order.
+- A fingerprint lookup that reached no catalogue at all carried no note, where
+  every sibling tool says an emptiness reaching nobody is no evidence about what
+  exists. The headline counts what was put to a catalogue that answered.
+- A link unread because the catalogue holding it failed was reported as a link
+  nobody wrote. A reading that did not happen establishes nothing either way.
+- A catalogue with no key was named as the reason a record went unread even
+  where no catalogue published a link to it. The key is named where a link
+  exists to follow.
+- A block nobody asked for was shaped like a value nobody published.
+- `match` is described, with the reading that stands when it is unwritten and
+  the arguments it governs. The narrowings no catalogue's route applies say so
+  in the argument list rather than only in the answer.
+- `get_sources` refused an unknown argument by enumerating nothing.
+- The specification and the code disagreed in four places. Each was decided:
+  the row shape follows the document, and the document follows the code where
+  the code was right.
+
 ## [0.9.0] - 2026-08-14
 
 Two rounds of adversarial use, one working from real tasks and one from the
