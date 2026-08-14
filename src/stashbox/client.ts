@@ -463,10 +463,13 @@ export class StashboxClient {
     );
     reports.push(...results);
 
-    // The order the groups actually arrived in, which is what the answer says.
-    const answering = reports
-      .filter((one) => one.state === "answered" && (one.count ?? 0) > 0)
-      .map((one) => one.name ?? one.source);
+    // The order the rows actually landed in, read off the rows themselves. A
+    // sentence naming the order the catalogues were asked describes something
+    // the answer does not do: they answer at their own speed, and the groups
+    // arrive as they finish.
+    const answering = [...new Set(rows.map((row) => (row as { source?: string }).source))]
+      .filter((one): one is string => one !== undefined)
+      .map((one) => instanceById(one)?.name ?? one);
     const perSource = orderByRegistry([...reports, ...unasked]);
     // A window states the page a catalogue paged through. Where every catalogue
     // that answered was never given the page, the rows are each one's own first

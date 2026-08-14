@@ -263,7 +263,7 @@ function creditsLine(value: unknown): string | null {
 export function renderCard(card: Card, kind: string, cached = false): Rendered {
   const rows: (string | null)[] = [];
   for (const [name, held] of Object.entries(card.fields)) {
-    rows.push(Array.isArray(held) ? unionLine(name, held) : valueLine(name, held));
+    rows.push(Array.isArray(held) ? unionBlock(name, held) : valueLine(name, held));
   }
 
   for (const [name, counts] of Object.entries(card.counts)) {
@@ -283,21 +283,40 @@ export function renderCard(card: Card, kind: string, cached = false): Rendered {
     rows.push(`${spelt(name)}: ${each}`);
   }
 
-  const held = card.held_by.map((one) => {
-    const who = catalogueOf(one.source).name;
-    if (one.state === "answered") {
-      // A catalogue that looked and holds nothing there answered, and saying
-      // it holds the record is the one thing the answer cannot say.
-      if (one.reason !== undefined) return `  - ${who}: ${inline(one.reason) ?? ""}`;
-      const at = one.retrieved_at === undefined ? "" : `, read ${one.retrieved_at}`;
-      const where = one.source_url === undefined ? "" : ` (${inline(one.source_url) ?? ""})`;
-      return `  - ${who}: holds it at ${one.id ?? ""}${one.status === undefined ? "" : markerSuffix(one.status)}${where}${at}`;
-    }
-    if (one.state === "failed") {
-      return `  - ${who}: could not answer (${one.error ?? "error"})${one.reason === undefined ? "" : `: ${inline(one.reason) ?? ""}`}`;
-    }
-    return `  - ${who}: not asked${one.reason === undefined ? "" : `: ${inline(one.reason) ?? ""}`}`;
-  });
+  // Catalogues held out for one reason are one fact. Written a line each, they
+  // push what the card holds off the top of a reader's view.
+  const alike = new Map<string, string[]>();
+  for (const one of card.held_by) {
+    if (one.state !== "absent" || one.reason === undefined) continue;
+    const shared = one.reason.replace(catalogueOf(one.source).name, "").replace(/STASHBOX_\w+/, "");
+    alike.set(shared, [...(alike.get(shared) ?? []), catalogueOf(one.source).name]);
+  }
+  const folded = new Set(
+    [...alike.entries()].filter(([, names]) => names.length > 1).flatMap(([, names]) => names),
+  );
+
+  const held = card.held_by
+    .filter((one) => !folded.has(catalogueOf(one.source).name))
+    .map((one) => {
+      const who = catalogueOf(one.source).name;
+      if (one.state === "answered") {
+        // A catalogue that looked and holds nothing there answered, and saying
+        // it holds the record is the one thing the answer cannot say.
+        if (one.reason !== undefined) return `  - ${who}: ${inline(one.reason) ?? ""}`;
+        const at = one.retrieved_at === undefined ? "" : `, read ${one.retrieved_at}`;
+        const where = one.source_url === undefined ? "" : ` (${inline(one.source_url) ?? ""})`;
+        return `  - ${who}: holds it at ${one.id ?? ""}${one.status === undefined ? "" : markerSuffix(one.status)}${where}${at}`;
+      }
+      if (one.state === "failed") {
+        return `  - ${who}: could not answer (${one.error ?? "error"})${one.reason === undefined ? "" : `: ${inline(one.reason) ?? ""}`}`;
+      }
+      return `  - ${who}: not asked${one.reason === undefined ? "" : `: ${inline(one.reason) ?? ""}`}`;
+    });
+
+  for (const [shared, names] of alike) {
+    if (names.length < 2) continue;
+    held.push(`  - ${names.join(", ")}: not asked:${shared.replace(/\s+/g, " ")}`);
+  }
 
   const body = joinLines([
     ...rows,
@@ -463,7 +482,14 @@ function spelled(value: unknown): string | null {
   if (typeof held.hash === "string")
     return inline(`${String(held.algorithm)} ${String(held.hash)}`);
   if (typeof held.name === "string" || typeof held.id === "string") {
-    return inline(String(held.name ?? held.id));
+    // The identifier travels with the name: a reader who wants this record's
+    // scenes calls the next tool with it, and a name is what that tool
+    // refuses. Chaining forward works because a search prints identifiers;
+    // chaining back from a card takes the same.
+    const called = inline(String(held.name ?? ""));
+    const at = typeof held.id === "string" ? inline(held.id) : null;
+    if (called === null) return at;
+    return at === null ? called : `${called} [${at}]`;
   }
   // A block of named fields is printed as its fields. A shape with nothing
   // naming it at all is the only thing this renderer has no words for, and
@@ -491,6 +517,25 @@ function valueLine(name: string, held: CardValue): string | null {
           .map((one) => `${catalogueOf(one.source).name} says ${spelled(one.value) ?? ""}`)
           .join(", ")}`;
   return `${spelt(name)}: ${value} (${said}${apart})`;
+}
+
+/**
+ * A united list, on one line while it fits and as rows once it does not.
+ *
+ * Seventy addresses joined by semicolons is not a line a reader walks, and the
+ * one thing they were reading for is somewhere inside it.
+ */
+function unionBlock(name: string, entries: readonly CardEntry[]): string | null {
+  const one = unionLine(name, entries);
+  if (one === null || one.length <= 240) return one;
+  const rows = entries
+    .map((entry) => {
+      const value = spelled(entry.value);
+      const by = entry.published_by.map((held) => catalogueOf(held).name).join(", ");
+      return value === null ? null : `  - ${value} (${by})`;
+    })
+    .filter((row): row is string => row !== null);
+  return `${spelt(name)}:\n${rows.join("\n")}`;
 }
 
 /**
