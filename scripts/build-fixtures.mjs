@@ -104,8 +104,20 @@ function scene(index) {
     urls: [],
     // MD5 stands in the vocabulary without appearing in current practice.
     fingerprints: [
-      { algorithm: "OSHASH", hash: hex(16), duration: 1200, submissions: 1 + Math.floor(random() * 8), reports: 0 },
-      { algorithm: "PHASH", hash: hex(16), duration: 1200, submissions: 1 + Math.floor(random() * 8), reports: random() < 0.1 ? 3 : 0 },
+      {
+        algorithm: "OSHASH",
+        hash: hex(16),
+        duration: 1200,
+        submissions: 1 + Math.floor(random() * 8),
+        reports: 0,
+      },
+      {
+        algorithm: "PHASH",
+        hash: hex(16),
+        duration: 1200,
+        submissions: 1 + Math.floor(random() * 8),
+        reports: random() < 0.1 ? 3 : 0,
+      },
     ],
     created: "2026-08-10T00:00:00Z",
     updated: "2026-08-10T00:00:00Z",

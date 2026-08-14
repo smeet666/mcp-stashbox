@@ -5,6 +5,56 @@ All notable changes to this project are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-08-14
+
+Two rounds of adversarial use, one working from real tasks and one from the
+seams. Both went at the two questions this server exists to answer: which record
+holds this file, and what do the catalogues say about it. What they found sits
+under identity, which is where a wrong answer costs a caller the most.
+
+### Fixed
+
+- A shared name joined records across catalogues. A list entry is identified by
+  the identifier its catalogue minted, and a scalar carrying such an identifier
+  agrees on that identifier or on a link one of them published. Two catalogues
+  holding records of one name are two records, each reachable at its own
+  identifier, with the resemblance stated in words that establish no identity.
+- One exact hash held by two records of a single catalogue was welded into one
+  card, which carried the title of one and the address of the other. Two records
+  are two matches. A record reached by several hashes stays one record, and the
+  answer names which hash reached which card.
+- A fingerprint algorithm a catalogue does not search was reported as a lookup
+  that found nothing. Those hashes were never put to it, and a hash nobody
+  searched keeps saying so inside a batch of several.
+- Three narrowings a catalogue's schema declares are read by no resolver, so a
+  search written with `alias`, `career_start_year` or `career_end_year` answered
+  with the whole corpus. A catalogue left with nothing a route reads is never
+  asked, and the narrowing it could not receive is named.
+- A text search written with `page` answered its first rows whatever page named.
+  It is refused, in the words the sibling argument is already refused with.
+- A record no catalogue holds answered with a card of nulls. It is `not_found`.
+- A bare uuid in an identifier list was blamed on a catalogue that never minted
+  it. It is refused as ambiguous, in the record route's own words.
+- A gender, an ethnicity or a hash the catalogues cannot read produced their 422,
+  reported as their failure. The closed sets they take are declared, so the
+  refusal happens before a request leaves.
+- Three keys reached the structured answer undeclared, one of them in camelCase
+  inside a snake_case envelope, so a client validating output rejected it.
+
+### Changed
+
+- `get_sources` names which evidence backs each row. A capability read off a
+  catalogue's schema and one measured on an answer are two different facts, and
+  whether a faceted route applies the narrowings written to it is one only a
+  request can settle.
+- The live suite walks all five catalogues by introspection, which needs no key,
+  so a claim about a catalogue this install cannot reach can fail. It ran 75
+  cases with 61 skipped and runs 173 with none.
+- `sections` says what it does: the record's own fields come back whatever is
+  written, and each name adds a block. `find_by_fingerprint` takes it too.
+- A card names every record it mentions with its identifier, so a reader of the
+  prose can call the next tool.
+
 ## [0.8.0] - 2026-08-14
 
 A second round of real use, aimed at the surfaces the first did not reach: a
