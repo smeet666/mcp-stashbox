@@ -57,7 +57,9 @@ function faults(schema: Record<string, unknown>, value: unknown, at = ""): Fault
     if (!Array.isArray(value)) return [`${where} is no array`];
     const items = schema.items as Record<string, unknown> | undefined;
     if (items !== undefined) {
-      value.forEach((one, index) => found.push(...faults(items, one, `${where}[${index}]`)));
+      value.forEach((one, index) => {
+        found.push(...faults(items, one, `${where}[${index}]`));
+      });
     }
     return found;
   }

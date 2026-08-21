@@ -15,7 +15,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { z } from "zod";
+import type { z } from "zod";
 
 import { TOOLS } from "../../src/tools/index.js";
 import { StashboxClient } from "../../src/stashbox/client.js";
@@ -315,9 +315,9 @@ describe("match decides the reading of the lists it names", () => {
   });
 
   it("declares the reading of every list it is written beside", async () => {
-    const shape = (
-      TOOLS.find((one) => one.name === "search_scenes")?.declared as z.ZodObject<z.ZodRawShape>
-    ).shape;
+    const searchScenes = TOOLS.find((one) => one.name === "search_scenes");
+    expect(searchScenes, "search_scenes is declared").toBeDefined();
+    const shape = (searchScenes?.declared as z.ZodObject<z.ZodRawShape> | undefined)?.shape ?? {};
     const said = (shape.match as { description?: string }).description ?? "";
     for (const list of LISTS) {
       expect(said, `match leaves ${list} unsaid`).toContain(list);

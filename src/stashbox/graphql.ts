@@ -19,7 +19,7 @@ import { indentMarkerLines } from "./normalise.js";
 import { StashboxError, parseFailure, rateLimited } from "../errors.js";
 import { CONTACT_URL, PKG_NAME, VERSION } from "../version.js";
 import type { InstanceSpec } from "./instances.js";
-import { RateLimiter, sleep } from "./rateLimiter.js";
+import { type RateLimiter, sleep } from "./rateLimiter.js";
 
 /** The first wait between two attempts, which doubles with each further one. */
 const FIRST_RETRY_WAIT_MS = 500;

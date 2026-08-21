@@ -53,7 +53,7 @@ export function catalogueOf(id: InstanceId | string): Catalogue {
   const spec = instanceById(id);
   return {
     name: spec?.name ?? id,
-    publishes: (capability) => spec !== undefined && spec.capabilities.includes(capability),
+    publishes: (capability) => spec?.capabilities.includes(capability) ?? false,
   };
 }
 
@@ -539,7 +539,8 @@ export function renderMatches(result: Matches, cached: boolean): Rendered {
     );
   }
 
-  const cards = result.matches.map((one) => renderCard(one.scene, "scene"));
+  const shown = result.matches.map((one) => ({ match: one, card: renderCard(one.scene, "scene") }));
+  const cards = shown.map((entry) => entry.card);
   // Every catalogue asked, and every one that was not, as every other answer
   // states them. Left to the payload, a caller reading the prose has no signal
   // that three of five catalogues were never asked, and "no match" reads as
@@ -605,10 +606,10 @@ export function renderMatches(result: Matches, cached: boolean): Rendered {
   return {
     text: `${body}${notesBlock(notes)}`,
     structured: {
-      matches: result.matches.map((one, at) => ({
-        scene: (cards[at]?.structured as { card: unknown }).card,
-        matched_by: one.matchedBy,
-        match_kind: one.matchKind,
+      matches: shown.map(({ match, card }) => ({
+        scene: (card.structured as { card: unknown }).card,
+        matched_by: match.matchedBy,
+        match_kind: match.matchKind,
       })),
       match_count: result.match_count,
       records_named: result.records_named,
