@@ -216,9 +216,15 @@ function tagSelection(spec: InstanceSpec): string {
 }
 
 function selectionFor(spec: InstanceSpec, kind: RecordKind, sections: readonly string[]): string {
-  if (kind === "scene") return sceneSelection(spec, sections as SceneSection[]);
-  if (kind === "performer") return performerSelection(spec, sections as PerformerSection[]);
-  if (kind === "studio") return studioSelection(spec);
+  if (kind === "scene") {
+    return sceneSelection(spec, sections as SceneSection[]);
+  }
+  if (kind === "performer") {
+    return performerSelection(spec, sections as PerformerSection[]);
+  }
+  if (kind === "studio") {
+    return studioSelection(spec);
+  }
   return tagSelection(spec);
 }
 
@@ -245,7 +251,9 @@ type Modifier =
  * refused before a row is seen.
  */
 function textCriterion(spec: InstanceSpec, value: string | undefined): unknown {
-  if (value === undefined) return undefined;
+  if (value === undefined) {
+    return undefined;
+  }
   return spec.filters === "plain" ? value : { value, modifier: "EQUALS" };
 }
 
@@ -261,8 +269,12 @@ function identifierCriterion(
   values: readonly string[] | undefined,
   match: "all" | "any",
 ): unknown {
-  if (values === undefined || values.length === 0) return undefined;
-  if (spec.filters === "plain") return values.join(",");
+  if (values === undefined || values.length === 0) {
+    return undefined;
+  }
+  if (spec.filters === "plain") {
+    return values.join(",");
+  }
   return { value: [...values], modifier: match === "all" ? "INCLUDES_ALL" : "INCLUDES" };
 }
 
@@ -305,7 +317,9 @@ function dateCriterion(
   value: string | undefined,
   compare: DateCompare | undefined,
 ): unknown {
-  if (value === undefined || compare === undefined) return undefined;
+  if (value === undefined || compare === undefined) {
+    return undefined;
+  }
   return spec.filters === "plain" ? value : { value, modifier: COMPARISON[compare] };
 }
 
@@ -344,7 +358,9 @@ function put(
   unreceived: string[],
   as = name,
 ): void {
-  if (value === undefined) return;
+  if (value === undefined) {
+    return;
+  }
   if (ANSWERED_BY_NO_ROUTE.has(name)) {
     unreceived.push(as);
     return;
@@ -371,8 +387,12 @@ function ordering(
 ): void {
   const named = sort ?? (spec.requiresOrder ? standing : undefined);
   const way = direction ?? (spec.requiresOrder ? "asc" : undefined);
-  if (named !== undefined) input.sort = named.toUpperCase();
-  if (way !== undefined) input.direction = way.toUpperCase();
+  if (named !== undefined) {
+    input.sort = named.toUpperCase();
+  }
+  if (way !== undefined) {
+    input.direction = way.toUpperCase();
+  }
 }
 
 /* -------------------------------------------------------------- the inputs */
@@ -391,7 +411,9 @@ export interface Faceted {
  * number written as text.
  */
 function numberFilter(spec: InstanceSpec, value: number | undefined): unknown {
-  if (value === undefined) return undefined;
+  if (value === undefined) {
+    return undefined;
+  }
   return spec.filters === "plain" ? String(value) : { value, modifier: "EQUALS" };
 }
 
@@ -456,7 +478,9 @@ export function sceneQueryInput(spec: InstanceSpec, narrowing: SceneNarrowing): 
     const criterion = input[name];
     return typeof criterion === "object" && criterion !== null && "modifier" in criterion;
   });
-  if (narrowing.match !== undefined && !decided) unreceived.push("match");
+  if (narrowing.match !== undefined && !decided) {
+    unreceived.push("match");
+  }
   ordering(spec, input, narrowing.sort, narrowing.direction, "date");
   input.page = narrowing.page;
   input.per_page = narrowing.limit;

@@ -52,13 +52,17 @@ const NAMES = [
 /** The messages of a refusal, or a failure saying the input was accepted. */
 function refusal(schema: z.ZodTypeAny, input: unknown): string {
   const result = schema.safeParse(input);
-  if (result.success) throw new Error("the schema accepted an input it was expected to refuse");
+  if (result.success) {
+    throw new Error("the schema accepted an input it was expected to refuse");
+  }
   return result.error.issues.map((issue) => issue.message).join("\n");
 }
 
 const tool = (name: string) => {
   const found = TOOLS.find((one) => one.name === name);
-  if (found === undefined) throw new Error(`no tool named ${name}`);
+  if (found === undefined) {
+    throw new Error(`no tool named ${name}`);
+  }
   return found;
 };
 
@@ -343,14 +347,20 @@ describe("every tool declares the answer it gives", () => {
   const describedAt = (name: string, field: string): string => {
     const declared = z.toJSONSchema(z.object(tool(name).outputSchema), { io: "output" });
     const found = (node: unknown): string | undefined => {
-      if (node === null || typeof node !== "object") return undefined;
+      if (node === null || typeof node !== "object") {
+        return undefined;
+      }
       const held = node as Record<string, unknown>;
       const properties = held.properties as Record<string, Record<string, unknown>> | undefined;
       const here = properties?.[field]?.description;
-      if (typeof here === "string") return here;
+      if (typeof here === "string") {
+        return here;
+      }
       for (const value of Object.values(held)) {
         const deeper = found(value);
-        if (deeper !== undefined) return deeper;
+        if (deeper !== undefined) {
+          return deeper;
+        }
       }
       return undefined;
     };
@@ -429,7 +439,9 @@ describe("the declaration the protocol enforces is the one it publishes", () => 
     // does not carry, and a caller reading the contract could not find it.
     for (const one of TOOLS.filter((tool) => tool.name.startsWith("search_"))) {
       const shape = (one.declared as z.ZodObject<z.ZodRawShape>).shape;
-      if (shape.query === undefined) continue;
+      if (shape.query === undefined) {
+        continue;
+      }
       const typed = Object.keys(shape).find(
         (name) => !["query", "sort", "direction", "page", "limit", "sources"].includes(name),
       );

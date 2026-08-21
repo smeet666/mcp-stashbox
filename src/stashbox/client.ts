@@ -269,7 +269,9 @@ export class StashboxClient {
   /** One pace per catalogue, with a floor the configuration may widen and never narrow. */
   #limiterFor(spec: InstanceSpec): RateLimiter {
     const held = this.#limiters.get(spec.id);
-    if (held !== undefined) return held;
+    if (held !== undefined) {
+      return held;
+    }
     const made = new RateLimiter({ intervalMs: this.pace });
     this.#limiters.set(spec.id, made);
     return made;
@@ -300,12 +302,12 @@ export class StashboxClient {
         );
       } else if (named !== undefined && !named.includes(spec.id)) {
         absent(`The catalogues named in this call left ${spec.name} out, so it was never asked.`);
-      } else if (!supports(spec, capability)) {
+      } else if (supports(spec, capability)) {
+        asks.push({ spec, apiKey });
+      } else {
         absent(
           `${spec.name} answers no ${route} of its own, so it was never asked, and its silence is no evidence about what it holds.`,
         );
-      } else {
-        asks.push({ spec, apiKey });
       }
     }
     return { asks, unasked };
@@ -440,7 +442,9 @@ export class StashboxClient {
       },
     });
     const held = this.#cache.get(key) as RowsResult<T> | undefined;
-    if (held !== undefined) return { data: held, cached: true };
+    if (held !== undefined) {
+      return { data: held, cached: true };
+    }
 
     const rows: T[] = [];
     const reports: SourceReport[] = [];
@@ -467,8 +471,11 @@ export class StashboxClient {
             let skipped = 0;
             for (const entry of raw) {
               const one = reader(entry, ask.spec, at);
-              if (one.record === null) skipped += 1;
-              else read.push(one.record);
+              if (one.record === null) {
+                skipped += 1;
+              } else {
+                read.push(one.record);
+              }
             }
             const total =
               supports(ask.spec, "index_total") &&
@@ -478,7 +485,9 @@ export class StashboxClient {
             return { read, skipped, total };
           },
         );
-        if ("report" in found) return found.report;
+        if ("report" in found) {
+          return found.report;
+        }
         const report: SourceReport = {
           source: ask.spec.id,
           name: ask.spec.name,
@@ -539,7 +548,9 @@ export class StashboxClient {
     };
     // An answer holding a failure is a statement about one exchange. Kept, it
     // would become a statement about the catalogue for a whole lifetime.
-    if (!perSource.some((one) => one.state === "failed")) this.#cache.set(key, data);
+    if (!perSource.some((one) => one.state === "failed")) {
+      this.#cache.set(key, data);
+    }
     return { data, cached: false };
   }
 
@@ -576,7 +587,7 @@ export class StashboxClient {
     // page at all, so every call reads the same first rows.
     if (words !== undefined && page > 1) {
       throw invalidInput(
-        `A search written with query does not take page. The route a catalogue reads words on takes a term and a size, so it answers its first rows whatever page names. An argument that is read and dropped produces an answer computed without it, which reads as the answer to the question that was asked.`,
+        "A search written with query does not take page. The route a catalogue reads words on takes a term and a size, so it answers its first rows whatever page names. An argument that is read and dropped produces an answer computed without it, which reads as the answer to the question that was asked.",
         "Narrow the words, raise limit, or write the typed arguments, which reach the route that pages.",
       );
     }
@@ -671,7 +682,9 @@ export class StashboxClient {
     // they asked to leave out.
     const first = await this.#readOne(kind, parsed.instance, parsed.uuid, sections, named);
     readings.push(first.reading);
-    if (first.replayed === true) replayed.add(parsed.instance);
+    if (first.replayed === true) {
+      replayed.add(parsed.instance);
+    }
 
     // The catalogues a link reaches are different catalogues, so they are read
     // together: each holds its own pace, and reading them one after another
@@ -686,7 +699,9 @@ export class StashboxClient {
     );
     for (const [at, next] of reached.entries()) {
       readings.push(next.reading);
-      if (next.replayed === true) replayed.add(others[at]?.source ?? "");
+      if (next.replayed === true) {
+        replayed.add(others[at]?.source ?? "");
+      }
     }
 
     // Every catalogue the registry declares leaves here named, as it does on a
@@ -700,20 +715,22 @@ export class StashboxClient {
     // record, and naming it sends a reader to do exactly that.
     const from = instanceById(first.reading.source)?.name ?? first.reading.source;
     for (const spec of INSTANCES) {
-      if (readings.some((one) => one.source === spec.id)) continue;
+      if (readings.some((one) => one.source === spec.id)) {
+        continue;
+      }
       const link = unfollowed(first.reading, spec.id);
       const reason =
         named !== undefined && !named.includes(spec.id)
           ? `The catalogues named in this call left ${spec.name} out, so it was never asked.`
-          : !supports(spec, ROUTE[kind])
-            ? `${spec.name} answers no ${kind} of its own, so it was never asked.`
-            : first.reading.state === "absent"
+          : supports(spec, ROUTE[kind])
+            ? first.reading.state === "absent"
               ? `${from} was never asked, so no link it publishes from this record was read and whether it links this record to one on ${spec.name} is unknown. That is a reading nobody performed rather than a link nobody wrote.`
               : first.reading.state === "failed"
                 ? `${from} could not answer, so whether it links this record to one on ${spec.name} is unknown and nothing here reached it. That is a reading that carried no link rather than a link nobody wrote.`
-                : link !== undefined
-                  ? `${from} links this record to one on ${spec.name} at ${link}, and that address names the record by something this client cannot address, so nothing here reached it. The link is written; following it is what failed.`
-                  : `${from} publishes no link from this record to one on ${spec.name}, so nothing here reached it. That is a link nobody wrote rather than a record ${spec.name} lacks.`;
+                : link === undefined
+                  ? `${from} publishes no link from this record to one on ${spec.name}, so nothing here reached it. That is a link nobody wrote rather than a record ${spec.name} lacks.`
+                  : `${from} links this record to one on ${spec.name} at ${link}, and that address names the record by something this client cannot address, so nothing here reached it. The link is written; following it is what failed.`
+            : `${spec.name} answers no ${kind} of its own, so it was never asked.`;
       readings.push({ source: spec.id, state: "absent", reason });
     }
 
@@ -847,7 +864,9 @@ export class StashboxClient {
       // The key present and null is the catalogue saying it holds nothing at
       // that identifier, and only that second reading is an absence.
       const container = recordUnder(payload, request.operation, spec, `the ${kind}`);
-      if (container === null) return null;
+      if (container === null) {
+        return null;
+      }
       return READERS[kind](container, spec, at).record;
     });
 
@@ -952,13 +971,18 @@ export class StashboxClient {
             let skipped = 0;
             for (const entry of raw) {
               const one = readScene(entry, ask.spec, at);
-              if (one.record === null) skipped += 1;
-              else read.push(one.record as unknown as Record<string, unknown>);
+              if (one.record === null) {
+                skipped += 1;
+              } else {
+                read.push(one.record as unknown as Record<string, unknown>);
+              }
             }
             return { read, skipped };
           },
         );
-        if ("report" in found) return { report: found.report, rows: [] as Raw[] };
+        if ("report" in found) {
+          return { report: found.report, rows: [] as Raw[] };
+        }
 
         // The route answers a group per hash, so a record carrying two of the
         // hashes asked comes back in two of them. Counted once per group, one
@@ -977,7 +1001,9 @@ export class StashboxClient {
           const seen = new Set<string>();
           held.fingerprints = prints.filter((one) => {
             const at = `${one.algorithm} ${one.hash.toLowerCase()}`;
-            if (seen.has(at)) return false;
+            if (seen.has(at)) {
+              return false;
+            }
             seen.add(at);
             return true;
           });
@@ -1011,8 +1037,9 @@ export class StashboxClient {
             continue;
           }
           count += 1;
-          for (const print of reached)
+          for (const print of reached) {
             rows.push({ source: ask.spec.id, scene, algorithm: print.algorithm, hash: print.hash });
+          }
         }
         return {
           report: {
@@ -1066,45 +1093,59 @@ export class StashboxClient {
     const under = new Map<string, Map<InstanceId, string>>();
     const root = (key: string): string => {
       const up = above.get(key);
-      if (up === undefined || up === key) return key;
+      if (up === undefined || up === key) {
+        return key;
+      }
       const top = root(up);
       above.set(key, top);
       return top;
     };
-    for (const key of records.keys())
+    for (const key of records.keys()) {
       if (printsOf(key, true).length > 0) {
         above.set(key, key);
         under.set(key, new Map([[sourceOf(key), key]]));
       }
+    }
     const sharing = new Map<string, string[]>();
-    for (const key of records.keys())
+    for (const key of records.keys()) {
       for (const print of printsOf(key, true)) {
         const at = `${print.algorithm} ${print.hash.toLowerCase()}`;
         sharing.set(at, [...(sharing.get(at) ?? []), key]);
       }
-    for (const together of sharing.values())
+    }
+    for (const together of sharing.values()) {
       for (const key of together.slice(1)) {
         const left = root(together[0] as string);
         const right = root(key);
-        if (left === right) continue;
+        if (left === right) {
+          continue;
+        }
         const one = under.get(left) as Map<InstanceId, string>;
         const other = under.get(right) as Map<InstanceId, string>;
-        if ([...other.keys()].some((source) => one.has(source))) continue;
-        for (const [source, held] of other) one.set(source, held);
+        if ([...other.keys()].some((source) => one.has(source))) {
+          continue;
+        }
+        for (const [source, held] of other) {
+          one.set(source, held);
+        }
         under.delete(right);
         above.set(right, left);
       }
+    }
 
     /** The hashes that reached a card, each naming the catalogues it reached it on. */
     const reaching = (group: readonly string[], exact: boolean) => {
       const by = new Map<string, { hash: string; algorithm: string; sources: InstanceId[] }>();
-      for (const key of group)
+      for (const key of group) {
         for (const print of printsOf(key, exact)) {
           const at = `${print.algorithm} ${print.hash.toLowerCase()}`;
           const entry = by.get(at) ?? { hash: print.hash, algorithm: print.algorithm, sources: [] };
-          if (!entry.sources.includes(sourceOf(key))) entry.sources.push(sourceOf(key));
+          if (!entry.sources.includes(sourceOf(key))) {
+            entry.sources.push(sourceOf(key));
+          }
           by.set(at, entry);
         }
+      }
       const asked = (one: { hash: string; algorithm: string }) =>
         fingerprints.findIndex(
           (print) =>
@@ -1194,7 +1235,9 @@ export class StashboxClient {
       const key = `${one.source}:${String(one.scene.id)}`;
       const exact = one.algorithm !== "PHASH";
       const at = exact ? `exact ${root(key)}` : `alike ${key}`;
-      if (opened.has(at)) continue;
+      if (opened.has(at)) {
+        continue;
+      }
       opened.add(at);
       matches.push(
         cardOf(
@@ -1326,7 +1369,9 @@ function shareOf(
   const receivedInPart: string[] = [];
   for (const name of IDENTIFIER_ARGUMENTS) {
     const written = input[name];
-    if (written === undefined) continue;
+    if (written === undefined) {
+      continue;
+    }
     const all = Array.isArray(written) ? (written as string[]) : [String(written)];
     const mine = all
       .filter((one) => one.startsWith(`${source}:`))
@@ -1338,7 +1383,9 @@ function shareOf(
       namingNoRecord.push(PUBLISHED[name] ?? name);
       delete share[name];
     } else {
-      if (mine.length < all.length) receivedInPart.push(PUBLISHED[name] ?? name);
+      if (mine.length < all.length) {
+        receivedInPart.push(PUBLISHED[name] ?? name);
+      }
       share[name] = Array.isArray(written) ? mine : mine[0];
     }
   }
@@ -1363,7 +1410,9 @@ function namedIdentifiers(
   const held: Record<string, unknown> = { ...input };
   for (const name of IDENTIFIER_ARGUMENTS) {
     const written = input[name];
-    if (written === undefined) continue;
+    if (written === undefined) {
+      continue;
+    }
     const published = PUBLISHED[name] ?? name;
     held[name] = Array.isArray(written)
       ? identifierList(published, written as string[], configured).entries.map((one) => one.given)

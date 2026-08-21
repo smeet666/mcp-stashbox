@@ -42,26 +42,36 @@ function daysInMonth(year: number, month: number): number {
  * could only be guessed.
  */
 export function readDate(value: string | null | undefined): ReadDate | null {
-  if (typeof value !== "string" || value === "") return null;
+  if (typeof value !== "string" || value === "") {
+    return null;
+  }
 
   const day = YEAR_MONTH_DAY.exec(value);
   if (day) {
     const year = Number(day[1]);
     const month = Number(day[2]);
     const date = Number(day[3]);
-    if (month < 1 || month > 12) return null;
-    if (date < 1 || date > daysInMonth(year, month)) return null;
+    if (month < 1 || month > 12) {
+      return null;
+    }
+    if (date < 1 || date > daysInMonth(year, month)) {
+      return null;
+    }
     return { value, precision: "day" };
   }
 
   const month = YEAR_MONTH.exec(value);
   if (month) {
     const number = Number(month[2]);
-    if (number < 1 || number > 12) return null;
+    if (number < 1 || number > 12) {
+      return null;
+    }
     return { value, precision: "month" };
   }
 
-  if (YEAR.test(value)) return { value, precision: "year" };
+  if (YEAR.test(value)) {
+    return { value, precision: "year" };
+  }
 
   return null;
 }
@@ -73,7 +83,9 @@ export function readDate(value: string | null | undefined): ReadDate | null {
  * measurement in front of a reader that nobody took.
  */
 export function positiveOrNull(value: number | null | undefined): number | null {
-  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return null;
+  }
   return value > 0 ? value : null;
 }
 
@@ -84,7 +96,9 @@ export function positiveOrNull(value: number | null | undefined): number | null 
  * `not_found` would deny a record that exists under another name.
  */
 export function readStatus(deleted: unknown, successor: unknown): RecordStatus {
-  if (deleted !== true) return "established";
+  if (deleted !== true) {
+    return "established";
+  }
   return typeof successor === "string" && successor !== "" ? "merged" : "deleted";
 }
 
@@ -102,9 +116,15 @@ export function readContested(
   submissions: number | null | undefined,
   reports: number | null | undefined,
 ): boolean | null {
-  if (typeof reports !== "number") return null;
-  if (reports <= 0) return false;
-  if (typeof submissions !== "number") return true;
+  if (typeof reports !== "number") {
+    return null;
+  }
+  if (reports <= 0) {
+    return false;
+  }
+  if (typeof submissions !== "number") {
+    return true;
+  }
   return reports >= submissions;
 }
 

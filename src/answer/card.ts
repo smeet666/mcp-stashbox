@@ -97,8 +97,12 @@ export function consolidate(shape: Consolidation): Card {
   const answered = inPreferredOrder(shape);
   const fields: Record<string, CardValue | CardEntry[]> = {};
 
-  for (const name of shape.scalars) fields[name] = scalarOf(answered, name);
-  for (const name of shape.lists) fields[name] = unionOf(answered, name);
+  for (const name of shape.scalars) {
+    fields[name] = scalarOf(answered, name);
+  }
+  for (const name of shape.lists) {
+    fields[name] = unionOf(answered, name);
+  }
 
   const counts: Record<string, CardCount[]> = {};
   for (const name of shape.perSource) {
@@ -145,7 +149,11 @@ function inPreferredOrder(shape: Consolidation): Answered[] {
   // turns two agreeing catalogues into three, which is the one signal every
   // value on this card rests on.
   const once = new Map<string, Reading & { record: Record<string, unknown> }>();
-  for (const one of answered) if (!once.has(one.source)) once.set(one.source, one);
+  for (const one of answered) {
+    if (!once.has(one.source)) {
+      once.set(one.source, one);
+    }
+  }
   return [...once.values()]
     .sort((a, b) => rank(a.source) - rank(b.source))
     .map((one) => ({ source: one.source, record: one.record }));
@@ -196,12 +204,19 @@ function scalarOf(answered: readonly Answered[], name: string): CardValue {
  * difference in the world.
  */
 function identityOf(value: unknown): string {
-  if (value === null || value === undefined) return "";
-  if (typeof value !== "object") return String(value);
+  if (value === null || value === undefined) {
+    return "";
+  }
+  if (typeof value !== "object") {
+    return String(value);
+  }
   const held = value as Record<string, unknown>;
-  if (typeof held.hash === "string")
+  if (typeof held.hash === "string") {
     return `${String(held.algorithm ?? "")} ${held.hash.toLowerCase()}`;
-  if (typeof held.url === "string") return held.url;
+  }
+  if (typeof held.url === "string") {
+    return held.url;
+  }
   if (typeof held.value === "string" && typeof held.precision === "string") {
     return `${held.value} ${held.precision}`;
   }
@@ -209,8 +224,12 @@ function identityOf(value: unknown): string {
   // The catalogue is left off the address: one identifier reached through two
   // catalogues' prefixes is one record, and the prefix says which of them the
   // reading came from rather than which record it is.
-  if (minted !== undefined) return `id ${minted.slice(minted.indexOf(":") + 1)}`;
-  if (typeof held.name === "string") return held.name.trim().toLowerCase();
+  if (minted !== undefined) {
+    return `id ${minted.slice(minted.indexOf(":") + 1)}`;
+  }
+  if (typeof held.name === "string") {
+    return held.name.trim().toLowerCase();
+  }
   // A shape with nothing naming it is compared whole, since there is nothing
   // else to compare it on.
   return JSON.stringify(
@@ -220,9 +239,15 @@ function identityOf(value: unknown): string {
 
 /** Whether two published readings name the same thing. */
 function same(a: unknown, b: unknown): boolean {
-  if (a === b) return true;
-  if (a === null || b === null) return false;
-  if (identityOf(a) === identityOf(b)) return true;
+  if (a === b) {
+    return true;
+  }
+  if (a === null || b === null) {
+    return false;
+  }
+  if (identityOf(a) === identityOf(b)) {
+    return true;
+  }
   // A link one catalogue publishes to another's record is a join an editor
   // wrote, and it makes two addresses two readings of one record.
   return linked(a, b) || linked(b, a);
@@ -256,7 +281,9 @@ function unionOf(answered: readonly Answered[], name: string): CardListEntry[] {
 
   for (const one of answered) {
     const value = one.record[name];
-    if (!Array.isArray(value)) continue;
+    if (!Array.isArray(value)) {
+      continue;
+    }
     for (const entry of value) {
       const id = identifierOf(entry);
       if (id === undefined) {
@@ -264,8 +291,11 @@ function unionOf(answered: readonly Answered[], name: string): CardListEntry[] {
         // catalogues publishing one alias published one alias.
         const key = typeof entry === "string" ? entry : identityOf(entry);
         const found = byContent.get(key);
-        if (found === undefined) byContent.set(key, place(held, entry, one.source));
-        else attribute(found, one.source);
+        if (found === undefined) {
+          byContent.set(key, place(held, entry, one.source));
+        } else {
+          attribute(found, one.source);
+        }
         continue;
       }
       const found = addressed.get(id);
@@ -281,7 +311,11 @@ function unionOf(answered: readonly Answered[], name: string): CardListEntry[] {
         }
       }
       addressed.set(id, kept);
-      for (const link of linksOf(entry)) if (!addressed.has(link)) addressed.set(link, kept);
+      for (const link of linksOf(entry)) {
+        if (!addressed.has(link)) {
+          addressed.set(link, kept);
+        }
+      }
     }
   }
   return resembling(held);
@@ -296,21 +330,29 @@ function place(held: CardListEntry[], value: unknown, source: string): CardListE
 
 /** A catalogue that published this very record, named once however often it said it. */
 function attribute(entry: CardListEntry, source: string): void {
-  if (!entry.published_by.includes(source)) entry.published_by.push(source);
+  if (!entry.published_by.includes(source)) {
+    entry.published_by.push(source);
+  }
 }
 
 /** The identifier a catalogue minted for an entry, absent where it minted none. */
 function identifierOf(value: unknown): string | undefined {
-  if (value === null || typeof value !== "object") return undefined;
+  if (value === null || typeof value !== "object") {
+    return undefined;
+  }
   const held = (value as Record<string, unknown>).id;
   return typeof held === "string" && held !== "" ? held : undefined;
 }
 
 /** The addresses an entry names for itself on other catalogues, which are joins. */
 function linksOf(value: unknown): string[] {
-  if (value === null || typeof value !== "object") return [];
+  if (value === null || typeof value !== "object") {
+    return [];
+  }
   const held = (value as { alsoHeldAt?: unknown }).alsoHeldAt;
-  if (!Array.isArray(held)) return [];
+  if (!Array.isArray(held)) {
+    return [];
+  }
   return held
     .map((one) => (one as { id?: unknown }).id)
     .filter((id): id is string => typeof id === "string" && id !== "");
@@ -318,9 +360,13 @@ function linksOf(value: unknown): string[] {
 
 /** What an entry is called, for the one comparison a name is allowed to decide. */
 function nameOf(value: unknown): string | null {
-  if (value === null || typeof value !== "object") return null;
+  if (value === null || typeof value !== "object") {
+    return null;
+  }
   const held = (value as Record<string, unknown>).name;
-  if (typeof held !== "string") return null;
+  if (typeof held !== "string") {
+    return null;
+  }
   const written = held.trim().toLowerCase();
   return written === "" ? null : written;
 }
@@ -342,17 +388,25 @@ function mintedOn(id: string, entry: CardListEntry): string {
 function resembling(held: readonly CardListEntry[]): CardListEntry[] {
   for (const one of held) {
     const name = nameOf(one.value);
-    if (name === null) continue;
+    if (name === null) {
+      continue;
+    }
     for (const other of held) {
-      if (other === one || nameOf(other.value) !== name) continue;
+      if (other === one || nameOf(other.value) !== name) {
+        continue;
+      }
       // What the reader is sent to read is an address, so an entry carrying
       // none is nothing to send them to.
       const id = identifierOf(other.value);
-      if (id === undefined) continue;
+      if (id === undefined) {
+        continue;
+      }
       // A catalogue that published both of them holds two records apart under
       // one name, which is its own reading and no resemblance between two
       // catalogues.
-      if (other.published_by.some((source) => one.published_by.includes(source))) continue;
+      if (other.published_by.some((source) => one.published_by.includes(source))) {
+        continue;
+      }
       one.same_name_as ??= [];
       one.same_name_as.push({ source: mintedOn(id, other), id });
     }
@@ -462,15 +516,23 @@ function notesFor(
 function resemblances(fields: Record<string, CardValue | CardEntry[]>): string[] {
   const notes: string[] = [];
   for (const [name, held] of Object.entries(fields)) {
-    if (Array.isArray(held) || held.disagreed === undefined) continue;
+    if (Array.isArray(held) || held.disagreed === undefined) {
+      continue;
+    }
     const called = nameOf(held.value);
-    if (called === null) continue;
+    if (called === null) {
+      continue;
+    }
     const alike = held.disagreed.filter((one) => nameOf(one.value) === called);
-    if (alike.length === 0) continue;
+    if (alike.length === 0) {
+      continue;
+    }
     const addresses = [held.value, ...alike.map((one) => one.value)].map(addressOf);
     // An address this server cannot write is an address it does not send a
     // reader to, and a note naming some of them would read as the whole set.
-    if (addresses.some((address) => address === undefined)) continue;
+    if (addresses.some((address) => address === undefined)) {
+      continue;
+    }
     notes.push(
       `Under ${name}, these catalogues each hold a record of their own under a name that matches: ${addresses.join(", ")}. None of them publishes a link to another's record, so nothing here establishes them as one record, and a reader reaches each of them at the identifier named.`,
     );
@@ -481,6 +543,8 @@ function resemblances(fields: Record<string, CardValue | CardEntry[]>): string[]
 /** The address a reader is sent to, written only where it parses as one. */
 function addressOf(value: unknown): string | undefined {
   const id = identifierOf(value);
-  if (id === undefined) return undefined;
+  if (id === undefined) {
+    return undefined;
+  }
   return isUuid(id.slice(id.indexOf(":") + 1)) ? id : undefined;
 }

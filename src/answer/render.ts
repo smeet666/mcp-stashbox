@@ -71,7 +71,9 @@ export function dateText(date: ReadDate | null): string | null {
 
 /** A runtime published as a count of seconds, with the unit it counts in. */
 export function durationText(seconds: number | null): string | null {
-  if (seconds === null) return null;
+  if (seconds === null) {
+    return null;
+  }
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   const rest = seconds % 60;
@@ -163,7 +165,9 @@ export function blockLoss(
   what: string,
   catalogue: string,
 ): string | null {
-  if (count === undefined || count === 0) return null;
+  if (count === undefined || count === 0) {
+    return null;
+  }
   return `${count} ${what}(s) ${catalogue} answered with could not be read and are left out of the block here.`;
 }
 
@@ -223,7 +227,9 @@ export function recordLines(record: Record<string, unknown>, kind: string): stri
 }
 
 function listLine(label: string, value: unknown): string | null {
-  if (!Array.isArray(value) || value.length === 0) return null;
+  if (!Array.isArray(value) || value.length === 0) {
+    return null;
+  }
   const held = value
     .map((entry) => inline(String(entry)))
     .filter((entry): entry is string => entry !== null);
@@ -232,27 +238,37 @@ function listLine(label: string, value: unknown): string | null {
 
 function studioLine(value: unknown): string | null {
   const studio = value as { name?: string | null; id?: string; status?: never } | null;
-  if (studio === null || studio === undefined) return null;
+  if (studio === null || studio === undefined) {
+    return null;
+  }
   return `${inline(studio.name ?? null) ?? studio.id ?? ""}${markerSuffix(studio.status ?? ("established" as never))}`;
 }
 
 function parentLine(value: unknown): string | null {
   const parent = value as { name?: string | null; id?: string } | null;
-  if (parent === null || parent === undefined) return null;
+  if (parent === null || parent === undefined) {
+    return null;
+  }
   return inline(parent.name ?? null) ?? parent.id ?? null;
 }
 
 function categoryLine(value: unknown): string | null {
   const category = value as { name?: string | null; group?: string | null } | null;
-  if (category === null || category === undefined) return null;
+  if (category === null || category === undefined) {
+    return null;
+  }
   const named = inline(category.name ?? null);
   const group = inline(category.group ?? null);
-  if (named === null) return null;
+  if (named === null) {
+    return null;
+  }
   return group === null ? named : `${named} (${group})`;
 }
 
 function creditsLine(value: unknown): string | null {
-  if (!Array.isArray(value) || value.length === 0) return null;
+  if (!Array.isArray(value) || value.length === 0) {
+    return null;
+  }
   const credits = value
     .map((entry) => {
       const credit = entry as {
@@ -300,9 +316,15 @@ export function renderCard(card: Card, kind: string, cached = false): Rendered {
         const who = catalogueOf(one.source).name;
         // A null is three different facts. Read as one, two of them become a
         // limit the catalogue does not have.
-        if (one.value !== null) return `${one.value} on ${who}`;
-        if (one.state === "absent") return `${who} was never asked`;
-        if (one.state === "failed") return `${who} could not answer`;
+        if (one.value !== null) {
+          return `${one.value} on ${who}`;
+        }
+        if (one.state === "absent") {
+          return `${who} was never asked`;
+        }
+        if (one.state === "failed") {
+          return `${who} could not answer`;
+        }
         return `${who} publishes no such count`;
       })
       .join("; ");
@@ -317,7 +339,9 @@ export function renderCard(card: Card, kind: string, cached = false): Rendered {
   // are held apart from the shape they are folded on and printed back.
   const alike = new Map<string, { names: string[]; variables: string[] }>();
   for (const one of card.held_by) {
-    if (one.state !== "absent" || one.reason === undefined) continue;
+    if (one.state !== "absent" || one.reason === undefined) {
+      continue;
+    }
     const who = catalogueOf(one.source).name;
     const shape = one.reason
       .split(who)
@@ -326,7 +350,9 @@ export function renderCard(card: Card, kind: string, cached = false): Rendered {
     const group = alike.get(shape) ?? { names: [], variables: [] };
     group.names.push(who);
     for (const variable of one.reason.match(/STASHBOX_\w+/g) ?? []) {
-      if (!group.variables.includes(variable)) group.variables.push(variable);
+      if (!group.variables.includes(variable)) {
+        group.variables.push(variable);
+      }
     }
     alike.set(shape, group);
   }
@@ -341,7 +367,9 @@ export function renderCard(card: Card, kind: string, cached = false): Rendered {
       if (one.state === "answered") {
         // A catalogue that looked and holds nothing there answered, and saying
         // it holds the record is the one thing the answer cannot say.
-        if (one.reason !== undefined) return `  - ${who}: ${inline(one.reason) ?? ""}`;
+        if (one.reason !== undefined) {
+          return `  - ${who}: ${inline(one.reason) ?? ""}`;
+        }
         const at = one.retrieved_at === undefined ? "" : `, read ${one.retrieved_at}`;
         const where = one.source_url === undefined ? "" : ` (${inline(one.source_url) ?? ""})`;
         return `  - ${who}: holds it at ${one.id ?? ""}${one.status === undefined ? "" : markerSuffix(one.status)}${where}${at}`;
@@ -353,7 +381,9 @@ export function renderCard(card: Card, kind: string, cached = false): Rendered {
     });
 
   for (const [shape, group] of alike) {
-    if (group.names.length < 2) continue;
+    if (group.names.length < 2) {
+      continue;
+    }
     const said = shape
       .split(CATALOGUE)
       .join("each of them")
@@ -469,9 +499,12 @@ export function renderMatches(result: Matches, cached: boolean): Rendered {
   // the note would assert a choice a caller does not have to make.
   const cardsPerHash = new Map<string, number>();
   for (const one of result.matches) {
-    if (one.matchKind !== "exact_file") continue;
-    for (const by of one.matchedBy)
+    if (one.matchKind !== "exact_file") {
+      continue;
+    }
+    for (const by of one.matchedBy) {
       cardsPerHash.set(spelt(by), (cardsPerHash.get(spelt(by)) ?? 0) + 1);
+    }
   }
   const doubled = [...cardsPerHash].filter(([, cards]) => cards > 1).map(([hash]) => hash);
   if (doubled.length > 0) {
@@ -556,8 +589,9 @@ export function renderMatches(result: Matches, cached: boolean): Rendered {
       ].filter((part): part is string => part !== null);
       return `  - ${who}: answered${also.length === 0 ? "" : `, ${also.join("; ")}`}`;
     }
-    if (one.state === "failed")
+    if (one.state === "failed") {
       return `  - ${who}: could not answer: ${inline(one.reason ?? "") ?? ""}`;
+    }
     return `  - ${who}: not asked: ${inline(one.reason ?? "") ?? ""}`;
   });
 
@@ -741,7 +775,9 @@ export function renderRows(result: Rows, what: string, notes: string[], cached =
 export function rowPayload(row: Record<string, unknown>): Record<string, unknown> {
   const held: Record<string, unknown> = {};
   for (const [name, value] of Object.entries(row)) {
-    if (value === undefined) continue;
+    if (value === undefined) {
+      continue;
+    }
     held[name.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)] = value;
   }
   return held;
@@ -770,14 +806,22 @@ function rowLine(row: Record<string, unknown>): string {
  * reader as nothing at all.
  */
 function spelled(value: unknown): string | null {
-  if (value === null || value === undefined) return null;
-  if (typeof value !== "object") return inline(String(value));
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value !== "object") {
+    return inline(String(value));
+  }
   const held = value as Record<string, unknown>;
   if (typeof held.value === "string" && typeof held.precision === "string") {
     return inline(held.value);
   }
-  if (typeof held.url === "string") return linksText([held as never]);
-  if (typeof held.hash === "string") return fingerprintText(held as Partial<FingerprintRow>);
+  if (typeof held.url === "string") {
+    return linksText([held as never]);
+  }
+  if (typeof held.hash === "string") {
+    return fingerprintText(held as Partial<FingerprintRow>);
+  }
   if (typeof held.name === "string" || typeof held.id === "string") {
     // The identifier travels with the name: a reader who wants this record's
     // scenes calls the next tool with it, and a name is what that tool
@@ -785,7 +829,9 @@ function spelled(value: unknown): string | null {
     // chaining back from a card takes the same.
     const called = inline(String(held.name ?? ""));
     const at = typeof held.id === "string" ? inline(held.id) : null;
-    if (called === null) return at;
+    if (called === null) {
+      return at;
+    }
     return at === null ? called : `${called} [${at}]`;
   }
   // A block of named fields is printed as its fields. A shape with nothing
@@ -805,7 +851,9 @@ function spelled(value: unknown): string | null {
 /** One value, with the catalogues that said it and the readings that lost. */
 function valueLine(name: string, held: CardValue): string | null {
   const value = spelled(held.value);
-  if (value === null) return null;
+  if (value === null) {
+    return null;
+  }
   const said = held.agreed_by.map((one) => catalogueOf(one).name).join(", ");
   const apart =
     held.disagreed === undefined
@@ -824,7 +872,9 @@ function valueLine(name: string, held: CardValue): string | null {
  */
 function unionBlock(name: string, entries: readonly CardEntry[]): string | null {
   const one = unionLine(name, entries);
-  if (one === null || one.length <= 240) return one;
+  if (one === null || one.length <= 240) {
+    return one;
+  }
   const rows = entries
     .map((entry) => {
       const value = spelled(entry.value);
@@ -876,8 +926,9 @@ function elsewhere(entry: CardEntry, name: string, brief: boolean): string {
  * exists to keep.
  */
 function unionLine(name: string, entries: readonly CardEntry[]): string | null {
-  if (entries.length === 0)
+  if (entries.length === 0) {
     return `${spelt(name)}: none of the catalogues that answered published any`;
+  }
   const each = entries
     .map((entry) => {
       const value = spelled(entry.value);
@@ -891,7 +942,7 @@ function unionLine(name: string, entries: readonly CardEntry[]): string | null {
 
 /** One of what a field holds, named as a reader names a single one of them. */
 function oneOf(field: string): string {
-  return /ses$/.test(field) ? field.slice(0, -2) : field.replace(/s$/, "");
+  return field.endsWith("ses") ? field.slice(0, -2) : field.replace(/s$/, "");
 }
 
 /** A field of a card as a reader names the thing it holds. */

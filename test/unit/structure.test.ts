@@ -18,7 +18,9 @@ const SRC = new URL("../../src", import.meta.url).pathname;
 function sourceFiles(directory: string = SRC): string[] {
   return readdirSync(directory).flatMap((entry) => {
     const path = join(directory, entry);
-    if (statSync(path).isDirectory()) return sourceFiles(path);
+    if (statSync(path).isDirectory()) {
+      return sourceFiles(path);
+    }
     return path.endsWith(".ts") ? [path] : [];
   });
 }
@@ -168,7 +170,7 @@ describe("every error this server raises carries one of the six codes", () => {
     // issue this server adds carries the code in the words a caller reads.
     for (const found of ALL.matchAll(/addIssue\(\{[\s\S]{0,400}?\}\)/g)) {
       expect(
-        found[0].includes(`\${CODE}`) || /\[[a-z_]+\]/.test(found[0]),
+        found[0].includes("${CODE}") || /\[[a-z_]+\]/.test(found[0]),
         `an issue reaches a caller with no code: ${found[0].slice(0, 80)}`,
       ).toBe(true);
     }

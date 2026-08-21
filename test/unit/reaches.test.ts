@@ -144,11 +144,17 @@ function answering(): StashboxClient {
 function written(argument: string): Record<string, unknown> {
   const held: Record<string, unknown> = { [argument]: VALUE[argument] };
   // A date and the comparison it is read with travel together.
-  if (argument === "date") held.date_compare = "after";
-  if (argument === "date_compare") held.date = "2019-04-12";
+  if (argument === "date") {
+    held.date_compare = "after";
+  }
+  if (argument === "date_compare") {
+    held.date = "2019-04-12";
+  }
   // A list of identifiers is read one way or the other, and the reading is what
   // `match` decides, so it needs a list to decide about.
-  if (argument === "match") held.tag_ids = VALUE.tag_ids;
+  if (argument === "match") {
+    held.tag_ids = VALUE.tag_ids;
+  }
   return held;
 }
 
@@ -279,7 +285,9 @@ describe("match decides the reading of the lists it names", () => {
   /** The criteria one search sent, as the catalogue received them. */
   async function criteria(written: Record<string, unknown>): Promise<string> {
     const search = TOOLS.find((one) => one.name === "search_scenes");
-    if (search === undefined) throw new Error("no tool named search_scenes");
+    if (search === undefined) {
+      throw new Error("no tool named search_scenes");
+    }
     const { client, sent } = watching();
     const read = search.inputSchema.parse(written);
     await search.run(client as never, read as Record<string, unknown>);

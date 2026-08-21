@@ -35,7 +35,9 @@ const STUDIOS = ["Northgate Pictures", "Tidewater Film", "Quarry House", "Meridi
 
 function hex(length) {
   let out = "";
-  while (out.length < length) out += Math.floor(random() * 16).toString(16);
+  while (out.length < length) {
+    out += Math.floor(random() * 16).toString(16);
+  }
   return out.slice(0, length);
 }
 
@@ -47,8 +49,12 @@ function uuid(version) {
 function date() {
   const year = 1994 + Math.floor(random() * 32);
   const roll = random();
-  if (roll < 0.08) return String(year);
-  if (roll < 0.14) return `${year}-${String(1 + Math.floor(random() * 12)).padStart(2, "0")}`;
+  if (roll < 0.08) {
+    return String(year);
+  }
+  if (roll < 0.14) {
+    return `${year}-${String(1 + Math.floor(random() * 12)).padStart(2, "0")}`;
+  }
   return `${year}-${String(1 + Math.floor(random() * 12)).padStart(2, "0")}-${String(
     1 + Math.floor(random() * 28),
   ).padStart(2, "0")}`;

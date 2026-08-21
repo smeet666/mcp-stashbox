@@ -51,7 +51,9 @@ import { cardOutput, fingerprintOutput, rowsOutput, sourcesOutput } from "./sche
 function asWritten(args: Record<string, unknown>): Record<string, unknown> {
   const held: Record<string, unknown> = {};
   for (const [name, value] of Object.entries(args)) {
-    if (value === undefined) continue;
+    if (value === undefined) {
+      continue;
+    }
     held[name.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase())] = value;
   }
   return held;
@@ -426,7 +428,9 @@ function asRow(kind: string, row: Record<string, unknown>): Record<string, unkno
   const left = LEFT_TO_THE_CARD[kind] ?? [];
   const held: Record<string, unknown> = {};
   for (const [name, value] of Object.entries(row)) {
-    if (left.includes(name)) continue;
+    if (left.includes(name)) {
+      continue;
+    }
     held[name] = name === "tags" && Array.isArray(value) ? value.map(taggedAs) : value;
   }
   return held;
@@ -442,7 +446,9 @@ function asRow(kind: string, row: Record<string, unknown>): Record<string, unkno
  */
 function taggedAs(tag: unknown): unknown {
   const one = tag as { id?: unknown; name?: unknown };
-  if (typeof one !== "object" || one === null) return tag;
+  if (typeof one !== "object" || one === null) {
+    return tag;
+  }
   return { id: one.id, name: one.name };
 }
 
@@ -457,7 +463,9 @@ function taggedAs(tag: unknown): unknown {
  */
 function noteUnboundedBlocks(card: { fields: Record<string, unknown>; notes: string[] }): void {
   const studios = card.fields.studios;
-  if (!Array.isArray(studios) || studios.length === 0) return;
+  if (!Array.isArray(studios) || studios.length === 0) {
+    return;
+  }
   const publishing = named(publishersOf(studios));
   card.notes.push(
     `The studios block holds ${studios.length} row(s), published by ${publishing}, and they are every studio ${publishing} credits this performer on: the table it publishes carries no page of its own, so it is read whole and nothing here caps or samples it. A catalogue that answered without publishing this table contributed no row to it.`,
@@ -469,8 +477,14 @@ function publishersOf(entries: readonly unknown[]): string[] {
   const sources = new Set<string>();
   for (const entry of entries) {
     const published = (entry as { published_by?: unknown }).published_by;
-    if (!Array.isArray(published)) continue;
-    for (const source of published) if (typeof source === "string") sources.add(source);
+    if (!Array.isArray(published)) {
+      continue;
+    }
+    for (const source of published) {
+      if (typeof source === "string") {
+        sources.add(source);
+      }
+    }
   }
   return [...sources];
 }

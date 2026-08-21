@@ -86,9 +86,13 @@ export class RateLimiter {
 
   /** A clean answer, which buys back half the widening once enough have followed. */
   succeeded(): void {
-    if (this.#intervalMs <= this.#baseIntervalMs) return;
+    if (this.#intervalMs <= this.#baseIntervalMs) {
+      return;
+    }
     this.#cleanAnswers += 1;
-    if (this.#cleanAnswers < CLEAN_ANSWERS_BEFORE_NARROWING) return;
+    if (this.#cleanAnswers < CLEAN_ANSWERS_BEFORE_NARROWING) {
+      return;
+    }
     this.#cleanAnswers = 0;
     this.#intervalMs = Math.max(this.#baseIntervalMs, this.#intervalMs / 2);
   }
@@ -106,18 +110,24 @@ export class RateLimiter {
 
   async #waitTurn(): Promise<void> {
     const wait = this.#waitMs();
-    if (wait > 0) await sleep(wait);
+    if (wait > 0) {
+      await sleep(wait);
+    }
     this.#lastRequestAt = Date.now();
   }
 
   #waitMs(): number {
     const last = this.#lastRequestAt;
-    if (last === undefined) return 0;
+    if (last === undefined) {
+      return 0;
+    }
     const elapsed = Date.now() - last;
     // A clock that jumps backwards makes the previous request read as one made
     // in the future, and the difference would park this client for the length
     // of the jump. One interval is the longest wait the instance is owed.
-    if (elapsed < 0) return this.#intervalMs;
+    if (elapsed < 0) {
+      return this.#intervalMs;
+    }
     return Math.min(this.#intervalMs, Math.max(0, this.#intervalMs - elapsed));
   }
 }

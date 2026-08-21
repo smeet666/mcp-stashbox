@@ -34,7 +34,9 @@ const UUID = "94ef9c17-82c6-48b0-8dcc-063b69231960";
 
 const tool = (name: string) => {
   const found = TOOLS.find((one) => one.name === name);
-  if (found === undefined) throw new Error(`no tool is named ${name}`);
+  if (found === undefined) {
+    throw new Error(`no tool is named ${name}`);
+  }
   return found;
 };
 
@@ -46,8 +48,9 @@ function watching(answer?: (query: string) => unknown) {
     transport: {
       request: async (_spec, _apiKey, body) => {
         sent.push(body.query);
-        if (answer === undefined)
+        if (answer === undefined) {
           throw new Error("this test reads the request and never an answer");
+        }
         return answer(body.query) as never;
       },
     },

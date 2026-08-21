@@ -45,7 +45,9 @@ function holding(answers: Partial<Record<string, unknown>>, keys?: Record<string
     transport: {
       request: async (spec, _apiKey, body) => {
         const named = /(?:query|mutation)\s+\w+[^{]*\{\s*(\w+)/.exec(body.query)?.[1] ?? "";
-        if (!(spec.id in answers)) throw new Error(`${spec.name} could not be reached`);
+        if (!(spec.id in answers)) {
+          throw new Error(`${spec.name} could not be reached`);
+        }
         return { [named]: answers[spec.id] } as never;
       },
     },

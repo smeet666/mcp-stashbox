@@ -103,7 +103,9 @@ export function createHttpTransport(options: HttpTransportOptions): HttpTranspor
       };
       // A key nobody set is a header nobody sends: an empty one would be read
       // as a credential presented and refused.
-      if (apiKey) headers.ApiKey = apiKey;
+      if (apiKey) {
+        headers.ApiKey = apiKey;
+      }
 
       response = await fetchImpl(spec.endpoint, {
         method: "POST",
@@ -264,7 +266,9 @@ export function createHttpTransport(options: HttpTransportOptions): HttpTranspor
       if (named !== undefined && named > LONGEST_HONOURED_RETRY_AFTER_MS) {
         throw attempt.error;
       }
-      if (!attempt.retryable || attemptsLeft <= 0) throw attempt.error;
+      if (!attempt.retryable || attemptsLeft <= 0) {
+        throw attempt.error;
+      }
 
       attemptsLeft -= 1;
       // A delay the catalogue named governs, since it knows when it will answer
@@ -373,10 +377,14 @@ function readBody(
 }
 
 function messageOf(entry: unknown): string {
-  if (typeof entry === "string") return entry;
+  if (typeof entry === "string") {
+    return entry;
+  }
   if (typeof entry === "object" && entry !== null) {
     const message = (entry as { message?: unknown }).message;
-    if (typeof message === "string") return message;
+    if (typeof message === "string") {
+      return message;
+    }
   }
   return "";
 }
@@ -389,14 +397,22 @@ function messageOf(entry: unknown): string {
  * client guessed at would be its own delay wearing the catalogue's name.
  */
 function readRetryAfter(written: string | null): number | undefined {
-  if (written === null) return undefined;
+  if (written === null) {
+    return undefined;
+  }
   const value = written.trim();
-  if (value === "") return undefined;
+  if (value === "") {
+    return undefined;
+  }
 
-  if (/^\d+$/.test(value)) return Number(value) * 1000;
+  if (/^\d+$/.test(value)) {
+    return Number(value) * 1000;
+  }
 
   const at = Date.parse(value);
-  if (Number.isNaN(at)) return undefined;
+  if (Number.isNaN(at)) {
+    return undefined;
+  }
   return Math.max(0, at - Date.now());
 }
 
@@ -409,7 +425,9 @@ function completeUserAgent(written: string): string {
   const own = written.trim();
   const identifies = own.includes(PKG_NAME) && own.includes(CONTACT_URL);
   const mine = `${PKG_NAME}/${VERSION} (+${CONTACT_URL})`;
-  if (own === "") return mine;
+  if (own === "") {
+    return mine;
+  }
   return identifies ? own : `${own} ${mine}`;
 }
 

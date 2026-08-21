@@ -24,7 +24,9 @@ const OTHER = "019fec3f-1bb1-7383-8782-ea0e678f6de0";
 
 const tool = (name: string) => {
   const found = TOOLS.find((one) => one.name === name);
-  if (found === undefined) throw new Error(`no tool is named ${name}`);
+  if (found === undefined) {
+    throw new Error(`no tool is named ${name}`);
+  }
   return found;
 };
 

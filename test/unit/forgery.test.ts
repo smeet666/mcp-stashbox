@@ -51,7 +51,9 @@ describe("a value a catalogue published stays on the line it was placed in", () 
   it("keeps every image on a line of its own", () => {
     const rows = imageRows([{ url: POISON, width: 100, height: 200 }]);
     expect(rows.length).toBe(1);
-    for (const row of rows) expect(lines(row)).toBe(1);
+    for (const row of rows) {
+      expect(lines(row)).toBe(1);
+    }
   });
 
   it("keeps every fingerprint on a line of its own", () => {
@@ -66,7 +68,9 @@ describe("a value a catalogue published stays on the line it was placed in", () 
       },
     ]);
     expect(rows.length).toBe(1);
-    for (const row of rows) expect(lines(row)).toBe(1);
+    for (const row of rows) {
+      expect(lines(row)).toBe(1);
+    }
   });
 
   it("keeps a tag and its category on one line", () => {

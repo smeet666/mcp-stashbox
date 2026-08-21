@@ -43,7 +43,9 @@ function faults(schema: Record<string, unknown>, value: unknown, at = ""): Fault
 
   const options = schema.anyOf as Record<string, unknown>[] | undefined;
   if (options !== undefined) {
-    if (options.some((one) => faults(one, value, at).length === 0)) return [];
+    if (options.some((one) => faults(one, value, at).length === 0)) {
+      return [];
+    }
     return [`${where} matches none of the readings the schema declares`];
   }
 
@@ -54,7 +56,9 @@ function faults(schema: Record<string, unknown>, value: unknown, at = ""): Fault
 
   const type = schema.type as string | undefined;
   if (type === "array") {
-    if (!Array.isArray(value)) return [`${where} is no array`];
+    if (!Array.isArray(value)) {
+      return [`${where} is no array`];
+    }
     const items = schema.items as Record<string, unknown> | undefined;
     if (items !== undefined) {
       value.forEach((one, index) => {
@@ -70,7 +74,9 @@ function faults(schema: Record<string, unknown>, value: unknown, at = ""): Fault
     const held = value as Record<string, unknown>;
     const properties = (schema.properties as Record<string, Record<string, unknown>>) ?? {};
     for (const name of (schema.required as string[]) ?? []) {
-      if (!(name in held)) found.push(`${where} declares ${name} and carries none`);
+      if (!(name in held)) {
+        found.push(`${where} declares ${name} and carries none`);
+      }
     }
     for (const [name, one] of Object.entries(held)) {
       const declared = properties[name];
@@ -84,10 +90,18 @@ function faults(schema: Record<string, unknown>, value: unknown, at = ""): Fault
     }
     return found;
   }
-  if (type === "string" && typeof value !== "string") found.push(`${where} is no string`);
-  if (type === "number" && typeof value !== "number") found.push(`${where} is no number`);
-  if (type === "boolean" && typeof value !== "boolean") found.push(`${where} is no boolean`);
-  if (type === "null" && value !== null) found.push(`${where} is not null`);
+  if (type === "string" && typeof value !== "string") {
+    found.push(`${where} is no string`);
+  }
+  if (type === "number" && typeof value !== "number") {
+    found.push(`${where} is no number`);
+  }
+  if (type === "boolean" && typeof value !== "boolean") {
+    found.push(`${where} is no boolean`);
+  }
+  if (type === "null" && value !== null) {
+    found.push(`${where} is not null`);
+  }
   return found;
 }
 
@@ -245,11 +259,15 @@ describe("every answer validates against the schema its tool publishes", () => {
     it(`${name} ${JSON.stringify(args).slice(0, 62)}`, async () => {
       const tool = TOOLS.find((one) => one.name === name);
       expect(tool, `no tool named ${name}`).toBeDefined();
-      if (tool === undefined) return;
+      if (tool === undefined) {
+        return;
+      }
 
       const read = tool.inputSchema.safeParse(args);
       expect(read.success, `${name} refused its own arguments: ${JSON.stringify(args)}`).toBe(true);
-      if (!read.success) return;
+      if (!read.success) {
+        return;
+      }
 
       const rendered = await tool.run(answering() as never, read.data as Record<string, unknown>);
       const declared = z.toJSONSchema(z.object(tool.outputSchema), { io: "output" }) as Record<
@@ -270,7 +288,9 @@ describe("every answer validates against the schema its tool publishes", () => {
    */
   const rowReading = (name: string): Record<string, unknown> => {
     const tool = TOOLS.find((one) => one.name === name);
-    if (tool === undefined) throw new Error(`no tool named ${name}`);
+    if (tool === undefined) {
+      throw new Error(`no tool named ${name}`);
+    }
     const declared = z.toJSONSchema(z.object(tool.outputSchema), {
       io: "output",
     }) as unknown as {
@@ -284,7 +304,9 @@ describe("every answer validates against the schema its tool publishes", () => {
   for (const [name, args] of CALLS.filter(([one]) => SEARCHES.includes(one))) {
     it(`${name} ${JSON.stringify(args).slice(0, 40)} answers rows of the kind it declares`, async () => {
       const tool = TOOLS.find((one) => one.name === name);
-      if (tool === undefined) throw new Error(`no tool named ${name}`);
+      if (tool === undefined) {
+        throw new Error(`no tool named ${name}`);
+      }
       const read = tool.inputSchema.parse(args) as Record<string, unknown>;
       const rendered = await tool.run(answering() as never, read);
       const rows = (rendered.structured as { results: unknown[] }).results;

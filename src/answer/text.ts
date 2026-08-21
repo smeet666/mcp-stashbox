@@ -30,7 +30,9 @@ export interface Rendered {
  * line instead of printing a label with nothing after it.
  */
 export function inline(value: string | null | undefined): string | null {
-  if (value === null || value === undefined) return null;
+  if (value === null || value === undefined) {
+    return null;
+  }
   const flattened = value.replace(/[\r\n]+/g, " ").trim();
   return flattened === "" ? null : indentMarkerLines(flattened);
 }
@@ -52,7 +54,9 @@ export function inlineAll(values: readonly string[]): string {
  * line of it can begin where a line of ours begins.
  */
 export function quoted(text: string | null): string | null {
-  if (text === null) return null;
+  if (text === null) {
+    return null;
+  }
   return text
     .split("\n")
     .map((entry) => `  ${entry}`)
@@ -96,7 +100,9 @@ export function pendingEdits(count: number | null, unreadable?: boolean): string
   if (unreadable === true) {
     return "a count this catalogue publishes and this client could not read";
   }
-  if (count === null) return null;
+  if (count === null) {
+    return null;
+  }
   return count === 0 ? "none open" : String(count);
 }
 
@@ -105,7 +111,9 @@ export function pendingEdits(count: number | null, unreadable?: boolean): string
  * that lost them, so the number says what it counts.
  */
 export function lostRows(skipped?: number, lists?: readonly string[]): string | null {
-  if (skipped === undefined || skipped === 0) return null;
+  if (skipped === undefined || skipped === 0) {
+    return null;
+  }
   const where = lists === undefined || lists.length === 0 ? "" : ` (in ${lists.join(", ")})`;
   return `${skipped}${where}`;
 }

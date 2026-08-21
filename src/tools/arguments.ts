@@ -117,8 +117,12 @@ export function hexadecimalHash<T extends z.ZodObject<z.ZodRawShape>>(schema: T)
     const algorithm = String(written.algorithm);
     const hash = String(written.hash);
     const length = HASH_LENGTH[algorithm];
-    if (length === undefined) return;
-    if (new RegExp(`^[0-9a-fA-F]{${length}}$`).test(hash)) return;
+    if (length === undefined) {
+      return;
+    }
+    if (new RegExp(`^[0-9a-fA-F]{${length}}$`).test(hash)) {
+      return;
+    }
     ctx.addIssue({
       code: "custom",
       message: `${CODE} "${hash}" is no ${algorithm}. ${algorithm} writes ${length} hexadecimal characters, and a string outside that shape names no file any catalogue indexes.`,
@@ -217,7 +221,9 @@ export function strictInput<Shape extends z.ZodRawShape>(shape: Shape): z.ZodObj
   const declared = Object.keys(shape);
   return z.strictObject(shape, {
     error: (issue) => {
-      if (issue.code === "unrecognized_keys") return unknownArgumentMessage(issue.keys, declared);
+      if (issue.code === "unrecognized_keys") {
+        return unknownArgumentMessage(issue.keys, declared);
+      }
       // Anything else the validator writes about this object is still an
       // argument that cannot produce a request, which is the one thing this code
       // names. Its own sentence already says which argument and why, so it is
@@ -283,8 +289,12 @@ function nearest(written: string, declared: readonly string[]): string | undefin
   let best: { name: string; apart: number } | undefined;
   for (const name of declared) {
     const apart = distance(written.toLowerCase(), name.toLowerCase());
-    if (apart > 2) continue;
-    if (best === undefined || apart < best.apart) best = { name, apart };
+    if (apart > 2) {
+      continue;
+    }
+    if (best === undefined || apart < best.apart) {
+      best = { name, apart };
+    }
   }
   return best?.name;
 }
@@ -306,9 +316,13 @@ export function exclusiveQuery<T extends z.ZodObject<z.ZodRawShape>>(
 ): T {
   return schema.superRefine((value, ctx) => {
     const written = value as Record<string, unknown>;
-    if (written.query === undefined) return;
+    if (written.query === undefined) {
+      return;
+    }
     const beside = typed.filter((name) => written[name] !== undefined);
-    if (beside.length === 0) return;
+    if (beside.length === 0) {
+      return;
+    }
     ctx.addIssue({
       code: "custom",
       message: `${CODE} query was written beside ${beside.join(", ")}. A catalogue's own text index reads the words as a union, and the typed arguments narrow as an intersection, so the two answer different questions. Write query on its own, or write the typed arguments without it.`,
@@ -328,7 +342,9 @@ export function datedTogether<T extends z.ZodObject<z.ZodRawShape>>(schema: T): 
     const written = value as Record<string, unknown>;
     const date = written.date !== undefined;
     const compare = written.date_compare !== undefined;
-    if (date === compare) return;
+    if (date === compare) {
+      return;
+    }
     ctx.addIssue({
       code: "custom",
       message: date

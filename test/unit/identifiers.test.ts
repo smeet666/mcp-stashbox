@@ -14,7 +14,9 @@ function capture(run: () => unknown): StashboxError {
   try {
     run();
   } catch (error) {
-    if (error instanceof StashboxError) return error;
+    if (error instanceof StashboxError) {
+      return error;
+    }
     throw error;
   }
   throw new Error("the call returned instead of throwing");
@@ -115,7 +117,7 @@ describe("parseId", () => {
   });
 
   it("refuses a uuid carrying a group of the wrong length", () => {
-    const error = capture(() => parseId(`stashdb:94ef9c17-82c6-48b0-8dcc-063b6923196`, ALL));
+    const error = capture(() => parseId("stashdb:94ef9c17-82c6-48b0-8dcc-063b6923196", ALL));
     expect(error.code).toBe("invalid_input");
   });
 

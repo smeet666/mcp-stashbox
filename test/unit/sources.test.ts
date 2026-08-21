@@ -200,7 +200,9 @@ describe("the answer get_sources gives", () => {
 
   it("holds the address a reader follows to the catalogue itself", () => {
     const said = describeSources({ configured: [] });
-    for (const one of said.sources) expect(one.web_url).toMatch(/^https:\/\//);
+    for (const one of said.sources) {
+      expect(one.web_url).toMatch(/^https:\/\//);
+    }
   });
 
   it("says so where no catalogue is reachable, rather than answering an empty list", () => {
