@@ -20,7 +20,8 @@ import { blockLoss } from "../../src/answer/render.js";
 /** The messages of a refusal, or a failure saying the input was accepted. */
 function refusal(schema: { safeParse: (value: unknown) => unknown }, input: unknown): string {
   const result = schema.safeParse(input) as
-    { success: true } | { success: false; error: { issues: { message: string }[] } };
+    | { success: true }
+    | { success: false; error: { issues: { message: string }[] } };
   if (result.success) throw new Error("the schema accepted an input it was expected to refuse");
   return result.error.issues.map((issue) => issue.message).join("\n");
 }

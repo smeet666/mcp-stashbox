@@ -127,7 +127,7 @@ function scene(index) {
 mkdirSync(OUT, { recursive: true });
 writeFileSync(
   join(OUT, "corpus.json"),
-  JSON.stringify(
+  `${JSON.stringify(
     {
       generatedBy: "scripts/build-fixtures.mjs",
       performers: Array.from({ length: 60 }, (_, index) => performer(index)),
@@ -135,7 +135,7 @@ writeFileSync(
     },
     null,
     2,
-  ) + "\n",
+  )}\n`,
 );
 
 process.stdout.write(`wrote ${join(OUT, "corpus.json")}\n`);

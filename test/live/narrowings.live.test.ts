@@ -302,7 +302,8 @@ describe.skipIf(!ENABLED)("live: the fingerprint route reaches a catalogue", () 
     ]);
     const carried = scene.data.fields.fingerprints;
     const print = (Array.isArray(carried) ? carried[0]?.value : undefined) as
-      { hash: string; algorithm: "MD5" | "OSHASH" | "PHASH" } | undefined;
+      | { hash: string; algorithm: "MD5" | "OSHASH" | "PHASH" }
+      | undefined;
     expect(print, "the record carried no fingerprint, so this case measures nothing").toBeDefined();
     if (!print) return;
 
@@ -362,7 +363,8 @@ describe.skipIf(!ENABLED)("live: what a card a fingerprint lookup opens states",
     ]);
     const carried = scene.data.fields.fingerprints;
     const print = (Array.isArray(carried) ? carried[0]?.value : undefined) as
-      { hash: string; algorithm: "MD5" | "OSHASH" | "PHASH" } | undefined;
+      | { hash: string; algorithm: "MD5" | "OSHASH" | "PHASH" }
+      | undefined;
     expect(print, "the record carried no fingerprint, so this case measures nothing").toBeDefined();
     if (!print) return;
 

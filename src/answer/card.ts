@@ -276,7 +276,8 @@ function unionOf(answered: readonly Answered[], name: string): CardListEntry[] {
         // identifier this catalogue minted is the one a reader chains to
         // there, and dropping it leaves that catalogue's record unreachable.
         if (identifierOf(found.value) !== id && !(found.also_at ?? []).some((at) => at.id === id)) {
-          (found.also_at ??= []).push({ source: one.source, id });
+          found.also_at ??= [];
+          found.also_at.push({ source: one.source, id });
         }
       }
       addressed.set(id, kept);
@@ -352,7 +353,8 @@ function resembling(held: readonly CardListEntry[]): CardListEntry[] {
       // one name, which is its own reading and no resemblance between two
       // catalogues.
       if (other.published_by.some((source) => one.published_by.includes(source))) continue;
-      (one.same_name_as ??= []).push({ source: mintedOn(id, other), id });
+      one.same_name_as ??= [];
+      one.same_name_as.push({ source: mintedOn(id, other), id });
     }
   }
   return [...held];
@@ -366,7 +368,8 @@ function countIn(value: unknown): number | null {
 /** What became of one catalogue, whether it answered, failed or was never asked. */
 function holderOf(reading: Reading): CardHolder {
   const held = reading.record as
-    { status?: RecordStatus; sourceUrl?: string; retrievedAt?: string } | undefined;
+    | { status?: RecordStatus; sourceUrl?: string; retrievedAt?: string }
+    | undefined;
   const status = held?.status;
   return {
     source: reading.source,

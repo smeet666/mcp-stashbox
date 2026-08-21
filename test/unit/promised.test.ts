@@ -23,7 +23,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { z } from "zod";
+import type { z } from "zod";
 
 import { TOOLS } from "../../src/tools/index.js";
 import { describeSources } from "../../src/answer/sources.js";

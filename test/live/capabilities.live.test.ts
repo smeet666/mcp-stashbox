@@ -380,33 +380,29 @@ describe.skipIf(!ENABLED)("every capability the registry calls answered is answe
 
     for (const capability of CAPABILITIES) {
       if (!supports(spec, capability)) continue;
-      it(
-        unreachable
-          ? `${spec.name} answers ${capability} — UNVERIFIED in this run`
-          : `${spec.name} answers ${capability}`,
-        async (ctx) => {
-          if (unreachable) {
-            ctx.skip(
-              `UNVERIFIED: ${spec.name} publishes ${capability} as measured answering, and no request was put to it here, since ${unreachable}`,
-            );
-            return;
-          }
-          const read = (await QUESTION[capability](spec)) as {
-            data?: {
-              perSource?: { source: string; state: string; error?: string; reason?: string }[];
-            };
-          };
-          const refused = (read.data?.perSource ?? []).filter(
-            (report) => report.source === spec.id && report.state === "failed",
+      it(unreachable
+        ? `${spec.name} answers ${capability} — UNVERIFIED in this run`
+        : `${spec.name} answers ${capability}`, async (ctx) => {
+        if (unreachable) {
+          ctx.skip(
+            `UNVERIFIED: ${spec.name} publishes ${capability} as measured answering, and no request was put to it here, since ${unreachable}`,
           );
-          expect(
-            refused.map((report) => `${report.error}: ${report.reason ?? ""}`),
-            `${spec.name} declares ${capability} and refused the request this client builds for it`,
-          ).toEqual([]);
-          record(SEEN_ANSWERING, spec, capability);
-        },
-        60_000,
-      );
+          return;
+        }
+        const read = (await QUESTION[capability](spec)) as {
+          data?: {
+            perSource?: { source: string; state: string; error?: string; reason?: string }[];
+          };
+        };
+        const refused = (read.data?.perSource ?? []).filter(
+          (report) => report.source === spec.id && report.state === "failed",
+        );
+        expect(
+          refused.map((report) => `${report.error}: ${report.reason ?? ""}`),
+          `${spec.name} declares ${capability} and refused the request this client builds for it`,
+        ).toEqual([]);
+        record(SEEN_ANSWERING, spec, capability);
+      }, 60_000);
     }
   }
 });

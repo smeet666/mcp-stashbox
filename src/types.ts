@@ -40,7 +40,12 @@ export interface Read<T> {
 
 /** The one code a caller branches on. Only `not_found` is about the world. */
 export type ErrorCode =
-  "not_found" | "invalid_input" | "rate_limited" | "parse_failure" | "network_error" | "timeout";
+  | "not_found"
+  | "invalid_input"
+  | "rate_limited"
+  | "parse_failure"
+  | "network_error"
+  | "timeout";
 
 /* ------------------------------------------------------------ what was lost */
 
