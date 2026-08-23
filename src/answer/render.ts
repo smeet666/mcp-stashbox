@@ -24,6 +24,7 @@ import { instanceById, type Capability, type InstanceId } from "../stashbox/inst
 import type {
   Card,
   CardEntry,
+  CardHolder,
   CardValue,
   FingerprintRow,
   ImageRow,
@@ -301,6 +302,33 @@ const CATALOGUE = "\u0001";
 const VARIABLE = "\u0002";
 
 /**
+ * One line of the "Held by" block, in the state the catalogue is actually in.
+ *
+ * A catalogue that looked and holds nothing there answered, and saying it holds
+ * the record is the one thing the line cannot say, so the reason it published
+ * stands in place of an address.
+ */
+function heldByLine(one: CardHolder): string {
+  const who = catalogueOf(one.source).name;
+  const because = one.reason === undefined ? "" : `: ${inline(one.reason) ?? ""}`;
+
+  if (one.state === "failed") {
+    return `  - ${who}: could not answer (${one.error ?? "error"})${because}`;
+  }
+  if (one.state !== "answered") {
+    return `  - ${who}: not asked${because}`;
+  }
+  if (one.reason !== undefined) {
+    return `  - ${who}: ${inline(one.reason) ?? ""}`;
+  }
+
+  const at = one.retrieved_at === undefined ? "" : `, read ${one.retrieved_at}`;
+  const where = one.source_url === undefined ? "" : ` (${inline(one.source_url) ?? ""})`;
+  const marker = one.status === undefined ? "" : markerSuffix(one.status);
+  return `  - ${who}: holds it at ${one.id ?? ""}${marker}${where}${at}`;
+}
+
+/**
  * A card as a reader meets it: every value with the catalogues that said it,
  * every disagreement stated rather than resolved in silence.
  */
@@ -362,23 +390,7 @@ export function renderCard(card: Card, kind: string, cached = false): Rendered {
 
   const held = card.held_by
     .filter((one) => !folded.has(catalogueOf(one.source).name))
-    .map((one) => {
-      const who = catalogueOf(one.source).name;
-      if (one.state === "answered") {
-        // A catalogue that looked and holds nothing there answered, and saying
-        // it holds the record is the one thing the answer cannot say.
-        if (one.reason !== undefined) {
-          return `  - ${who}: ${inline(one.reason) ?? ""}`;
-        }
-        const at = one.retrieved_at === undefined ? "" : `, read ${one.retrieved_at}`;
-        const where = one.source_url === undefined ? "" : ` (${inline(one.source_url) ?? ""})`;
-        return `  - ${who}: holds it at ${one.id ?? ""}${one.status === undefined ? "" : markerSuffix(one.status)}${where}${at}`;
-      }
-      if (one.state === "failed") {
-        return `  - ${who}: could not answer (${one.error ?? "error"})${one.reason === undefined ? "" : `: ${inline(one.reason) ?? ""}`}`;
-      }
-      return `  - ${who}: not asked${one.reason === undefined ? "" : `: ${inline(one.reason) ?? ""}`}`;
-    });
+    .map(heldByLine);
 
   for (const [shape, group] of alike) {
     if (group.names.length < 2) {
@@ -685,6 +697,42 @@ export interface Rows {
 }
 
 /**
+ * Everything the payload carries about what one catalogue did with a search.
+ *
+ * A client showing the text block alone must lose none of it. A narrowing a
+ * catalogue never received, and a list it received short of what was written,
+ * both leave it answering a question of its own: its total counts that
+ * question, so the disclosure stands beside the total that would deny it.
+ */
+function whatElseThisCatalogueDid(one: {
+  indexTotal?: number;
+  indexTotalOverAnyWord?: boolean;
+  skipped?: number;
+  narrowingsNotReceived?: string[];
+  narrowingsReceivedInPart?: string[];
+  algorithmsNotSearched?: string[];
+}): string[] {
+  const notReceived = one.narrowingsNotReceived ?? [];
+  const inPart = one.narrowingsReceivedInPart ?? [];
+  const notSearched = one.algorithmsNotSearched ?? [];
+  const narrower = notReceived.length > 0 || inPart.length > 0;
+
+  return [
+    one.indexTotal === undefined
+      ? null
+      : `of ${String(one.indexTotal)} its own index holds for ${whatThatTotalCounts(one, narrower)}`,
+    one.skipped === undefined
+      ? null
+      : `${String(one.skipped)} row(s) it answered with could not be read and are left out`,
+    notReceived.length === 0 ? null : `did not receive: ${notReceived.join(", ")}`,
+    inPart.length === 0
+      ? null
+      : `received in part, the rest of what was written naming records of other catalogues: ${inPart.join(", ")}`,
+    notSearched.length === 0 ? null : `does not search ${notSearched.join(", ")}`,
+  ].filter((part): part is string => part !== null);
+}
+
+/**
  * What a catalogue's own index total was counted over.
  *
  * A catalogue whose text index reads the words apart counts rows carrying any
@@ -717,28 +765,7 @@ export function renderRows(result: Rows, what: string, notes: string[], cached =
       // of what was written, both leave it answering a question of its own. Its
       // total counts that question, and called the total for this one it stands
       // beside the disclosure that denies it.
-      const narrower =
-        (one.narrowingsNotReceived ?? []).length > 0 ||
-        (one.narrowingsReceivedInPart ?? []).length > 0;
-      const also = [
-        one.indexTotal === undefined
-          ? null
-          : `of ${String(one.indexTotal)} its own index holds for ${whatThatTotalCounts(one, narrower)}`,
-        one.skipped === undefined
-          ? null
-          : `${String(one.skipped)} row(s) it answered with could not be read and are left out`,
-        (one.narrowingsNotReceived ?? []).length === 0
-          ? null
-          : `did not receive: ${(one.narrowingsNotReceived ?? []).join(", ")}`,
-        (one.narrowingsReceivedInPart ?? []).length === 0
-          ? null
-          : `received in part, the rest of what was written naming records of other catalogues: ${(
-              one.narrowingsReceivedInPart ?? []
-            ).join(", ")}`,
-        (one.algorithmsNotSearched ?? []).length === 0
-          ? null
-          : `does not search ${(one.algorithmsNotSearched ?? []).join(", ")}`,
-      ].filter((part): part is string => part !== null);
+      const also = whatElseThisCatalogueDid(one);
       const tail = also.length === 0 ? "" : `, ${also.join("; ")}`;
       return `  - ${who}: answered, ${one.count ?? 0} row(s)${tail}`;
     }

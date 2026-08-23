@@ -287,38 +287,72 @@ function unionOf(answered: readonly Answered[], name: string): CardListEntry[] {
     for (const entry of value) {
       const id = identifierOf(entry);
       if (id === undefined) {
-        // An entry nobody minted an identifier for is what it holds. Two
-        // catalogues publishing one alias published one alias.
-        const key = typeof entry === "string" ? entry : identityOf(entry);
-        const found = byContent.get(key);
-        if (found === undefined) {
-          byContent.set(key, place(held, entry, one.source));
-        } else {
-          attribute(found, one.source);
-        }
+        joinOnContent({ held, byContent, entry, source: one.source });
         continue;
       }
-      const found = addressed.get(id);
-      const kept = found ?? place(held, entry, one.source);
-      if (found !== undefined) {
-        attribute(found, one.source);
-        // Reached through a link rather than under its own address: the
-        // identifier this catalogue minted is the one a reader chains to
-        // there, and dropping it leaves that catalogue's record unreachable.
-        if (identifierOf(found.value) !== id && !(found.also_at ?? []).some((at) => at.id === id)) {
-          found.also_at ??= [];
-          found.also_at.push({ source: one.source, id });
-        }
-      }
-      addressed.set(id, kept);
-      for (const link of linksOf(entry)) {
-        if (!addressed.has(link)) {
-          addressed.set(link, kept);
-        }
-      }
+      joinOnIdentifier({ held, addressed, entry, id, source: one.source });
     }
   }
   return resembling(held);
+}
+
+/**
+ * Fold an entry nobody minted an identifier for into the union, on what it holds.
+ *
+ * Two catalogues publishing one alias published one alias, so the content is
+ * the only address such an entry answers to.
+ */
+function joinOnContent(what: {
+  held: CardListEntry[];
+  byContent: Map<string, CardListEntry>;
+  entry: unknown;
+  source: string;
+}): void {
+  const { held, byContent, entry, source } = what;
+  const key = typeof entry === "string" ? entry : identityOf(entry);
+  const found = byContent.get(key);
+  if (found === undefined) {
+    byContent.set(key, place(held, entry, source));
+    return;
+  }
+  attribute(found, source);
+}
+
+/**
+ * Fold an entry a catalogue minted an identifier for into the union.
+ *
+ * The entry meets another catalogue's under its own address or under a link
+ * published to it, and every address it answers to is recorded so the entry
+ * that follows meets it either way.
+ */
+function joinOnIdentifier(what: {
+  held: CardListEntry[];
+  addressed: Map<string, CardListEntry>;
+  entry: unknown;
+  id: string;
+  source: string;
+}): void {
+  const { held, addressed, entry, id, source } = what;
+  const found = addressed.get(id);
+  const kept = found ?? place(held, entry, source);
+
+  if (found !== undefined) {
+    attribute(found, source);
+    // Reached through a link rather than under its own address: the identifier
+    // this catalogue minted is the one a reader chains to there, and dropping
+    // it leaves that catalogue's record unreachable.
+    if (identifierOf(found.value) !== id && !(found.also_at ?? []).some((at) => at.id === id)) {
+      found.also_at ??= [];
+      found.also_at.push({ source, id });
+    }
+  }
+
+  addressed.set(id, kept);
+  for (const link of linksOf(entry)) {
+    if (!addressed.has(link)) {
+      addressed.set(link, kept);
+    }
+  }
 }
 
 /** A new entry of the union, in the order the catalogue that published it was read. */

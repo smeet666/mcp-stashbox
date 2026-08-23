@@ -149,6 +149,158 @@ const ROUTE: Record<RecordKind, Capability> = {
 };
 
 /**
+ * Weld into one card the records two catalogues published one exact hash for.
+ *
+ * Two catalogues answering one exact hash describe the same bytes, which is the
+ * strongest identity the data carries, and both records are already here, so
+ * welding them costs no request. A perceptual hash states a likeness and joins
+ * nothing, so its records stay one card per catalogue.
+ *
+ * A catalogue mints one identifier per record it holds, so two of its records
+ * carrying one hash are two records by its own account: the second opens a card
+ * of its own rather than disappearing behind the first.
+ */
+function weldOnExactHashes(
+  keys: Iterable<string>,
+  printsOf: (key: string, exact: boolean) => { hash: string; algorithm: string }[],
+  sourceOf: (key: string) => InstanceId,
+): {
+  under: Map<string, Map<InstanceId, string>>;
+  root: (key: string) => string;
+} {
+  const all = [...keys];
+  const above = new Map<string, string>();
+  const under = new Map<string, Map<InstanceId, string>>();
+
+  const root = (key: string): string => {
+    const up = above.get(key);
+    if (up === undefined || up === key) {
+      return key;
+    }
+    const top = root(up);
+    above.set(key, top);
+    return top;
+  };
+
+  for (const key of all) {
+    if (printsOf(key, true).length > 0) {
+      above.set(key, key);
+      under.set(key, new Map([[sourceOf(key), key]]));
+    }
+  }
+
+  const sharing = new Map<string, string[]>();
+  for (const key of all) {
+    for (const print of printsOf(key, true)) {
+      const at = `${print.algorithm} ${print.hash.toLowerCase()}`;
+      sharing.set(at, [...(sharing.get(at) ?? []), key]);
+    }
+  }
+
+  for (const together of sharing.values()) {
+    for (const key of together.slice(1)) {
+      const left = root(together[0] as string);
+      const right = root(key);
+      if (left === right) {
+        continue;
+      }
+      const one = under.get(left) as Map<InstanceId, string>;
+      const other = under.get(right) as Map<InstanceId, string>;
+      if ([...other.keys()].some((source) => one.has(source))) {
+        continue;
+      }
+      for (const [source, held] of other) {
+        one.set(source, held);
+      }
+      under.delete(right);
+      above.set(right, left);
+    }
+  }
+
+  return { under, root };
+}
+
+/**
+ * One record per scene, whatever number of hashes reached it.
+ *
+ * The route answers a group per hash, so a record carrying two of the hashes
+ * asked comes back in two of them. Counted once per group, one record of one
+ * catalogue is reported as several, and keeping the first copy alone drops the
+ * hash the second was reached by.
+ */
+function oneRecordPerScene(
+  read: readonly Record<string, unknown>[],
+): Map<string, Record<string, unknown>> {
+  const answered = new Map<string, Record<string, unknown>>();
+
+  for (const scene of read) {
+    const held = answered.get(String(scene.id));
+    if (held === undefined) {
+      answered.set(String(scene.id), scene);
+      continue;
+    }
+    const prints = [...heldPrints(held), ...heldPrints(scene)];
+    const seen = new Set<string>();
+    held.fingerprints = prints.filter((one) => {
+      const at = `${one.algorithm} ${one.hash.toLowerCase()}`;
+      if (seen.has(at)) {
+        return false;
+      }
+      seen.add(at);
+      return true;
+    });
+  }
+
+  return answered;
+}
+
+/**
+ * Which of the hashes asked reached each record this catalogue answered with.
+ *
+ * A catalogue was put only the algorithms its own lookup searches, and a record
+ * it answered with carries hashes of every algorithm, so reading those as
+ * matches attributes to it an answer to a question it never received. A record
+ * no hash asked can be attributed to stands apart rather than dropped: the
+ * catalogue answered with it, and this client cannot say which hash reached it.
+ */
+function attributeHashesToRecords(what: {
+  answered: Map<string, Record<string, unknown>>;
+  fingerprints: readonly Fingerprint[];
+  notSearched: readonly string[];
+  source: InstanceId;
+}): { count: number; unattributed: number; rows: Raw[] } {
+  const { answered, fingerprints, notSearched, source } = what;
+  const put = fingerprints.filter((one) => !notSearched.includes(one.algorithm));
+
+  let count = 0;
+  let unattributed = 0;
+  const rows: Raw[] = [];
+
+  for (const scene of answered.values()) {
+    const carried = heldPrints(scene);
+    // A hash is compared for what it is: the catalogues publish it in either
+    // case, and a comparison that reads two spellings of one hash as two
+    // hashes turns a match into an emptiness.
+    const reached = put.filter((print) =>
+      carried.some(
+        (one) =>
+          one.hash.toLowerCase() === print.hash.toLowerCase() && one.algorithm === print.algorithm,
+      ),
+    );
+    if (reached.length === 0) {
+      unattributed += 1;
+      continue;
+    }
+    count += 1;
+    for (const print of reached) {
+      rows.push({ source, scene, algorithm: print.algorithm, hash: print.hash });
+    }
+  }
+
+  return { count, unattributed, rows };
+}
+
+/**
  * Why a catalogue holds no reading on this card, in the words a caller acts on.
  *
  * Four facts wear the same shape and are different things to do about: a call
@@ -1016,63 +1168,13 @@ export class StashboxClient {
           return { report: found.report, rows: [] as Raw[] };
         }
 
-        // The route answers a group per hash, so a record carrying two of the
-        // hashes asked comes back in two of them. Counted once per group, one
-        // record of one catalogue is reported as several.
-        const answered = new Map<string, Record<string, unknown>>();
-        for (const scene of found.value.read) {
-          const held = answered.get(String(scene.id));
-          if (held === undefined) {
-            answered.set(String(scene.id), scene);
-            continue;
-          }
-          // One record answered under two hashes is one record, and each copy
-          // of it carries the hashes its own group was matched on. Keeping the
-          // first copy alone drops the hash the second was reached by.
-          const prints = [...heldPrints(held), ...heldPrints(scene)];
-          const seen = new Set<string>();
-          held.fingerprints = prints.filter((one) => {
-            const at = `${one.algorithm} ${one.hash.toLowerCase()}`;
-            if (seen.has(at)) {
-              return false;
-            }
-            seen.add(at);
-            return true;
-          });
-        }
-        // This catalogue was put only the algorithms its own lookup searches.
-        // A record it answered with carries hashes of every algorithm, so
-        // reading those as matches attributes to it an answer to a question it
-        // never received.
-        const put = fingerprints.filter((one) => !request.notSearched.includes(one.algorithm));
-
-        let count = 0;
-        let unattributed = 0;
-        const rows: Raw[] = [];
-        for (const scene of answered.values()) {
-          const carried = heldPrints(scene);
-          // A hash is compared for what it is: the catalogues publish it in
-          // either case, and a comparison that reads two spellings of one
-          // hash as two hashes turns a match into an emptiness.
-          const reached = put.filter((print) =>
-            carried.some(
-              (one) =>
-                one.hash.toLowerCase() === print.hash.toLowerCase() &&
-                one.algorithm === print.algorithm,
-            ),
-          );
-          // The catalogue answered with it and this client cannot say which
-          // hash reached it, so it stands as no match and is counted apart
-          // rather than dropped out of the answer entirely.
-          if (reached.length === 0) {
-            unattributed += 1;
-            continue;
-          }
-          count += 1;
-          for (const print of reached) {
-            rows.push({ source: ask.spec.id, scene, algorithm: print.algorithm, hash: print.hash });
-          }
-        }
+        const answered = oneRecordPerScene(found.value.read);
+        const { count, unattributed, rows } = attributeHashesToRecords({
+          answered,
+          fingerprints,
+          notSearched: request.notSearched,
+          source: ask.spec.id,
+        });
         return {
           report: {
             source: ask.spec.id,
@@ -1121,49 +1223,7 @@ export class StashboxClient {
     // records carrying one hash are two records by its own account. A card
     // takes at most one reading per catalogue: the second record opens a card
     // of its own rather than disappearing behind the first.
-    const above = new Map<string, string>();
-    const under = new Map<string, Map<InstanceId, string>>();
-    const root = (key: string): string => {
-      const up = above.get(key);
-      if (up === undefined || up === key) {
-        return key;
-      }
-      const top = root(up);
-      above.set(key, top);
-      return top;
-    };
-    for (const key of records.keys()) {
-      if (printsOf(key, true).length > 0) {
-        above.set(key, key);
-        under.set(key, new Map([[sourceOf(key), key]]));
-      }
-    }
-    const sharing = new Map<string, string[]>();
-    for (const key of records.keys()) {
-      for (const print of printsOf(key, true)) {
-        const at = `${print.algorithm} ${print.hash.toLowerCase()}`;
-        sharing.set(at, [...(sharing.get(at) ?? []), key]);
-      }
-    }
-    for (const together of sharing.values()) {
-      for (const key of together.slice(1)) {
-        const left = root(together[0] as string);
-        const right = root(key);
-        if (left === right) {
-          continue;
-        }
-        const one = under.get(left) as Map<InstanceId, string>;
-        const other = under.get(right) as Map<InstanceId, string>;
-        if ([...other.keys()].some((source) => one.has(source))) {
-          continue;
-        }
-        for (const [source, held] of other) {
-          one.set(source, held);
-        }
-        under.delete(right);
-        above.set(right, left);
-      }
-    }
+    const { under, root } = weldOnExactHashes(records.keys(), printsOf, sourceOf);
 
     /** The hashes that reached a card, each naming the catalogues it reached it on. */
     const reaching = (group: readonly string[], exact: boolean) => {

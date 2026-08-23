@@ -30,6 +30,59 @@ const PHASH = "e276686d35b2c94c";
 /** Where a mismatch was found, written as a reader of the payload would point. */
 type Fault = string;
 
+/** What a payload breaks in a schema declaring a list. */
+function faultsInArray(schema: Record<string, unknown>, value: unknown, where: string): Fault[] {
+  if (!Array.isArray(value)) {
+    return [`${where} is no array`];
+  }
+  const items = schema.items as Record<string, unknown> | undefined;
+  if (items === undefined) {
+    return [];
+  }
+  return value.flatMap((one, index) => faults(items, one, `${where}[${index}]`));
+}
+
+/** What a payload breaks in a schema declaring named properties. */
+function faultsInObject(schema: Record<string, unknown>, value: unknown, where: string): Fault[] {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return [`${where} is no object`];
+  }
+  const held = value as Record<string, unknown>;
+  const properties = (schema.properties as Record<string, Record<string, unknown>>) ?? {};
+  const found: Fault[] = [];
+
+  for (const name of (schema.required as string[]) ?? []) {
+    if (!(name in held)) {
+      found.push(`${where} declares ${name} and carries none`);
+    }
+  }
+  for (const [name, one] of Object.entries(held)) {
+    const declared = properties[name];
+    if (declared === undefined) {
+      if (schema.additionalProperties === false) {
+        found.push(`${where} carries ${name}, which its schema does not declare`);
+      }
+      continue;
+    }
+    found.push(...faults(declared, one, `${where}.${name}`));
+  }
+  return found;
+}
+
+/** What a payload breaks in a schema declaring one primitive. */
+function faultsInScalar(type: string | undefined, value: unknown, where: string): Fault[] {
+  const holds: Record<string, boolean> = {
+    string: typeof value === "string",
+    number: typeof value === "number",
+    boolean: typeof value === "boolean",
+    null: value === null,
+  };
+  if (type === undefined || holds[type] !== false) {
+    return [];
+  }
+  return [`${where} is ${type === "null" ? "not null" : `no ${type}`}`];
+}
+
 /**
  * What a payload breaks in the schema declared for it.
  *
@@ -38,7 +91,6 @@ type Fault = string;
  * would fail answers that satisfy the published schema.
  */
 function faults(schema: Record<string, unknown>, value: unknown, at = ""): Fault[] {
-  const found: Fault[] = [];
   const where = at === "" ? "the answer" : at;
 
   const options = schema.anyOf as Record<string, unknown>[] | undefined;
@@ -49,6 +101,7 @@ function faults(schema: Record<string, unknown>, value: unknown, at = ""): Fault
     return [`${where} matches none of the readings the schema declares`];
   }
 
+  const found: Fault[] = [];
   const named = schema.enum as unknown[] | undefined;
   if (named !== undefined && !named.includes(value)) {
     found.push(`${where} carries ${JSON.stringify(value)}, outside the set the schema declares`);
@@ -56,53 +109,12 @@ function faults(schema: Record<string, unknown>, value: unknown, at = ""): Fault
 
   const type = schema.type as string | undefined;
   if (type === "array") {
-    if (!Array.isArray(value)) {
-      return [`${where} is no array`];
-    }
-    const items = schema.items as Record<string, unknown> | undefined;
-    if (items !== undefined) {
-      value.forEach((one, index) => {
-        found.push(...faults(items, one, `${where}[${index}]`));
-      });
-    }
-    return found;
+    return [...found, ...faultsInArray(schema, value, where)];
   }
   if (type === "object") {
-    if (value === null || typeof value !== "object" || Array.isArray(value)) {
-      return [`${where} is no object`];
-    }
-    const held = value as Record<string, unknown>;
-    const properties = (schema.properties as Record<string, Record<string, unknown>>) ?? {};
-    for (const name of (schema.required as string[]) ?? []) {
-      if (!(name in held)) {
-        found.push(`${where} declares ${name} and carries none`);
-      }
-    }
-    for (const [name, one] of Object.entries(held)) {
-      const declared = properties[name];
-      if (declared === undefined) {
-        if (schema.additionalProperties === false) {
-          found.push(`${where} carries ${name}, which its schema does not declare`);
-        }
-        continue;
-      }
-      found.push(...faults(declared, one, `${where}.${name}`));
-    }
-    return found;
+    return [...found, ...faultsInObject(schema, value, where)];
   }
-  if (type === "string" && typeof value !== "string") {
-    found.push(`${where} is no string`);
-  }
-  if (type === "number" && typeof value !== "number") {
-    found.push(`${where} is no number`);
-  }
-  if (type === "boolean" && typeof value !== "boolean") {
-    found.push(`${where} is no boolean`);
-  }
-  if (type === "null" && value !== null) {
-    found.push(`${where} is not null`);
-  }
-  return found;
+  return [...found, ...faultsInScalar(type, value, where)];
 }
 
 /* --------------------------------------------- the catalogues, answering */

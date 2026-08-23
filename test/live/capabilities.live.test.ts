@@ -452,6 +452,37 @@ describe.skipIf(!ENABLED)("a capability a catalogue lacks is never put to it", (
   }, 60_000);
 });
 
+/**
+ * Every capability the registry publishes that this run put nothing to.
+ *
+ * A claim whose schema was read and whose capability nothing reached has no
+ * excuse; one on a catalogue whose schema could not be read is a silence this
+ * run explains rather than a defect.
+ */
+function claimsNothingReached(unreadIds: ReadonlySet<InstanceId>): {
+  missing: string[];
+  unanswered: string[];
+} {
+  const missing: string[] = [];
+  const unanswered: string[] = [];
+
+  for (const spec of INSTANCES) {
+    for (const capability of CAPABILITIES) {
+      if (!supports(spec, capability)) {
+        continue;
+      }
+      if (!SEEN_IN_SCHEMA.get(spec.id)?.has(capability) && !unreadIds.has(spec.id)) {
+        missing.push(`${spec.name}: ${capability}`);
+      }
+      if (spec.evidence === "measured_answering" && !SEEN_ANSWERING.get(spec.id)?.has(capability)) {
+        unanswered.push(`${spec.name}: ${capability}`);
+      }
+    }
+  }
+
+  return { missing, unanswered };
+}
+
 describe.skipIf(!ENABLED)("what this run left unchecked", () => {
   it("names every claim this run reached, and every claim it did not", async (ctx) => {
     // Vitest runs the cases above before this one, so what they recorded is
@@ -470,24 +501,7 @@ describe.skipIf(!ENABLED)("what this run left unchecked", () => {
       unreadIds.add(spec.id);
     }
 
-    const missing: string[] = [];
-    const unanswered: string[] = [];
-    for (const spec of INSTANCES) {
-      for (const capability of CAPABILITIES) {
-        if (!supports(spec, capability)) {
-          continue;
-        }
-        if (!SEEN_IN_SCHEMA.get(spec.id)?.has(capability) && !unreadIds.has(spec.id)) {
-          missing.push(`${spec.name}: ${capability}`);
-        }
-        if (
-          spec.evidence === "measured_answering" &&
-          !SEEN_ANSWERING.get(spec.id)?.has(capability)
-        ) {
-          unanswered.push(`${spec.name}: ${capability}`);
-        }
-      }
-    }
+    const { missing, unanswered } = claimsNothingReached(unreadIds);
 
     // A capability of a catalogue this run read the schema of has no excuse
     // for going unchecked, so it is a failure rather than a silence.
