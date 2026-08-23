@@ -20,6 +20,22 @@ import type { z } from "zod";
 import { TOOLS } from "../../src/tools/index.js";
 import { StashboxClient } from "../../src/stashbox/client.js";
 
+/**
+ * The key a catalogue files its rows under, read off the name of the query.
+ *
+ * A query that names none of the three other kinds asks for scenes, which is
+ * the shape every route falls back to.
+ */
+function rowsUnder(named: string): string {
+  const lowered = named.toLowerCase();
+  for (const kind of ["performer", "studio", "tag"]) {
+    if (lowered.includes(kind)) {
+      return `${kind}s`;
+    }
+  }
+  return "scenes";
+}
+
 const UUID = "94ef9c17-82c6-48b0-8dcc-063b69231960";
 const OTHER = "019fec3f-1bb1-7383-8782-ea0e678f6de0";
 
@@ -127,13 +143,7 @@ function answering(): StashboxClient {
     transport: {
       request: async (_spec, _apiKey, body) => {
         const named = /(?:query|mutation)\s+\w+[^{]*\{\s*(\w+)/.exec(body.query)?.[1] ?? "";
-        const rows = named.toLowerCase().includes("performer")
-          ? "performers"
-          : named.toLowerCase().includes("studio")
-            ? "studios"
-            : named.toLowerCase().includes("tag")
-              ? "tags"
-              : "scenes";
+        const rows = rowsUnder(named);
         return { [named]: { count: 0, [rows]: [] } } as never;
       },
     },

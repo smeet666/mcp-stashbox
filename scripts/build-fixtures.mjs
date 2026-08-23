@@ -60,6 +60,12 @@ function date() {
   ).padStart(2, "0")}`;
 }
 
+// A tenth of the records state no height at all, which is what a catalogue
+// looks like where nobody has filled the field in.
+function heightOrNothing() {
+  return random() < 0.9 ? 150 + Math.floor(random() * 45) : null;
+}
+
 function performer(index) {
   // A record is settled, withdrawn or folded into another, in roughly the
   // proportions the live catalogues show.
@@ -81,7 +87,7 @@ function performer(index) {
     // A settled record can hold no scenes at all: the count reports coverage.
     scene_count: merged || withdrawn ? 0 : Math.floor(random() ** 3 * 300),
     // A folded record publishes a height of zero, which no person has.
-    height: merged ? 0 : random() < 0.9 ? 150 + Math.floor(random() * 45) : null,
+    height: merged ? 0 : heightOrNothing(),
     deleted: merged || withdrawn,
     merged_into_id: merged ? uuid("4") : null,
     merged_ids: [],

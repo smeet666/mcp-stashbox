@@ -89,6 +89,9 @@ function scriptedFetch(steps: Array<() => Response | Promise<Response>>): {
 } {
   const calls: FetchCall[] = [];
   const fetchImpl = (async (input: unknown, init?: RequestInit) => {
+    // The clock here is the faked one, pinned to EPOCH above, so the moment is
+    // exact rather than measured: `performance.now()` is not driven by
+    // setSystemTime and would read zero.
     calls.push({ url: String(input), init, at: Date.now() });
     const step = steps[Math.min(calls.length - 1, steps.length - 1)];
     if (!step) {

@@ -17,6 +17,22 @@ import { StashboxClient } from "../../src/stashbox/client.js";
 import { renderCard } from "../../src/answer/render.js";
 import { consolidate } from "../../src/answer/card.js";
 
+/**
+ * The key a catalogue files its rows under, read off the name of the query.
+ *
+ * A query that names none of the three other kinds asks for scenes, which is
+ * the shape every route falls back to.
+ */
+function rowsUnder(named: string): string {
+  const lowered = named.toLowerCase();
+  for (const kind of ["performer", "studio", "tag"]) {
+    if (lowered.includes(kind)) {
+      return `${kind}s`;
+    }
+  }
+  return "scenes";
+}
+
 const A = "94ef9c17-82c6-48b0-8dcc-063b69231960";
 
 /**
@@ -34,13 +50,7 @@ function watching() {
         sent.push({ instance: spec.id, body: JSON.stringify(body.variables ?? {}) });
         const named = /(?:query|mutation)\s+\w+[^{]*\{\s*(\w+)/.exec(body.query)?.[1] ?? "";
         const paged = /searchScenes|searchPerformers|query\w+/.test(named);
-        const rows = named.toLowerCase().includes("performer")
-          ? "performers"
-          : named.toLowerCase().includes("studio")
-            ? "studios"
-            : named.toLowerCase().includes("tag")
-              ? "tags"
-              : "scenes";
+        const rows = rowsUnder(named);
         return (paged ? { [named]: { count: 0, [rows]: [] } } : { [named]: [] }) as never;
       },
     },

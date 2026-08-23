@@ -578,7 +578,9 @@ export const TOOLS: Tool[] = [
     declared: sourcesInput,
     outputSchema: sourcesOutput,
     annotations: { readOnlyHint: true, openWorldHint: true },
-    run: async (client) => {
+    // This route reaches no catalogue: it reads what the install itself holds,
+    // so it resolves without ever waiting on one.
+    run: (client) => {
       const said = describeSources({ configured: client.configured as never });
       const lines = said.sources.map((one) =>
         [
@@ -594,10 +596,10 @@ export const TOOLS: Tool[] = [
           `    measured ${one.measured_at}`,
         ].join("\n"),
       );
-      return {
+      return Promise.resolve({
         text: `Catalogues:\n${lines.join("\n")}\n\n${said.notes.map((one) => `Note: ${one}`).join("\n")}`,
         structured: said as unknown as Record<string, unknown>,
-      };
+      });
     },
   },
   searchTool(

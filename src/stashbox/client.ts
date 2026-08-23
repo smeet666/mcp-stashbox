@@ -148,6 +148,49 @@ const ROUTE: Record<RecordKind, Capability> = {
   tag: "get_tag",
 };
 
+/**
+ * Why a catalogue holds no reading on this card, in the words a caller acts on.
+ *
+ * Four facts wear the same shape and are different things to do about: a call
+ * that left the catalogue out, a catalogue that answers no such record at all,
+ * a first reading that carried no link either way, and a link written but not
+ * followable. Each names what would have to change for a reading to exist.
+ */
+function whyThisCatalogueWasNeverAsked(what: {
+  spec: InstanceSpec;
+  kind: RecordKind;
+  from: string;
+  named: readonly InstanceId[] | undefined;
+  link: string | undefined;
+  reading: Reading;
+}): string {
+  const { spec, kind, from, named, link, reading } = what;
+
+  if (named !== undefined && !named.includes(spec.id)) {
+    return `The catalogues named in this call left ${spec.name} out, so it was never asked.`;
+  }
+  if (!supports(spec, ROUTE[kind])) {
+    return `${spec.name} answers no ${kind} of its own, so it was never asked.`;
+  }
+  if (reading.state === "absent") {
+    return `${from} was never asked, so no link it publishes from this record was read and whether it links this record to one on ${spec.name} is unknown. That is a reading nobody performed rather than a link nobody wrote.`;
+  }
+  if (reading.state === "failed") {
+    return `${from} could not answer, so whether it links this record to one on ${spec.name} is unknown and nothing here reached it. That is a reading that carried no link rather than a link nobody wrote.`;
+  }
+  if (link === undefined) {
+    return `${from} publishes no link from this record to one on ${spec.name}, so nothing here reached it. That is a link nobody wrote rather than a record ${spec.name} lacks.`;
+  }
+  return `${from} links this record to one on ${spec.name} at ${link}, and that address names the record by something this client cannot address, so nothing here reached it. The link is written; following it is what failed.`;
+}
+
+const QUERY_INPUT_OF = {
+  scenes: sceneQueryInput,
+  performers: performerQueryInput,
+  studios: studioQueryInput,
+  tags: tagQueryInput,
+} as const;
+
 const SEARCH: Record<Kind, Capability> = {
   scenes: "search_scenes",
   performers: "search_performers",
@@ -555,16 +598,16 @@ export class StashboxClient {
   }
 
   async searchScenes(input: Record<string, unknown> = {}): Promise<Answer<never>> {
-    return this.#searchOf("scenes", input) as never;
+    return (await this.#searchOf("scenes", input)) as never;
   }
   async searchPerformers(input: Record<string, unknown> = {}): Promise<Answer<never>> {
-    return this.#searchOf("performers", input) as never;
+    return (await this.#searchOf("performers", input)) as never;
   }
   async searchStudios(input: Record<string, unknown> = {}): Promise<Answer<never>> {
-    return this.#searchOf("studios", input) as never;
+    return (await this.#searchOf("studios", input)) as never;
   }
   async searchTags(input: Record<string, unknown> = {}): Promise<Answer<never>> {
-    return this.#searchOf("tags", input) as never;
+    return (await this.#searchOf("tags", input)) as never;
   }
 
   #searchOf(kind: Kind, given: Record<string, unknown>): Promise<Answer<unknown>> {
@@ -621,14 +664,7 @@ export class StashboxClient {
         // refusal that came back would read as a fact about this one.
         const held = shareOf(input, spec.id);
         const narrowing = { ...held.share, page, limit } as never;
-        const shaped =
-          kind === "scenes"
-            ? sceneQueryInput(spec, narrowing)
-            : kind === "performers"
-              ? performerQueryInput(spec, narrowing)
-              : kind === "studios"
-                ? studioQueryInput(spec, narrowing)
-                : tagQueryInput(spec, narrowing);
+        const shaped = QUERY_INPUT_OF[kind](spec, narrowing);
         const built = facetedRequest(spec, kind, shaped.input as Record<string, unknown>);
         return {
           ...built,
@@ -719,18 +755,14 @@ export class StashboxClient {
         continue;
       }
       const link = unfollowed(first.reading, spec.id);
-      const reason =
-        named !== undefined && !named.includes(spec.id)
-          ? `The catalogues named in this call left ${spec.name} out, so it was never asked.`
-          : supports(spec, ROUTE[kind])
-            ? first.reading.state === "absent"
-              ? `${from} was never asked, so no link it publishes from this record was read and whether it links this record to one on ${spec.name} is unknown. That is a reading nobody performed rather than a link nobody wrote.`
-              : first.reading.state === "failed"
-                ? `${from} could not answer, so whether it links this record to one on ${spec.name} is unknown and nothing here reached it. That is a reading that carried no link rather than a link nobody wrote.`
-                : link === undefined
-                  ? `${from} publishes no link from this record to one on ${spec.name}, so nothing here reached it. That is a link nobody wrote rather than a record ${spec.name} lacks.`
-                  : `${from} links this record to one on ${spec.name} at ${link}, and that address names the record by something this client cannot address, so nothing here reached it. The link is written; following it is what failed.`
-            : `${spec.name} answers no ${kind} of its own, so it was never asked.`;
+      const reason = whyThisCatalogueWasNeverAsked({
+        spec,
+        kind,
+        from,
+        named,
+        link,
+        reading: first.reading,
+      });
       readings.push({ source: spec.id, state: "absent", reason });
     }
 
@@ -1475,12 +1507,12 @@ function orderingOf(
     return "in no order at all: no catalogue answered, so no catalogue laid a row anywhere";
   }
 
-  const way = (order: OrderSent | undefined) =>
-    order?.direction === undefined
-      ? null
-      : order.direction.toUpperCase() === "ASC"
-        ? "ascending"
-        : "descending";
+  const way = (order: OrderSent | undefined) => {
+    if (order?.direction === undefined) {
+      return null;
+    }
+    return order.direction.toUpperCase() === "ASC" ? "ascending" : "descending";
+  };
   /** What one catalogue did with the order, in words that name no catalogue. */
   const clauseOf = (asked: Asked | undefined): string | null => {
     const run = way(asked?.order);

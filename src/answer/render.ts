@@ -625,14 +625,14 @@ export function renderMatches(result: Matches, cached: boolean): Rendered {
             `${spelt(print)}${several ? ` on ${print.sources.map(named).join(", ")}` : ""}`,
         )
         .join(", ");
+      // An exact hash names the bytes themselves; a perceptual one says only
+      // that the thing resembles them, and the verb agrees with how many
+      // hashes are speaking.
+      const many = by.length > 1;
       const claim =
         match?.matchKind === "exact_file"
-          ? by.length > 1
-            ? "name these bytes"
-            : "names these bytes"
-          : by.length > 1
-            ? "resemble this"
-            : "resembles this";
+          ? `${many ? "name" : "names"} these bytes`
+          : `${many ? "resemble" : "resembles"} this`;
       return `\n${hashes} ${claim}:\n${one.text}`;
     }),
   ].join("\n");
@@ -685,6 +685,20 @@ export interface Rows {
 }
 
 /**
+ * What a catalogue's own index total was counted over.
+ *
+ * A catalogue whose text index reads the words apart counts rows carrying any
+ * of them, and one that received the narrowing short counts a question of its
+ * own rather than the one that was written.
+ */
+function whatThatTotalCounts(one: { indexTotalOverAnyWord?: boolean }, narrower: boolean): string {
+  if (one.indexTotalOverAnyWord === true) {
+    return "rows carrying any of the words asked, which is how its text index reads them";
+  }
+  return narrower ? "the question it received" : "this question";
+}
+
+/**
  * A page of rows, with what each catalogue did and what the page does not
  * establish.
  *
@@ -709,13 +723,7 @@ export function renderRows(result: Rows, what: string, notes: string[], cached =
       const also = [
         one.indexTotal === undefined
           ? null
-          : `of ${String(one.indexTotal)} its own index holds for ${
-              one.indexTotalOverAnyWord === true
-                ? "rows carrying any of the words asked, which is how its text index reads them"
-                : narrower
-                  ? "the question it received"
-                  : "this question"
-            }`,
+          : `of ${String(one.indexTotal)} its own index holds for ${whatThatTotalCounts(one, narrower)}`,
         one.skipped === undefined
           ? null
           : `${String(one.skipped)} row(s) it answered with could not be read and are left out`,

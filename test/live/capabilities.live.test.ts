@@ -386,14 +386,26 @@ describe.skipIf(!ENABLED)(
   },
 );
 
+/**
+ * Why this run cannot check a catalogue, or undefined when it can.
+ *
+ * A key this install does not hold and a suite that names no record for the
+ * catalogue are two different things to do about, and neither is evidence
+ * about what the catalogue answers.
+ */
+function whyThisCatalogueCannotBeChecked(spec: InstanceSpec): string | undefined {
+  if (KEYS[spec.id] === undefined) {
+    return `no key is held for it in this run, so set ${spec.envVar} to check it`;
+  }
+  if (KNOWN[spec.id] === undefined) {
+    return "no record of each kind is named for it in this suite";
+  }
+  return undefined;
+}
+
 describe.skipIf(!ENABLED)("every capability the registry calls answered is answered", () => {
   for (const spec of INSTANCES.filter((one) => one.evidence === "measured_answering")) {
-    const unreachable =
-      KEYS[spec.id] === undefined
-        ? `no key is held for it in this run, so set ${spec.envVar} to check it`
-        : KNOWN[spec.id] === undefined
-          ? "no record of each kind is named for it in this suite"
-          : undefined;
+    const unreachable = whyThisCatalogueCannotBeChecked(spec);
 
     for (const capability of CAPABILITIES) {
       if (!supports(spec, capability)) {

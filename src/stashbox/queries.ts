@@ -543,18 +543,7 @@ export function studioQueryInput(spec: InstanceSpec, narrowing: StudioNarrowing)
   put(spec, input, "name", narrowing.name, unreceived);
   // Measured: a studio names one parent, so its filter is a criterion carrying
   // one identifier rather than a list of them.
-  put(
-    spec,
-    input,
-    "parent",
-    narrowing.parentId === undefined
-      ? undefined
-      : spec.filters === "plain"
-        ? narrowing.parentId
-        : { value: narrowing.parentId, modifier: "EQUALS" },
-    unreceived,
-    "parent_id",
-  );
+  put(spec, input, "parent", textCriterion(spec, narrowing.parentId), unreceived, "parent_id");
   put(spec, input, "has_parent", narrowing.hasParent, unreceived);
   ordering(spec, input, narrowing.sort, narrowing.direction, "name");
   input.page = narrowing.page;
