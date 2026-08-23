@@ -61,7 +61,9 @@ export function identifierList(
   const seen = new Set<string>();
   for (const raw of given) {
     const parsed = readOne(name, raw, configured);
-    if (seen.has(parsed.given)) continue;
+    if (seen.has(parsed.given)) {
+      continue;
+    }
     seen.add(parsed.given);
     entries.push(parsed);
   }

@@ -73,12 +73,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     const written = env[spec.envVar]?.trim();
     // A variable set to nothing is a variable nobody set. Holding an empty key
     // would send a request that fails on every record for one missing setting.
-    if (written) keys[spec.id] = written;
+    if (written) {
+      keys[spec.id] = written;
+    }
   }
 
   const bounded = (name: string, fallback: number, low: number, high: number): number => {
     const written = env[name]?.trim();
-    if (written === undefined || written === "") return fallback;
+    if (written === undefined || written === "") {
+      return fallback;
+    }
     const value = Number(written);
     if (!Number.isFinite(value) || !Number.isInteger(value) || value < low || value > high) {
       refused.push(name);
@@ -129,7 +133,9 @@ function readLogLevel(written: string | undefined): LogLevel {
 export function createLogger(level: LogLevel): Logger {
   const at = LOG_LEVELS.indexOf(level);
   const write = (want: LogLevel, message: string) => {
-    if (LOG_LEVELS.indexOf(want) <= at) process.stderr.write(`mcp-stashbox: ${message}\n`);
+    if (LOG_LEVELS.indexOf(want) <= at) {
+      process.stderr.write(`mcp-stashbox: ${message}\n`);
+    }
   };
   return {
     error: (message) => write("error", message),

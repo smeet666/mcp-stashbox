@@ -89,9 +89,14 @@ function scriptedFetch(steps: Array<() => Response | Promise<Response>>): {
 } {
   const calls: FetchCall[] = [];
   const fetchImpl = (async (input: unknown, init?: RequestInit) => {
+    // The clock here is the faked one, pinned to EPOCH above, so the moment is
+    // exact rather than measured: `performance.now()` is not driven by
+    // setSystemTime and would read zero.
     calls.push({ url: String(input), init, at: Date.now() });
     const step = steps[Math.min(calls.length - 1, steps.length - 1)];
-    if (!step) throw new Error("scriptedFetch was given no steps");
+    if (!step) {
+      throw new Error("scriptedFetch was given no steps");
+    }
     return step();
   }) as unknown as typeof fetch;
   return { fetchImpl, calls, count: () => calls.length };
@@ -102,7 +107,9 @@ function hangingFetch(): typeof fetch {
   return (async (_input: unknown, init?: RequestInit) =>
     new Promise<Response>((_resolve, reject) => {
       const signal = init?.signal;
-      if (!signal) return;
+      if (!signal) {
+        return;
+      }
       if (signal.aborted) {
         reject(new DOMException("The operation was aborted.", "AbortError"));
         return;
@@ -116,13 +123,19 @@ function hangingFetch(): typeof fetch {
 /** A header value, whichever of the three shapes `fetch` accepts was used. */
 function headerOf(init: RequestInit | undefined, name: string): string | null {
   const headers = init?.headers;
-  if (!headers) return null;
-  if (typeof (headers as Headers).get === "function") return (headers as Headers).get(name);
+  if (!headers) {
+    return null;
+  }
+  if (typeof (headers as Headers).get === "function") {
+    return (headers as Headers).get(name);
+  }
   const entries = Array.isArray(headers)
     ? (headers as string[][])
     : Object.entries(headers as Record<string, string>);
   for (const [key, value] of entries) {
-    if (String(key).toLowerCase() === name.toLowerCase()) return String(value);
+    if (String(key).toLowerCase() === name.toLowerCase()) {
+      return String(value);
+    }
   }
   return null;
 }

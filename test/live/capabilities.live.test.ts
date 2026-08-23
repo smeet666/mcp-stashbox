@@ -175,7 +175,9 @@ function unwrap(ref: TypeRef): { target: string | null; isList: boolean } {
   let isList = false;
   let at: TypeRef | null | undefined = ref;
   while (at && (at.kind === "NON_NULL" || at.kind === "LIST")) {
-    if (at.kind === "LIST") isList = true;
+    if (at.kind === "LIST") {
+      isList = true;
+    }
     at = at.ofType;
   }
   return { target: at?.name ?? null, isList };
@@ -192,7 +194,9 @@ const SCHEMAS = new Map<InstanceId, Promise<Schema | string>>();
 
 function schemaOf(spec: InstanceSpec): Promise<Schema | string> {
   const held = SCHEMAS.get(spec.id);
-  if (held) return held;
+  if (held) {
+    return held;
+  }
   const reading = readSchema(spec);
   SCHEMAS.set(spec.id, reading);
   return reading;
@@ -212,7 +216,9 @@ async function readSchema(spec: InstanceSpec): Promise<Schema | string> {
       signal: AbortSignal.timeout(45_000),
     });
     const body = await answer.text();
-    if (!answer.ok) return `it answered ${answer.status} to an introspection query`;
+    if (!answer.ok) {
+      return `it answered ${answer.status} to an introspection query`;
+    }
     const parsed = JSON.parse(body) as {
       data?: {
         __schema: {
@@ -225,7 +231,9 @@ async function readSchema(spec: InstanceSpec): Promise<Schema | string> {
         };
       };
     };
-    if (!parsed.data) return "it answered an introspection query with no schema in it";
+    if (!parsed.data) {
+      return "it answered an introspection query with no schema in it";
+    }
     const fieldsByType = new Map<string, Map<string, Field>>();
     const enumValues = new Map<string, string[]>();
     for (const type of parsed.data.__schema.types) {
@@ -234,11 +242,12 @@ async function readSchema(spec: InstanceSpec): Promise<Schema | string> {
         type.name,
         new Map(fields.map((one) => [one.name, { name: one.name, ...unwrap(one.type) }])),
       );
-      if (type.enumValues)
+      if (type.enumValues) {
         enumValues.set(
           type.name,
           type.enumValues.map((one) => one.name),
         );
+      }
     }
     return { queryType: parsed.data.__schema.queryType.name, fieldsByType, enumValues };
   } catch (cause) {
@@ -259,9 +268,13 @@ function resolve(schema: Schema, path: string): { field: Field | undefined; reac
   let field: Field | undefined;
   const walked: string[] = [];
   for (const segment of path.split(".")) {
-    if (type === null) return { field: undefined, reached: walked.join(".") };
+    if (type === null) {
+      return { field: undefined, reached: walked.join(".") };
+    }
     field = schema.fieldsByType.get(type)?.get(segment);
-    if (!field) return { field: undefined, reached: walked.join(".") };
+    if (!field) {
+      return { field: undefined, reached: walked.join(".") };
+    }
     walked.push(segment);
     type = field.target;
   }
@@ -292,7 +305,9 @@ describe.skipIf(!ENABLED)(
   () => {
     for (const spec of INSTANCES) {
       for (const capability of CAPABILITIES) {
-        if (!supports(spec, capability)) continue;
+        if (!supports(spec, capability)) {
+          continue;
+        }
         it(`${spec.name} declares ${capability}`, async (ctx) => {
           const schema = await schemaOf(spec);
           if (typeof schema === "string") {
@@ -348,7 +363,9 @@ describe.skipIf(!ENABLED)(
     }
 
     for (const spec of INSTANCES) {
-      if (!supports(spec, "perceptual_lookup")) continue;
+      if (!supports(spec, "perceptual_lookup")) {
+        continue;
+      }
       it(`${spec.name} declares the perceptual algorithm its fingerprint route searches`, async (ctx) => {
         const schema = await schemaOf(spec);
         if (typeof schema === "string") {
@@ -369,17 +386,31 @@ describe.skipIf(!ENABLED)(
   },
 );
 
+/**
+ * Why this run cannot check a catalogue, or undefined when it can.
+ *
+ * A key this install does not hold and a suite that names no record for the
+ * catalogue are two different things to do about, and neither is evidence
+ * about what the catalogue answers.
+ */
+function whyThisCatalogueCannotBeChecked(spec: InstanceSpec): string | undefined {
+  if (KEYS[spec.id] === undefined) {
+    return `no key is held for it in this run, so set ${spec.envVar} to check it`;
+  }
+  if (KNOWN[spec.id] === undefined) {
+    return "no record of each kind is named for it in this suite";
+  }
+  return undefined;
+}
+
 describe.skipIf(!ENABLED)("every capability the registry calls answered is answered", () => {
   for (const spec of INSTANCES.filter((one) => one.evidence === "measured_answering")) {
-    const unreachable =
-      KEYS[spec.id] === undefined
-        ? `no key is held for it in this run, so set ${spec.envVar} to check it`
-        : KNOWN[spec.id] === undefined
-          ? "no record of each kind is named for it in this suite"
-          : undefined;
+    const unreachable = whyThisCatalogueCannotBeChecked(spec);
 
     for (const capability of CAPABILITIES) {
-      if (!supports(spec, capability)) continue;
+      if (!supports(spec, capability)) {
+        continue;
+      }
       it(unreachable
         ? `${spec.name} answers ${capability} — UNVERIFIED in this run`
         : `${spec.name} answers ${capability}`, async (ctx) => {
@@ -410,7 +441,9 @@ describe.skipIf(!ENABLED)("every capability the registry calls answered is answe
 describe.skipIf(!ENABLED)("a capability a catalogue lacks is never put to it", () => {
   it("sends no request to a catalogue the registry says answers no such route", async () => {
     for (const spec of INSTANCES.filter((one) => KEYS[one.id] !== undefined)) {
-      if (supports(spec, "search_studios")) continue;
+      if (supports(spec, "search_studios")) {
+        continue;
+      }
       const read = await client.searchStudios({ query: "vixen", limit: 1, sources: [spec.id] });
       const mine = read.data.perSource.find((report) => report.source === spec.id);
       // Never asked is a third state, and it is the one that is true here.
@@ -418,6 +451,37 @@ describe.skipIf(!ENABLED)("a capability a catalogue lacks is never put to it", (
     }
   }, 60_000);
 });
+
+/**
+ * Every capability the registry publishes that this run put nothing to.
+ *
+ * A claim whose schema was read and whose capability nothing reached has no
+ * excuse; one on a catalogue whose schema could not be read is a silence this
+ * run explains rather than a defect.
+ */
+function claimsNothingReached(unreadIds: ReadonlySet<InstanceId>): {
+  missing: string[];
+  unanswered: string[];
+} {
+  const missing: string[] = [];
+  const unanswered: string[] = [];
+
+  for (const spec of INSTANCES) {
+    for (const capability of CAPABILITIES) {
+      if (!supports(spec, capability)) {
+        continue;
+      }
+      if (!SEEN_IN_SCHEMA.get(spec.id)?.has(capability) && !unreadIds.has(spec.id)) {
+        missing.push(`${spec.name}: ${capability}`);
+      }
+      if (spec.evidence === "measured_answering" && !SEEN_ANSWERING.get(spec.id)?.has(capability)) {
+        unanswered.push(`${spec.name}: ${capability}`);
+      }
+    }
+  }
+
+  return { missing, unanswered };
+}
 
 describe.skipIf(!ENABLED)("what this run left unchecked", () => {
   it("names every claim this run reached, and every claim it did not", async (ctx) => {
@@ -430,27 +494,14 @@ describe.skipIf(!ENABLED)("what this run left unchecked", () => {
     const unreadIds = new Set<InstanceId>();
     for (const spec of INSTANCES) {
       const schema = await schemaOf(spec);
-      if (typeof schema !== "string") continue;
+      if (typeof schema !== "string") {
+        continue;
+      }
       unread.push(`${spec.name}, since ${schema}`);
       unreadIds.add(spec.id);
     }
 
-    const missing: string[] = [];
-    const unanswered: string[] = [];
-    for (const spec of INSTANCES) {
-      for (const capability of CAPABILITIES) {
-        if (!supports(spec, capability)) continue;
-        if (!SEEN_IN_SCHEMA.get(spec.id)?.has(capability) && !unreadIds.has(spec.id)) {
-          missing.push(`${spec.name}: ${capability}`);
-        }
-        if (
-          spec.evidence === "measured_answering" &&
-          !SEEN_ANSWERING.get(spec.id)?.has(capability)
-        ) {
-          unanswered.push(`${spec.name}: ${capability}`);
-        }
-      }
-    }
+    const { missing, unanswered } = claimsNothingReached(unreadIds);
 
     // A capability of a catalogue this run read the schema of has no excuse
     // for going unchecked, so it is a failure rather than a silence.

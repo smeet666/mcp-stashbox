@@ -17,7 +17,9 @@ import type { InstanceId, InstanceSpec } from "./instances.js";
 
 /** An object as a payload carries one, which a list and a null are not. */
 export function asObject(value: unknown): Record<string, unknown> | undefined {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return undefined;
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
   return value as Record<string, unknown>;
 }
 
@@ -43,9 +45,13 @@ export function objectUnder(
   moment: string,
 ): Record<string, unknown> {
   const body = asObject(payload);
-  if (body === undefined || !(key in body)) throw unreadable(spec, moment);
+  if (body === undefined || !(key in body)) {
+    throw unreadable(spec, moment);
+  }
   const held = asObject(body[key]);
-  if (held === undefined) throw unreadable(spec, moment);
+  if (held === undefined) {
+    throw unreadable(spec, moment);
+  }
   return held;
 }
 
@@ -57,7 +63,9 @@ export function arrayUnder(
   moment: string,
 ): unknown[] {
   const rows = container[key];
-  if (!Array.isArray(rows)) throw unreadable(spec, moment);
+  if (!Array.isArray(rows)) {
+    throw unreadable(spec, moment);
+  }
   return rows;
 }
 
@@ -75,7 +83,9 @@ export function rowsUnder(
   moment: string,
 ): unknown[] {
   const body = asObject(payload);
-  if (body === undefined) throw unreadable(spec, moment);
+  if (body === undefined) {
+    throw unreadable(spec, moment);
+  }
   return arrayUnder(body, key, spec, moment);
 }
 
@@ -93,11 +103,17 @@ export function recordUnder(
   moment: string,
 ): Record<string, unknown> | null {
   const body = asObject(payload);
-  if (body === undefined || !(key in body)) throw unreadable(spec, moment);
+  if (body === undefined || !(key in body)) {
+    throw unreadable(spec, moment);
+  }
   const held = body[key];
-  if (held === null || held === undefined) return null;
+  if (held === null || held === undefined) {
+    return null;
+  }
   const record = asObject(held);
-  if (record === undefined) throw unreadable(spec, moment);
+  if (record === undefined) {
+    throw unreadable(spec, moment);
+  }
   return record;
 }
 
@@ -115,10 +131,16 @@ export function groupsUnder(
   moment: string,
 ): unknown[][] {
   const body = asObject(payload);
-  if (body === undefined || !(key in body)) throw unreadable(spec, moment);
+  if (body === undefined || !(key in body)) {
+    throw unreadable(spec, moment);
+  }
   const groups = body[key];
-  if (!Array.isArray(groups)) throw unreadable(spec, moment);
-  if (!groups.every((group) => Array.isArray(group))) throw unreadable(spec, moment);
+  if (!Array.isArray(groups)) {
+    throw unreadable(spec, moment);
+  }
+  if (!groups.every((group) => Array.isArray(group))) {
+    throw unreadable(spec, moment);
+  }
   return groups as unknown[][];
 }
 
@@ -215,7 +237,9 @@ function measure(value: unknown): number | null {
 
 /** A list of the strings a catalogue published, with anything else counted lost. */
 function strings(value: unknown, list: string, lost: Lost): string[] {
-  if (value === undefined || value === null) return [];
+  if (value === undefined || value === null) {
+    return [];
+  }
   if (!Array.isArray(value)) {
     lost.lost(list);
     return [];
@@ -223,8 +247,11 @@ function strings(value: unknown, list: string, lost: Lost): string[] {
   const held: string[] = [];
   for (const entry of value) {
     const one = text(entry);
-    if (one === null) lost.lost(list);
-    else held.push(one);
+    if (one === null) {
+      lost.lost(list);
+    } else {
+      held.push(one);
+    }
   }
   return held;
 }
@@ -243,7 +270,9 @@ function addressOf(spec: InstanceSpec, kind: string, uuid: string): string {
 /** A date as the catalogue entered it, with a mark where it entered one unreadable. */
 function dateOf(value: unknown): { date: ReturnType<typeof readDate>; unreadable: boolean } {
   const written = text(value);
-  if (written === null) return { date: null, unreadable: false };
+  if (written === null) {
+    return { date: null, unreadable: false };
+  }
   const read = readDate(written);
   return { date: read, unreadable: read === null };
 }
@@ -251,7 +280,9 @@ function dateOf(value: unknown): { date: ReturnType<typeof readDate>; unreadable
 /* ------------------------------------------------------------- the pieces */
 
 function readLinks(value: unknown, spec: InstanceSpec, lost: Lost): SiteLink[] {
-  if (value === undefined || value === null) return [];
+  if (value === undefined || value === null) {
+    return [];
+  }
   if (!Array.isArray(value)) {
     lost.lost("urls");
     return [];
@@ -283,7 +314,9 @@ function readLinks(value: unknown, spec: InstanceSpec, lost: Lost): SiteLink[] {
 }
 
 function readImages(value: unknown, lost: Lost): { images: ImageRow[]; imagesSkipped?: number } {
-  if (value === undefined || value === null) return { images: [] };
+  if (value === undefined || value === null) {
+    return { images: [] };
+  }
   if (!Array.isArray(value)) {
     lost.lost("images");
     return { images: [], imagesSkipped: 1 };
@@ -310,7 +343,9 @@ function readFingerprints(
   spec: InstanceSpec,
   lost: Lost,
 ): { fingerprints: FingerprintRow[]; fingerprintsSkipped?: number } {
-  if (value === undefined || value === null) return { fingerprints: [] };
+  if (value === undefined || value === null) {
+    return { fingerprints: [] };
+  }
   if (!Array.isArray(value)) {
     lost.lost("fingerprints");
     return { fingerprints: [], fingerprintsSkipped: 1 };
@@ -347,7 +382,9 @@ function readFingerprints(
 }
 
 function readTags(value: unknown, spec: InstanceSpec, lost: Lost): TagRef[] {
-  if (value === undefined || value === null) return [];
+  if (value === undefined || value === null) {
+    return [];
+  }
   if (!Array.isArray(value)) {
     lost.lost("tags");
     return [];
@@ -373,7 +410,9 @@ function readTags(value: unknown, spec: InstanceSpec, lost: Lost): TagRef[] {
 }
 
 function readCredits(value: unknown, spec: InstanceSpec, lost: Lost): CreditRef[] {
-  if (value === undefined || value === null) return [];
+  if (value === undefined || value === null) {
+    return [];
+  }
   if (!Array.isArray(value)) {
     lost.lost("performers");
     return [];
@@ -400,7 +439,9 @@ function readCredits(value: unknown, spec: InstanceSpec, lost: Lost): CreditRef[
 
 function readStudioRef(value: unknown, spec: InstanceSpec, lost: Lost): StudioRef | null {
   const one = row(value);
-  if (one === undefined) return null;
+  if (one === undefined) {
+    return null;
+  }
   const id = identify(one.id, spec);
   if (id === null) {
     lost.lost("studio");
@@ -409,7 +450,9 @@ function readStudioRef(value: unknown, spec: InstanceSpec, lost: Lost): StudioRe
   const parent = row(one.parent);
   // A parent naming no record of its own can be addressed by nobody, so the
   // name alone would be a claim a reader cannot follow.
-  if (parent !== undefined && identify(parent.id, spec) === null) lost.lost("studio");
+  if (parent !== undefined && identify(parent.id, spec) === null) {
+    lost.lost("studio");
+  }
   return {
     id,
     name: text(one.name),
@@ -441,9 +484,13 @@ function readAlsoHeldAt(
   const linkedUnfollowed: { source: InstanceId; url: string }[] = [];
   for (const link of links) {
     const other = instanceByUrl(link.url);
-    if (other === undefined || other.id === spec.id) continue;
+    if (other === undefined || other.id === spec.id) {
+      continue;
+    }
     const expected = `${other.webBase}/${kind}/`;
-    if (!link.url.startsWith(expected)) continue;
+    if (!link.url.startsWith(expected)) {
+      continue;
+    }
     const uuid = link.url.slice(expected.length).split(/[/?#]/)[0] ?? "";
     if (!isUuid(uuid)) {
       // The link is written, and it names the record by something this client
@@ -494,7 +541,9 @@ export function readScene(
 ): Reading<SceneRecord> {
   const one = row(value);
   const id = one === undefined ? null : identify(one.id, spec);
-  if (one === undefined || id === null) return { record: null };
+  if (one === undefined || id === null) {
+    return { record: null };
+  }
 
   const lost = new Lost();
   const urls = readLinks(one.urls, spec, lost);
@@ -539,7 +588,9 @@ export function readPerformer(
 ): Reading<PerformerRecord> {
   const one = row(value);
   const id = one === undefined ? null : identify(one.id, spec);
-  if (one === undefined || id === null) return { record: null };
+  if (one === undefined || id === null) {
+    return { record: null };
+  }
 
   const lost = new Lost();
   const urls = readLinks(one.urls, spec, lost);
@@ -593,9 +644,13 @@ function readAppearance(one: Record<string, unknown>, lost: Lost): Appearance | 
     "tattoos",
     "piercings",
   ];
-  if (!named.some((name) => one[name] !== undefined)) return undefined;
+  if (!named.some((name) => one[name] !== undefined)) {
+    return undefined;
+  }
   const marks = (value: unknown, list: string): string[] => {
-    if (value === undefined || value === null) return [];
+    if (value === undefined || value === null) {
+      return [];
+    }
     if (!Array.isArray(value)) {
       lost.lost(list);
       return [];
@@ -671,14 +726,18 @@ export function readStudio(
 ): Reading<StudioRecord> {
   const one = row(value);
   const id = one === undefined ? null : identify(one.id, spec);
-  if (one === undefined || id === null) return { record: null };
+  if (one === undefined || id === null) {
+    return { record: null };
+  }
 
   const lost = new Lost();
   const urls = readLinks(one.urls, spec, lost);
   const { images, imagesSkipped } = readImages(one.images, lost);
   const parentRow = row(one.parent);
   const parentId = parentRow === undefined ? null : identify(parentRow.id, spec);
-  if (parentRow !== undefined && parentId === null) lost.lost("parent");
+  if (parentRow !== undefined && parentId === null) {
+    lost.lost("parent");
+  }
 
   const record: StudioRecord = {
     ...base(one, spec, "studios", id, retrievedAt, urls),
@@ -708,7 +767,9 @@ export function readTag(
 ): Reading<TagRecord> {
   const one = row(value);
   const id = one === undefined ? null : identify(one.id, spec);
-  if (one === undefined || id === null) return { record: null, publishesCategories: false };
+  if (one === undefined || id === null) {
+    return { record: null, publishesCategories: false };
+  }
 
   const lost = new Lost();
   const publishes = supports(spec, "tag_categories");

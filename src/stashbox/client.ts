@@ -148,6 +148,201 @@ const ROUTE: Record<RecordKind, Capability> = {
   tag: "get_tag",
 };
 
+/**
+ * Weld into one card the records two catalogues published one exact hash for.
+ *
+ * Two catalogues answering one exact hash describe the same bytes, which is the
+ * strongest identity the data carries, and both records are already here, so
+ * welding them costs no request. A perceptual hash states a likeness and joins
+ * nothing, so its records stay one card per catalogue.
+ *
+ * A catalogue mints one identifier per record it holds, so two of its records
+ * carrying one hash are two records by its own account: the second opens a card
+ * of its own rather than disappearing behind the first.
+ */
+function weldOnExactHashes(
+  keys: Iterable<string>,
+  printsOf: (key: string, exact: boolean) => { hash: string; algorithm: string }[],
+  sourceOf: (key: string) => InstanceId,
+): {
+  under: Map<string, Map<InstanceId, string>>;
+  root: (key: string) => string;
+} {
+  const all = [...keys];
+  const above = new Map<string, string>();
+  const under = new Map<string, Map<InstanceId, string>>();
+
+  const root = (key: string): string => {
+    const up = above.get(key);
+    if (up === undefined || up === key) {
+      return key;
+    }
+    const top = root(up);
+    above.set(key, top);
+    return top;
+  };
+
+  for (const key of all) {
+    if (printsOf(key, true).length > 0) {
+      above.set(key, key);
+      under.set(key, new Map([[sourceOf(key), key]]));
+    }
+  }
+
+  const sharing = new Map<string, string[]>();
+  for (const key of all) {
+    for (const print of printsOf(key, true)) {
+      const at = `${print.algorithm} ${print.hash.toLowerCase()}`;
+      sharing.set(at, [...(sharing.get(at) ?? []), key]);
+    }
+  }
+
+  for (const together of sharing.values()) {
+    for (const key of together.slice(1)) {
+      const left = root(together[0] as string);
+      const right = root(key);
+      if (left === right) {
+        continue;
+      }
+      const one = under.get(left) as Map<InstanceId, string>;
+      const other = under.get(right) as Map<InstanceId, string>;
+      if ([...other.keys()].some((source) => one.has(source))) {
+        continue;
+      }
+      for (const [source, held] of other) {
+        one.set(source, held);
+      }
+      under.delete(right);
+      above.set(right, left);
+    }
+  }
+
+  return { under, root };
+}
+
+/**
+ * One record per scene, whatever number of hashes reached it.
+ *
+ * The route answers a group per hash, so a record carrying two of the hashes
+ * asked comes back in two of them. Counted once per group, one record of one
+ * catalogue is reported as several, and keeping the first copy alone drops the
+ * hash the second was reached by.
+ */
+function oneRecordPerScene(
+  read: readonly Record<string, unknown>[],
+): Map<string, Record<string, unknown>> {
+  const answered = new Map<string, Record<string, unknown>>();
+
+  for (const scene of read) {
+    const held = answered.get(String(scene.id));
+    if (held === undefined) {
+      answered.set(String(scene.id), scene);
+      continue;
+    }
+    const prints = [...heldPrints(held), ...heldPrints(scene)];
+    const seen = new Set<string>();
+    held.fingerprints = prints.filter((one) => {
+      const at = `${one.algorithm} ${one.hash.toLowerCase()}`;
+      if (seen.has(at)) {
+        return false;
+      }
+      seen.add(at);
+      return true;
+    });
+  }
+
+  return answered;
+}
+
+/**
+ * Which of the hashes asked reached each record this catalogue answered with.
+ *
+ * A catalogue was put only the algorithms its own lookup searches, and a record
+ * it answered with carries hashes of every algorithm, so reading those as
+ * matches attributes to it an answer to a question it never received. A record
+ * no hash asked can be attributed to stands apart rather than dropped: the
+ * catalogue answered with it, and this client cannot say which hash reached it.
+ */
+function attributeHashesToRecords(what: {
+  answered: Map<string, Record<string, unknown>>;
+  fingerprints: readonly Fingerprint[];
+  notSearched: readonly string[];
+  source: InstanceId;
+}): { count: number; unattributed: number; rows: Raw[] } {
+  const { answered, fingerprints, notSearched, source } = what;
+  const put = fingerprints.filter((one) => !notSearched.includes(one.algorithm));
+
+  let count = 0;
+  let unattributed = 0;
+  const rows: Raw[] = [];
+
+  for (const scene of answered.values()) {
+    const carried = heldPrints(scene);
+    // A hash is compared for what it is: the catalogues publish it in either
+    // case, and a comparison that reads two spellings of one hash as two
+    // hashes turns a match into an emptiness.
+    const reached = put.filter((print) =>
+      carried.some(
+        (one) =>
+          one.hash.toLowerCase() === print.hash.toLowerCase() && one.algorithm === print.algorithm,
+      ),
+    );
+    if (reached.length === 0) {
+      unattributed += 1;
+      continue;
+    }
+    count += 1;
+    for (const print of reached) {
+      rows.push({ source, scene, algorithm: print.algorithm, hash: print.hash });
+    }
+  }
+
+  return { count, unattributed, rows };
+}
+
+/**
+ * Why a catalogue holds no reading on this card, in the words a caller acts on.
+ *
+ * Four facts wear the same shape and are different things to do about: a call
+ * that left the catalogue out, a catalogue that answers no such record at all,
+ * a first reading that carried no link either way, and a link written but not
+ * followable. Each names what would have to change for a reading to exist.
+ */
+function whyThisCatalogueWasNeverAsked(what: {
+  spec: InstanceSpec;
+  kind: RecordKind;
+  from: string;
+  named: readonly InstanceId[] | undefined;
+  link: string | undefined;
+  reading: Reading;
+}): string {
+  const { spec, kind, from, named, link, reading } = what;
+
+  if (named !== undefined && !named.includes(spec.id)) {
+    return `The catalogues named in this call left ${spec.name} out, so it was never asked.`;
+  }
+  if (!supports(spec, ROUTE[kind])) {
+    return `${spec.name} answers no ${kind} of its own, so it was never asked.`;
+  }
+  if (reading.state === "absent") {
+    return `${from} was never asked, so no link it publishes from this record was read and whether it links this record to one on ${spec.name} is unknown. That is a reading nobody performed rather than a link nobody wrote.`;
+  }
+  if (reading.state === "failed") {
+    return `${from} could not answer, so whether it links this record to one on ${spec.name} is unknown and nothing here reached it. That is a reading that carried no link rather than a link nobody wrote.`;
+  }
+  if (link === undefined) {
+    return `${from} publishes no link from this record to one on ${spec.name}, so nothing here reached it. That is a link nobody wrote rather than a record ${spec.name} lacks.`;
+  }
+  return `${from} links this record to one on ${spec.name} at ${link}, and that address names the record by something this client cannot address, so nothing here reached it. The link is written; following it is what failed.`;
+}
+
+const QUERY_INPUT_OF = {
+  scenes: sceneQueryInput,
+  performers: performerQueryInput,
+  studios: studioQueryInput,
+  tags: tagQueryInput,
+} as const;
+
 const SEARCH: Record<Kind, Capability> = {
   scenes: "search_scenes",
   performers: "search_performers",
@@ -269,7 +464,9 @@ export class StashboxClient {
   /** One pace per catalogue, with a floor the configuration may widen and never narrow. */
   #limiterFor(spec: InstanceSpec): RateLimiter {
     const held = this.#limiters.get(spec.id);
-    if (held !== undefined) return held;
+    if (held !== undefined) {
+      return held;
+    }
     const made = new RateLimiter({ intervalMs: this.pace });
     this.#limiters.set(spec.id, made);
     return made;
@@ -300,12 +497,12 @@ export class StashboxClient {
         );
       } else if (named !== undefined && !named.includes(spec.id)) {
         absent(`The catalogues named in this call left ${spec.name} out, so it was never asked.`);
-      } else if (!supports(spec, capability)) {
+      } else if (supports(spec, capability)) {
+        asks.push({ spec, apiKey });
+      } else {
         absent(
           `${spec.name} answers no ${route} of its own, so it was never asked, and its silence is no evidence about what it holds.`,
         );
-      } else {
-        asks.push({ spec, apiKey });
       }
     }
     return { asks, unasked };
@@ -440,7 +637,9 @@ export class StashboxClient {
       },
     });
     const held = this.#cache.get(key) as RowsResult<T> | undefined;
-    if (held !== undefined) return { data: held, cached: true };
+    if (held !== undefined) {
+      return { data: held, cached: true };
+    }
 
     const rows: T[] = [];
     const reports: SourceReport[] = [];
@@ -467,8 +666,11 @@ export class StashboxClient {
             let skipped = 0;
             for (const entry of raw) {
               const one = reader(entry, ask.spec, at);
-              if (one.record === null) skipped += 1;
-              else read.push(one.record);
+              if (one.record === null) {
+                skipped += 1;
+              } else {
+                read.push(one.record);
+              }
             }
             const total =
               supports(ask.spec, "index_total") &&
@@ -478,7 +680,9 @@ export class StashboxClient {
             return { read, skipped, total };
           },
         );
-        if ("report" in found) return found.report;
+        if ("report" in found) {
+          return found.report;
+        }
         const report: SourceReport = {
           source: ask.spec.id,
           name: ask.spec.name,
@@ -539,21 +743,23 @@ export class StashboxClient {
     };
     // An answer holding a failure is a statement about one exchange. Kept, it
     // would become a statement about the catalogue for a whole lifetime.
-    if (!perSource.some((one) => one.state === "failed")) this.#cache.set(key, data);
+    if (!perSource.some((one) => one.state === "failed")) {
+      this.#cache.set(key, data);
+    }
     return { data, cached: false };
   }
 
   async searchScenes(input: Record<string, unknown> = {}): Promise<Answer<never>> {
-    return this.#searchOf("scenes", input) as never;
+    return (await this.#searchOf("scenes", input)) as never;
   }
   async searchPerformers(input: Record<string, unknown> = {}): Promise<Answer<never>> {
-    return this.#searchOf("performers", input) as never;
+    return (await this.#searchOf("performers", input)) as never;
   }
   async searchStudios(input: Record<string, unknown> = {}): Promise<Answer<never>> {
-    return this.#searchOf("studios", input) as never;
+    return (await this.#searchOf("studios", input)) as never;
   }
   async searchTags(input: Record<string, unknown> = {}): Promise<Answer<never>> {
-    return this.#searchOf("tags", input) as never;
+    return (await this.#searchOf("tags", input)) as never;
   }
 
   #searchOf(kind: Kind, given: Record<string, unknown>): Promise<Answer<unknown>> {
@@ -576,7 +782,7 @@ export class StashboxClient {
     // page at all, so every call reads the same first rows.
     if (words !== undefined && page > 1) {
       throw invalidInput(
-        `A search written with query does not take page. The route a catalogue reads words on takes a term and a size, so it answers its first rows whatever page names. An argument that is read and dropped produces an answer computed without it, which reads as the answer to the question that was asked.`,
+        "A search written with query does not take page. The route a catalogue reads words on takes a term and a size, so it answers its first rows whatever page names. An argument that is read and dropped produces an answer computed without it, which reads as the answer to the question that was asked.",
         "Narrow the words, raise limit, or write the typed arguments, which reach the route that pages.",
       );
     }
@@ -610,14 +816,7 @@ export class StashboxClient {
         // refusal that came back would read as a fact about this one.
         const held = shareOf(input, spec.id);
         const narrowing = { ...held.share, page, limit } as never;
-        const shaped =
-          kind === "scenes"
-            ? sceneQueryInput(spec, narrowing)
-            : kind === "performers"
-              ? performerQueryInput(spec, narrowing)
-              : kind === "studios"
-                ? studioQueryInput(spec, narrowing)
-                : tagQueryInput(spec, narrowing);
+        const shaped = QUERY_INPUT_OF[kind](spec, narrowing);
         const built = facetedRequest(spec, kind, shaped.input as Record<string, unknown>);
         return {
           ...built,
@@ -671,7 +870,9 @@ export class StashboxClient {
     // they asked to leave out.
     const first = await this.#readOne(kind, parsed.instance, parsed.uuid, sections, named);
     readings.push(first.reading);
-    if (first.replayed === true) replayed.add(parsed.instance);
+    if (first.replayed === true) {
+      replayed.add(parsed.instance);
+    }
 
     // The catalogues a link reaches are different catalogues, so they are read
     // together: each holds its own pace, and reading them one after another
@@ -686,7 +887,9 @@ export class StashboxClient {
     );
     for (const [at, next] of reached.entries()) {
       readings.push(next.reading);
-      if (next.replayed === true) replayed.add(others[at]?.source ?? "");
+      if (next.replayed === true) {
+        replayed.add(others[at]?.source ?? "");
+      }
     }
 
     // Every catalogue the registry declares leaves here named, as it does on a
@@ -700,20 +903,18 @@ export class StashboxClient {
     // record, and naming it sends a reader to do exactly that.
     const from = instanceById(first.reading.source)?.name ?? first.reading.source;
     for (const spec of INSTANCES) {
-      if (readings.some((one) => one.source === spec.id)) continue;
+      if (readings.some((one) => one.source === spec.id)) {
+        continue;
+      }
       const link = unfollowed(first.reading, spec.id);
-      const reason =
-        named !== undefined && !named.includes(spec.id)
-          ? `The catalogues named in this call left ${spec.name} out, so it was never asked.`
-          : !supports(spec, ROUTE[kind])
-            ? `${spec.name} answers no ${kind} of its own, so it was never asked.`
-            : first.reading.state === "absent"
-              ? `${from} was never asked, so no link it publishes from this record was read and whether it links this record to one on ${spec.name} is unknown. That is a reading nobody performed rather than a link nobody wrote.`
-              : first.reading.state === "failed"
-                ? `${from} could not answer, so whether it links this record to one on ${spec.name} is unknown and nothing here reached it. That is a reading that carried no link rather than a link nobody wrote.`
-                : link !== undefined
-                  ? `${from} links this record to one on ${spec.name} at ${link}, and that address names the record by something this client cannot address, so nothing here reached it. The link is written; following it is what failed.`
-                  : `${from} publishes no link from this record to one on ${spec.name}, so nothing here reached it. That is a link nobody wrote rather than a record ${spec.name} lacks.`;
+      const reason = whyThisCatalogueWasNeverAsked({
+        spec,
+        kind,
+        from,
+        named,
+        link,
+        reading: first.reading,
+      });
       readings.push({ source: spec.id, state: "absent", reason });
     }
 
@@ -847,7 +1048,9 @@ export class StashboxClient {
       // The key present and null is the catalogue saying it holds nothing at
       // that identifier, and only that second reading is an absence.
       const container = recordUnder(payload, request.operation, spec, `the ${kind}`);
-      if (container === null) return null;
+      if (container === null) {
+        return null;
+      }
       return READERS[kind](container, spec, at).record;
     });
 
@@ -952,68 +1155,26 @@ export class StashboxClient {
             let skipped = 0;
             for (const entry of raw) {
               const one = readScene(entry, ask.spec, at);
-              if (one.record === null) skipped += 1;
-              else read.push(one.record as unknown as Record<string, unknown>);
+              if (one.record === null) {
+                skipped += 1;
+              } else {
+                read.push(one.record as unknown as Record<string, unknown>);
+              }
             }
             return { read, skipped };
           },
         );
-        if ("report" in found) return { report: found.report, rows: [] as Raw[] };
-
-        // The route answers a group per hash, so a record carrying two of the
-        // hashes asked comes back in two of them. Counted once per group, one
-        // record of one catalogue is reported as several.
-        const answered = new Map<string, Record<string, unknown>>();
-        for (const scene of found.value.read) {
-          const held = answered.get(String(scene.id));
-          if (held === undefined) {
-            answered.set(String(scene.id), scene);
-            continue;
-          }
-          // One record answered under two hashes is one record, and each copy
-          // of it carries the hashes its own group was matched on. Keeping the
-          // first copy alone drops the hash the second was reached by.
-          const prints = [...heldPrints(held), ...heldPrints(scene)];
-          const seen = new Set<string>();
-          held.fingerprints = prints.filter((one) => {
-            const at = `${one.algorithm} ${one.hash.toLowerCase()}`;
-            if (seen.has(at)) return false;
-            seen.add(at);
-            return true;
-          });
+        if ("report" in found) {
+          return { report: found.report, rows: [] as Raw[] };
         }
-        // This catalogue was put only the algorithms its own lookup searches.
-        // A record it answered with carries hashes of every algorithm, so
-        // reading those as matches attributes to it an answer to a question it
-        // never received.
-        const put = fingerprints.filter((one) => !request.notSearched.includes(one.algorithm));
 
-        let count = 0;
-        let unattributed = 0;
-        const rows: Raw[] = [];
-        for (const scene of answered.values()) {
-          const carried = heldPrints(scene);
-          // A hash is compared for what it is: the catalogues publish it in
-          // either case, and a comparison that reads two spellings of one
-          // hash as two hashes turns a match into an emptiness.
-          const reached = put.filter((print) =>
-            carried.some(
-              (one) =>
-                one.hash.toLowerCase() === print.hash.toLowerCase() &&
-                one.algorithm === print.algorithm,
-            ),
-          );
-          // The catalogue answered with it and this client cannot say which
-          // hash reached it, so it stands as no match and is counted apart
-          // rather than dropped out of the answer entirely.
-          if (reached.length === 0) {
-            unattributed += 1;
-            continue;
-          }
-          count += 1;
-          for (const print of reached)
-            rows.push({ source: ask.spec.id, scene, algorithm: print.algorithm, hash: print.hash });
-        }
+        const answered = oneRecordPerScene(found.value.read);
+        const { count, unattributed, rows } = attributeHashesToRecords({
+          answered,
+          fingerprints,
+          notSearched: request.notSearched,
+          source: ask.spec.id,
+        });
         return {
           report: {
             source: ask.spec.id,
@@ -1062,49 +1223,21 @@ export class StashboxClient {
     // records carrying one hash are two records by its own account. A card
     // takes at most one reading per catalogue: the second record opens a card
     // of its own rather than disappearing behind the first.
-    const above = new Map<string, string>();
-    const under = new Map<string, Map<InstanceId, string>>();
-    const root = (key: string): string => {
-      const up = above.get(key);
-      if (up === undefined || up === key) return key;
-      const top = root(up);
-      above.set(key, top);
-      return top;
-    };
-    for (const key of records.keys())
-      if (printsOf(key, true).length > 0) {
-        above.set(key, key);
-        under.set(key, new Map([[sourceOf(key), key]]));
-      }
-    const sharing = new Map<string, string[]>();
-    for (const key of records.keys())
-      for (const print of printsOf(key, true)) {
-        const at = `${print.algorithm} ${print.hash.toLowerCase()}`;
-        sharing.set(at, [...(sharing.get(at) ?? []), key]);
-      }
-    for (const together of sharing.values())
-      for (const key of together.slice(1)) {
-        const left = root(together[0] as string);
-        const right = root(key);
-        if (left === right) continue;
-        const one = under.get(left) as Map<InstanceId, string>;
-        const other = under.get(right) as Map<InstanceId, string>;
-        if ([...other.keys()].some((source) => one.has(source))) continue;
-        for (const [source, held] of other) one.set(source, held);
-        under.delete(right);
-        above.set(right, left);
-      }
+    const { under, root } = weldOnExactHashes(records.keys(), printsOf, sourceOf);
 
     /** The hashes that reached a card, each naming the catalogues it reached it on. */
     const reaching = (group: readonly string[], exact: boolean) => {
       const by = new Map<string, { hash: string; algorithm: string; sources: InstanceId[] }>();
-      for (const key of group)
+      for (const key of group) {
         for (const print of printsOf(key, exact)) {
           const at = `${print.algorithm} ${print.hash.toLowerCase()}`;
           const entry = by.get(at) ?? { hash: print.hash, algorithm: print.algorithm, sources: [] };
-          if (!entry.sources.includes(sourceOf(key))) entry.sources.push(sourceOf(key));
+          if (!entry.sources.includes(sourceOf(key))) {
+            entry.sources.push(sourceOf(key));
+          }
           by.set(at, entry);
         }
+      }
       const asked = (one: { hash: string; algorithm: string }) =>
         fingerprints.findIndex(
           (print) =>
@@ -1194,7 +1327,9 @@ export class StashboxClient {
       const key = `${one.source}:${String(one.scene.id)}`;
       const exact = one.algorithm !== "PHASH";
       const at = exact ? `exact ${root(key)}` : `alike ${key}`;
-      if (opened.has(at)) continue;
+      if (opened.has(at)) {
+        continue;
+      }
       opened.add(at);
       matches.push(
         cardOf(
@@ -1326,7 +1461,9 @@ function shareOf(
   const receivedInPart: string[] = [];
   for (const name of IDENTIFIER_ARGUMENTS) {
     const written = input[name];
-    if (written === undefined) continue;
+    if (written === undefined) {
+      continue;
+    }
     const all = Array.isArray(written) ? (written as string[]) : [String(written)];
     const mine = all
       .filter((one) => one.startsWith(`${source}:`))
@@ -1338,7 +1475,9 @@ function shareOf(
       namingNoRecord.push(PUBLISHED[name] ?? name);
       delete share[name];
     } else {
-      if (mine.length < all.length) receivedInPart.push(PUBLISHED[name] ?? name);
+      if (mine.length < all.length) {
+        receivedInPart.push(PUBLISHED[name] ?? name);
+      }
       share[name] = Array.isArray(written) ? mine : mine[0];
     }
   }
@@ -1363,7 +1502,9 @@ function namedIdentifiers(
   const held: Record<string, unknown> = { ...input };
   for (const name of IDENTIFIER_ARGUMENTS) {
     const written = input[name];
-    if (written === undefined) continue;
+    if (written === undefined) {
+      continue;
+    }
     const published = PUBLISHED[name] ?? name;
     held[name] = Array.isArray(written)
       ? identifierList(published, written as string[], configured).entries.map((one) => one.given)
@@ -1426,12 +1567,12 @@ function orderingOf(
     return "in no order at all: no catalogue answered, so no catalogue laid a row anywhere";
   }
 
-  const way = (order: OrderSent | undefined) =>
-    order?.direction === undefined
-      ? null
-      : order.direction.toUpperCase() === "ASC"
-        ? "ascending"
-        : "descending";
+  const way = (order: OrderSent | undefined) => {
+    if (order?.direction === undefined) {
+      return null;
+    }
+    return order.direction.toUpperCase() === "ASC" ? "ascending" : "descending";
+  };
   /** What one catalogue did with the order, in words that name no catalogue. */
   const clauseOf = (asked: Asked | undefined): string | null => {
     const run = way(asked?.order);

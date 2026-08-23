@@ -38,15 +38,21 @@ function declaredInRegistry(): Map<string, string> {
   const said = new Map<string, string>();
   const walk = (value: unknown): void => {
     if (Array.isArray(value)) {
-      for (const item of value) walk(item);
+      for (const item of value) {
+        walk(item);
+      }
       return;
     }
-    if (value === null || typeof value !== "object") return;
+    if (value === null || typeof value !== "object") {
+      return;
+    }
     const object = value as Record<string, unknown>;
     if (typeof object.name === "string" && typeof object.description === "string") {
       said.set(object.name, object.description);
     }
-    for (const item of Object.values(object)) walk(item);
+    for (const item of Object.values(object)) {
+      walk(item);
+    }
   };
   walk(manifest);
   return said;

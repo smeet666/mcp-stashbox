@@ -72,8 +72,8 @@ describe("a list too long for one line", () => {
 
 /* ------------------------------------ what the prose says about two entries */
 
-const TAG_ON_STASHDB = `stashdb:fe7f4d46-966e-4a36-bf6a-61ccf7d3734d`;
-const TAG_ON_TPDB = `tpdb:dd622a8a-3c3f-4f1a-9a17-2b0c5c9b8e4d`;
+const TAG_ON_STASHDB = "stashdb:fe7f4d46-966e-4a36-bf6a-61ccf7d3734d";
+const TAG_ON_TPDB = "tpdb:dd622a8a-3c3f-4f1a-9a17-2b0c5c9b8e4d";
 
 /** A card holding the tags two catalogues published, whatever joins them. */
 function tagCard(stashdb: unknown[], tpdb: unknown[]) {
@@ -201,7 +201,9 @@ describe("a card read on one catalogue", () => {
     // The reason is one shape and three facts. Folded on the shape and printed
     // with the catalogue and the variable stripped out of it, it names neither
     // what was not read nor what to set to read it.
-    for (const name of ["FansDB", "PMV Stash", "JAVStash"]) expect(line).toContain(name);
+    for (const name of ["FansDB", "PMV Stash", "JAVStash"]) {
+      expect(line).toContain(name);
+    }
     for (const variable of ["STASHBOX_FANSDB_KEY", "STASHBOX_PMV_KEY", "STASHBOX_JAVSTASH_KEY"]) {
       expect(line).toContain(variable);
     }

@@ -54,7 +54,9 @@ const CORPUS = new Map<string, Map<string, number>>();
 
 async function corpus(kind: string): Promise<Map<string, number>> {
   const held = CORPUS.get(kind);
-  if (held !== undefined) return held;
+  if (held !== undefined) {
+    return held;
+  }
   const read = await (
     client[`search${kind}` as "searchScenes"] as (
       input: Record<string, unknown>,
@@ -305,7 +307,9 @@ describe.skipIf(!ENABLED)("live: the fingerprint route reaches a catalogue", () 
       | { hash: string; algorithm: "MD5" | "OSHASH" | "PHASH" }
       | undefined;
     expect(print, "the record carried no fingerprint, so this case measures nothing").toBeDefined();
-    if (!print) return;
+    if (!print) {
+      return;
+    }
 
     const read = await client.findByFingerprint({
       fingerprints: [{ hash: print.hash, algorithm: print.algorithm }],
@@ -366,7 +370,9 @@ describe.skipIf(!ENABLED)("live: what a card a fingerprint lookup opens states",
       | { hash: string; algorithm: "MD5" | "OSHASH" | "PHASH" }
       | undefined;
     expect(print, "the record carried no fingerprint, so this case measures nothing").toBeDefined();
-    if (!print) return;
+    if (!print) {
+      return;
+    }
 
     // The preference names a catalogue this suite holds no key for, so every
     // value on every card was read from another one.

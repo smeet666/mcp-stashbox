@@ -181,7 +181,9 @@ describe("a date carries one comparison, because no catalogue declares a range",
     for (const input of built) {
       for (const value of Object.values(input)) {
         const modifier = (value as { modifier?: unknown })?.modifier;
-        if (modifier !== undefined) expect(declared).toContain(modifier);
+        if (modifier !== undefined) {
+          expect(declared).toContain(modifier);
+        }
       }
     }
   });

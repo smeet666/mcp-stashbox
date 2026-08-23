@@ -204,7 +204,9 @@ describe("RateLimiter widening", () => {
   it("stops at the ceiling it was given", () => {
     const limiter = new RateLimiter({ intervalMs: 1000, maxIntervalMs: 4000 });
 
-    for (let i = 0; i < 10; i += 1) limiter.pushBack();
+    for (let i = 0; i < 10; i += 1) {
+      limiter.pushBack();
+    }
 
     expect(limiter.currentIntervalMs).toBe(4000);
   });
@@ -212,7 +214,9 @@ describe("RateLimiter widening", () => {
   it("stops at sixteen times the base when no ceiling is given", () => {
     const limiter = new RateLimiter({ intervalMs: 1000 });
 
-    for (let i = 0; i < 10; i += 1) limiter.pushBack();
+    for (let i = 0; i < 10; i += 1) {
+      limiter.pushBack();
+    }
 
     expect(limiter.currentIntervalMs).toBe(16_000);
   });
@@ -264,7 +268,9 @@ describe("RateLimiter narrowing", () => {
   it("never narrows below the base interval", () => {
     const limiter = new RateLimiter({ intervalMs: 1000 });
 
-    for (let i = 0; i < 30; i += 1) limiter.succeeded();
+    for (let i = 0; i < 30; i += 1) {
+      limiter.succeeded();
+    }
 
     expect(limiter.currentIntervalMs).toBe(1000);
   });

@@ -35,7 +35,9 @@ const STUDIOS = ["Northgate Pictures", "Tidewater Film", "Quarry House", "Meridi
 
 function hex(length) {
   let out = "";
-  while (out.length < length) out += Math.floor(random() * 16).toString(16);
+  while (out.length < length) {
+    out += Math.floor(random() * 16).toString(16);
+  }
   return out.slice(0, length);
 }
 
@@ -47,11 +49,21 @@ function uuid(version) {
 function date() {
   const year = 1994 + Math.floor(random() * 32);
   const roll = random();
-  if (roll < 0.08) return String(year);
-  if (roll < 0.14) return `${year}-${String(1 + Math.floor(random() * 12)).padStart(2, "0")}`;
+  if (roll < 0.08) {
+    return String(year);
+  }
+  if (roll < 0.14) {
+    return `${year}-${String(1 + Math.floor(random() * 12)).padStart(2, "0")}`;
+  }
   return `${year}-${String(1 + Math.floor(random() * 12)).padStart(2, "0")}-${String(
     1 + Math.floor(random() * 28),
   ).padStart(2, "0")}`;
+}
+
+// A tenth of the records state no height at all, which is what a catalogue
+// looks like where nobody has filled the field in.
+function heightOrNothing() {
+  return random() < 0.9 ? 150 + Math.floor(random() * 45) : null;
 }
 
 function performer(index) {
@@ -75,7 +87,7 @@ function performer(index) {
     // A settled record can hold no scenes at all: the count reports coverage.
     scene_count: merged || withdrawn ? 0 : Math.floor(random() ** 3 * 300),
     // A folded record publishes a height of zero, which no person has.
-    height: merged ? 0 : random() < 0.9 ? 150 + Math.floor(random() * 45) : null,
+    height: merged ? 0 : heightOrNothing(),
     deleted: merged || withdrawn,
     merged_into_id: merged ? uuid("4") : null,
     merged_ids: [],

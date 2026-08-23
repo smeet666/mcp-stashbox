@@ -77,7 +77,9 @@ function refusing(
     keys: { stashdb: "a key this test never sends anywhere", tpdb: "another" },
     transport: {
       request: async (spec) => {
-        if (failing.includes(spec.id)) throw new Error(`${spec.name} could not be reached`);
+        if (failing.includes(spec.id)) {
+          throw new Error(`${spec.name} could not be reached`);
+        }
         return { findScenesBySceneFingerprints: answers[spec.id] ?? [] } as never;
       },
     },
@@ -323,7 +325,9 @@ describe("a batch mixing an algorithm one catalogue does not search", () => {
   it("attributes no perceptual match to the catalogue that never received one", async () => {
     const read = await reading(answers).findByFingerprint(asked);
     for (const one of read.data.matches) {
-      if (one.matchKind !== "perceptual_similarity") continue;
+      if (one.matchKind !== "perceptual_similarity") {
+        continue;
+      }
       // A catalogue stands on a card as a reading of it only where it carries
       // the identifier it minted for the record. Named without one, it looked
       // and holds nothing here, which is the other fact the card owes.
@@ -337,9 +341,13 @@ describe("a batch mixing an algorithm one catalogue does not search", () => {
 
   it("carries on every match the hash that reached it on each catalogue", async () => {
     const read = await reading(answers).findByFingerprint(asked);
-    for (const one of read.data.matches)
-      for (const by of one.matchedBy)
-        if (by.algorithm === "PHASH") expect(by.sources).not.toContain("tpdb");
+    for (const one of read.data.matches) {
+      for (const by of one.matchedBy) {
+        if (by.algorithm === "PHASH") {
+          expect(by.sources).not.toContain("tpdb");
+        }
+      }
+    }
   });
 
   it("keeps the hash that catalogue never searched in the payload", async () => {

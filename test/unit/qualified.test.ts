@@ -29,7 +29,9 @@ function watching(answer?: unknown) {
     transport: {
       request: async (_spec, _apiKey, body) => {
         sent.push(JSON.stringify(body.variables ?? {}));
-        if (answer === undefined) throw new Error("this test reads the request");
+        if (answer === undefined) {
+          throw new Error("this test reads the request");
+        }
         return answer as never;
       },
     },

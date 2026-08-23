@@ -27,7 +27,9 @@ export function isFolded(status: RecordStatus): boolean {
  * points nowhere, which is all the catalogue said.
  */
 export function markerClause(status: RecordStatus, successor?: string | null): string {
-  if (!isFolded(status)) return "";
+  if (!isFolded(status)) {
+    return "";
+  }
   if (status === "merged") {
     return successor
       ? `, merged into ${successor}, so this identifier addresses that record`
@@ -38,7 +40,9 @@ export function markerClause(status: RecordStatus, successor?: string | null): s
 
 /** The shorter mark, for a name inside a list where a clause would crowd the line. */
 export function markerSuffix(status: RecordStatus): string {
-  if (!isFolded(status)) return "";
+  if (!isFolded(status)) {
+    return "";
+  }
   return status === "merged" ? " (merged into another record)" : " (withdrawn)";
 }
 
@@ -82,7 +86,9 @@ export function markerSectionsNote(
   unrendered: readonly string[],
   successor: string | null,
 ): string | null {
-  if (unrendered.length === 0) return null;
+  if (unrendered.length === 0) {
+    return null;
+  }
   const next = successor ? ` Ask for them on ${successor}, which continues it.` : "";
   return `A marker carries no body, so ${unrendered.join(", ")} could not be rendered here.${next}`;
 }

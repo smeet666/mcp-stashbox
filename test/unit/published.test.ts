@@ -30,6 +30,59 @@ const PHASH = "e276686d35b2c94c";
 /** Where a mismatch was found, written as a reader of the payload would point. */
 type Fault = string;
 
+/** What a payload breaks in a schema declaring a list. */
+function faultsInArray(schema: Record<string, unknown>, value: unknown, where: string): Fault[] {
+  if (!Array.isArray(value)) {
+    return [`${where} is no array`];
+  }
+  const items = schema.items as Record<string, unknown> | undefined;
+  if (items === undefined) {
+    return [];
+  }
+  return value.flatMap((one, index) => faults(items, one, `${where}[${index}]`));
+}
+
+/** What a payload breaks in a schema declaring named properties. */
+function faultsInObject(schema: Record<string, unknown>, value: unknown, where: string): Fault[] {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return [`${where} is no object`];
+  }
+  const held = value as Record<string, unknown>;
+  const properties = (schema.properties as Record<string, Record<string, unknown>>) ?? {};
+  const found: Fault[] = [];
+
+  for (const name of (schema.required as string[]) ?? []) {
+    if (!(name in held)) {
+      found.push(`${where} declares ${name} and carries none`);
+    }
+  }
+  for (const [name, one] of Object.entries(held)) {
+    const declared = properties[name];
+    if (declared === undefined) {
+      if (schema.additionalProperties === false) {
+        found.push(`${where} carries ${name}, which its schema does not declare`);
+      }
+      continue;
+    }
+    found.push(...faults(declared, one, `${where}.${name}`));
+  }
+  return found;
+}
+
+/** What a payload breaks in a schema declaring one primitive. */
+function faultsInScalar(type: string | undefined, value: unknown, where: string): Fault[] {
+  const holds: Record<string, boolean> = {
+    string: typeof value === "string",
+    number: typeof value === "number",
+    boolean: typeof value === "boolean",
+    null: value === null,
+  };
+  if (type === undefined || holds[type] !== false) {
+    return [];
+  }
+  return [`${where} is ${type === "null" ? "not null" : `no ${type}`}`];
+}
+
 /**
  * What a payload breaks in the schema declared for it.
  *
@@ -38,15 +91,17 @@ type Fault = string;
  * would fail answers that satisfy the published schema.
  */
 function faults(schema: Record<string, unknown>, value: unknown, at = ""): Fault[] {
-  const found: Fault[] = [];
   const where = at === "" ? "the answer" : at;
 
   const options = schema.anyOf as Record<string, unknown>[] | undefined;
   if (options !== undefined) {
-    if (options.some((one) => faults(one, value, at).length === 0)) return [];
+    if (options.some((one) => faults(one, value, at).length === 0)) {
+      return [];
+    }
     return [`${where} matches none of the readings the schema declares`];
   }
 
+  const found: Fault[] = [];
   const named = schema.enum as unknown[] | undefined;
   if (named !== undefined && !named.includes(value)) {
     found.push(`${where} carries ${JSON.stringify(value)}, outside the set the schema declares`);
@@ -54,41 +109,12 @@ function faults(schema: Record<string, unknown>, value: unknown, at = ""): Fault
 
   const type = schema.type as string | undefined;
   if (type === "array") {
-    if (!Array.isArray(value)) return [`${where} is no array`];
-    const items = schema.items as Record<string, unknown> | undefined;
-    if (items !== undefined) {
-      value.forEach((one, index) => {
-        found.push(...faults(items, one, `${where}[${index}]`));
-      });
-    }
-    return found;
+    return [...found, ...faultsInArray(schema, value, where)];
   }
   if (type === "object") {
-    if (value === null || typeof value !== "object" || Array.isArray(value)) {
-      return [`${where} is no object`];
-    }
-    const held = value as Record<string, unknown>;
-    const properties = (schema.properties as Record<string, Record<string, unknown>>) ?? {};
-    for (const name of (schema.required as string[]) ?? []) {
-      if (!(name in held)) found.push(`${where} declares ${name} and carries none`);
-    }
-    for (const [name, one] of Object.entries(held)) {
-      const declared = properties[name];
-      if (declared === undefined) {
-        if (schema.additionalProperties === false) {
-          found.push(`${where} carries ${name}, which its schema does not declare`);
-        }
-        continue;
-      }
-      found.push(...faults(declared, one, `${where}.${name}`));
-    }
-    return found;
+    return [...found, ...faultsInObject(schema, value, where)];
   }
-  if (type === "string" && typeof value !== "string") found.push(`${where} is no string`);
-  if (type === "number" && typeof value !== "number") found.push(`${where} is no number`);
-  if (type === "boolean" && typeof value !== "boolean") found.push(`${where} is no boolean`);
-  if (type === "null" && value !== null) found.push(`${where} is not null`);
-  return found;
+  return [...found, ...faultsInScalar(type, value, where)];
 }
 
 /* --------------------------------------------- the catalogues, answering */
@@ -245,11 +271,15 @@ describe("every answer validates against the schema its tool publishes", () => {
     it(`${name} ${JSON.stringify(args).slice(0, 62)}`, async () => {
       const tool = TOOLS.find((one) => one.name === name);
       expect(tool, `no tool named ${name}`).toBeDefined();
-      if (tool === undefined) return;
+      if (tool === undefined) {
+        return;
+      }
 
       const read = tool.inputSchema.safeParse(args);
       expect(read.success, `${name} refused its own arguments: ${JSON.stringify(args)}`).toBe(true);
-      if (!read.success) return;
+      if (!read.success) {
+        return;
+      }
 
       const rendered = await tool.run(answering() as never, read.data as Record<string, unknown>);
       const declared = z.toJSONSchema(z.object(tool.outputSchema), { io: "output" }) as Record<
@@ -270,7 +300,9 @@ describe("every answer validates against the schema its tool publishes", () => {
    */
   const rowReading = (name: string): Record<string, unknown> => {
     const tool = TOOLS.find((one) => one.name === name);
-    if (tool === undefined) throw new Error(`no tool named ${name}`);
+    if (tool === undefined) {
+      throw new Error(`no tool named ${name}`);
+    }
     const declared = z.toJSONSchema(z.object(tool.outputSchema), {
       io: "output",
     }) as unknown as {
@@ -284,7 +316,9 @@ describe("every answer validates against the schema its tool publishes", () => {
   for (const [name, args] of CALLS.filter(([one]) => SEARCHES.includes(one))) {
     it(`${name} ${JSON.stringify(args).slice(0, 40)} answers rows of the kind it declares`, async () => {
       const tool = TOOLS.find((one) => one.name === name);
-      if (tool === undefined) throw new Error(`no tool named ${name}`);
+      if (tool === undefined) {
+        throw new Error(`no tool named ${name}`);
+      }
       const read = tool.inputSchema.parse(args) as Record<string, unknown>;
       const rendered = await tool.run(answering() as never, read);
       const rows = (rendered.structured as { results: unknown[] }).results;

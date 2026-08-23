@@ -22,7 +22,9 @@ function refusal(schema: { safeParse: (value: unknown) => unknown }, input: unkn
   const result = schema.safeParse(input) as
     | { success: true }
     | { success: false; error: { issues: { message: string }[] } };
-  if (result.success) throw new Error("the schema accepted an input it was expected to refuse");
+  if (result.success) {
+    throw new Error("the schema accepted an input it was expected to refuse");
+  }
   return result.error.issues.map((issue) => issue.message).join("\n");
 }
 

@@ -87,7 +87,9 @@ describe("Cache lifetime", () => {
 
   it("stores nothing over many writes when the lifetime is zero", () => {
     const cache = new Cache<string>(0, 10);
-    for (let i = 0; i < 20; i += 1) cache.set(`key-${i}`, `value-${i}`);
+    for (let i = 0; i < 20; i += 1) {
+      cache.set(`key-${i}`, `value-${i}`);
+    }
 
     expect(cache.size).toBe(0);
     expect(cache.get("key-7")).toBeUndefined();
@@ -179,7 +181,9 @@ describe("Cache size", () => {
 
   it("never grows past the number of entries it was given", () => {
     const cache = new Cache<string>(10_000, 3);
-    for (let i = 0; i < 20; i += 1) cache.set(`key-${i}`, `value-${i}`);
+    for (let i = 0; i < 20; i += 1) {
+      cache.set(`key-${i}`, `value-${i}`);
+    }
 
     expect(cache.size).toBe(3);
   });
