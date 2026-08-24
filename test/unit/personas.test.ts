@@ -294,12 +294,12 @@ describe("a question written only with narrowings the route reads nothing of", (
 describe("a question written beside a narrowing the route reads nothing of", () => {
   it("is still put to the catalogue for the narrowings it does receive", async () => {
     const { client, sent } = watching();
-    const read = await client.searchPerformers({ alias: "Angie", name: "Angela White", limit: 1 });
+    const read = await client.searchPerformers({ alias: "Marly", name: "Marla Quint", limit: 1 });
     // One narrowing left behind never silences the others: the catalogue
     // answers what it was given, and the answer names what it was not.
     const toStashdb = sent.filter((one) => one.instance === "stashdb");
     expect(toStashdb.length).toBeGreaterThan(0);
-    expect(toStashdb[0]?.body).toContain("Angela White");
+    expect(toStashdb[0]?.body).toContain("Marla Quint");
     const stashdb = read.data.perSource.find((one) => one.source === "stashdb");
     expect(stashdb?.state).toBe("answered");
     expect(stashdb?.narrowingsNotReceived ?? []).toContain("alias");

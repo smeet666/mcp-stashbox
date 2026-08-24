@@ -50,7 +50,7 @@ const UUID2 = "155f2559-d1f1-42b1-8cbe-9008542df5ce";
 const SCENE = {
   id: UUID,
   title: "Awakening",
-  details: "Dr Angela White sits beside her patient.",
+  details: "Dr Marla Quint sits beside her patient.",
   release_date: "2017-11-02",
   production_date: null,
   code: null,
@@ -59,8 +59,8 @@ const SCENE = {
   deleted: false,
   created: "2020-07-07T12:39:35Z",
   updated: "2022-03-09T05:21:01Z",
-  studio: { id: UUID2, name: "Girlsway", deleted: false, parent: null },
-  performers: [{ as: null, performer: { id: UUID2, name: "Angela White", deleted: false } }],
+  studio: { id: UUID2, name: "Fieldhouse", deleted: false, parent: null },
+  performers: [{ as: null, performer: { id: UUID2, name: "Marla Quint", deleted: false } }],
   tags: [
     { id: UUID2, name: "Brown Hair", deleted: false, category: { id: UUID, name: "Hair Color" } },
   ],
@@ -268,10 +268,10 @@ describe("every entity is read into a record that names its catalogue", () => {
     const read = readStudio(
       {
         id: UUID,
-        name: "Vixen",
+        name: "Northgate",
         aliases: [],
         deleted: false,
-        parent: { id: UUID2, name: "Vixen Media Group", deleted: false },
+        parent: { id: UUID2, name: "Northgate Media Group", deleted: false },
         urls: [],
       },
       SD,
@@ -280,14 +280,14 @@ describe("every entity is read into a record that names its catalogue", () => {
     expect(read.record?.id).toBe(`stashdb:${UUID}`);
     expect(read.record?.parent).toMatchObject({
       id: `stashdb:${UUID2}`,
-      name: "Vixen Media Group",
+      name: "Northgate Media Group",
     });
     expect(read.record?.sourceUrl).toBe(`https://stashdb.org/studios/${UUID}`);
   });
 
   it("loses a parent that carries no identifier, and counts it", () => {
     const read = readStudio(
-      { id: UUID, name: "Vixen", deleted: false, parent: { name: "A group" } },
+      { id: UUID, name: "Northgate", deleted: false, parent: { name: "A group" } },
       SD,
       AT,
     );
@@ -316,7 +316,7 @@ describe("every entity is read into a record that names its catalogue", () => {
     const read = readPerformer(
       {
         id: UUID2,
-        name: "Angela White",
+        name: "Marla Quint",
         deleted: false,
         gender: "FEMALE",
         country: "AU",
@@ -385,7 +385,7 @@ describe("the studios a catalogue credits a performer on", () => {
         name: "A",
         deleted: false,
         studios: [
-          { scene_count: 12, studio: { id: UUID, name: "Vixen", deleted: false } },
+          { scene_count: 12, studio: { id: UUID, name: "Northgate", deleted: false } },
           { scene_count: 3, studio: { id: "not-a-uuid", name: "Broken" } },
         ],
       },
@@ -393,7 +393,7 @@ describe("the studios a catalogue credits a performer on", () => {
       AT,
     );
     expect(read.record?.studios).toHaveLength(1);
-    expect(read.record?.studios?.[0]).toMatchObject({ name: "Vixen", sceneCount: 12 });
+    expect(read.record?.studios?.[0]).toMatchObject({ name: "Northgate", sceneCount: 12 });
     // A line naming no studio of its own can be addressed by nobody, so it is
     // counted rather than dropped.
     expect(read.record?.studiosSkipped).toBe(1);
@@ -405,11 +405,11 @@ describe("the link a catalogue publishes to the same record elsewhere", () => {
     const read = readPerformer(
       {
         id: UUID2,
-        name: "Angela White",
+        name: "Marla Quint",
         deleted: false,
         urls: [
           { url: `https://theporndb.net/performers/${UUID}`, site: { name: "ThePornDB" } },
-          { url: "https://x.com/angelawhite", site: { name: "Twitter" } },
+          { url: "https://x.com/marlawhite", site: { name: "Twitter" } },
         ],
       },
       SD,
@@ -440,7 +440,7 @@ describe("the link a catalogue publishes to the same record elsewhere", () => {
         id: UUID2,
         name: "A",
         deleted: false,
-        urls: [{ url: "https://theporndb.net/performers/angela-white", site: { name: "TPDB" } }],
+        urls: [{ url: "https://theporndb.net/performers/marla-white", site: { name: "TPDB" } }],
       },
       SD,
       AT,

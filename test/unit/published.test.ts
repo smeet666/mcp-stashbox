@@ -131,8 +131,8 @@ const SCENE = {
   deleted: false,
   created: "2020-07-07T12:39:35Z",
   updated: "2022-03-09T05:21:01Z",
-  studio: { id: OTHER, name: "Girlsway", deleted: false, parent: null },
-  performers: [{ as: null, performer: { id: OTHER, name: "Angela White", deleted: false } }],
+  studio: { id: OTHER, name: "Fieldhouse", deleted: false, parent: null },
+  performers: [{ as: null, performer: { id: OTHER, name: "Marla Quint", deleted: false } }],
   tags: [{ id: OTHER, name: "Brown Hair", deleted: false, category: null }],
   urls: [{ url: "https://example.invalid/a", site: { id: UUID, name: "Twitter" } }],
   images: [{ id: UUID, url: "https://stashdb.org/images/x", width: 960, height: 544 }],
@@ -150,9 +150,9 @@ const SCENE = {
 
 const PERFORMER = {
   id: UUID,
-  name: "Angela White",
+  name: "Marla Quint",
   disambiguation: null,
-  aliases: ["Angie"],
+  aliases: ["Marly"],
   gender: "FEMALE",
   country: "AU",
   birth_date: "1985-03-04",
@@ -167,12 +167,12 @@ const PERFORMER = {
   scene_count: 12,
   urls: [],
   images: [],
-  studios: [{ scene_count: 3, studio: { id: OTHER, name: "Girlsway", deleted: false } }],
+  studios: [{ scene_count: 3, studio: { id: OTHER, name: "Fieldhouse", deleted: false } }],
 };
 
 const STUDIO = {
   id: UUID,
-  name: "Girlsway",
+  name: "Fieldhouse",
   aliases: [],
   deleted: false,
   parent: null,
@@ -239,12 +239,12 @@ const CALLS: [string, Record<string, unknown>][] = [
   ["search_scenes", { performer_ids: [`tpdb:${UUID}`, `stashdb:${OTHER}`] }],
   // A narrowing one catalogue's own input declares no field for.
   ["search_scenes", { parent_studio_id: `tpdb:${UUID}` }],
-  ["search_performers", { query: "angela" }],
-  ["search_performers", { name: "Angela White", gender: "FEMALE" }],
+  ["search_performers", { query: "marla" }],
+  ["search_performers", { name: "Marla Quint", gender: "FEMALE" }],
   // A narrowing the catalogue's route takes and reads nothing of.
-  ["search_performers", { alias: "Angie" }],
-  ["search_studios", { query: "girlsway" }],
-  ["search_studios", { name: "Girlsway" }],
+  ["search_performers", { alias: "Marly" }],
+  ["search_studios", { query: "fieldhouse" }],
+  ["search_studios", { name: "Fieldhouse" }],
   ["search_tags", { query: "hair" }],
   ["search_tags", { name: "Brown Hair" }],
   ["get_scene", { id: `stashdb:${UUID}`, sections: ["basic", "fingerprints", "images"] }],

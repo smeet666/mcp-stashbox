@@ -43,7 +43,7 @@ const OTHER = "019fec3f-1bb1-7383-8782-ea0e678f6de0";
 const VALUE: Record<string, unknown> = {
   query: "sunset",
   title: "sunset",
-  name: "vixen",
+  name: "northgate",
   code: "START-614",
   alias: "sunset",
   date: "2019-04-12",
@@ -73,7 +73,7 @@ const VALUE: Record<string, unknown> = {
 const REACHES: Record<string, (sent: string) => boolean> = {
   query: (sent) => sent.includes("sunset"),
   title: (sent) => sent.includes("sunset"),
-  name: (sent) => sent.includes("vixen"),
+  name: (sent) => sent.includes("northgate"),
   code: (sent) => sent.includes("START-614"),
   alias: (sent) => sent.includes("sunset"),
   date: (sent) => sent.includes("2019-04-12"),

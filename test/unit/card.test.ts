@@ -45,18 +45,18 @@ function answered(source: string, id: string, record: Record<string, unknown>): 
 }
 
 const STASHDB = answered("stashdb", UUID_A, {
-  name: "Angela White",
+  name: "Marla Quint",
   birthDate: "1985-03-04",
   country: "AU",
-  aliases: ["Angela Exposed", "Angie", "Aussie Angela"],
+  aliases: ["Marla Exposed", "Marly", "Aussie Marla"],
   sceneCount: 1041,
 });
 
 const TPDB = answered("tpdb", UUID_B, {
-  name: "Angela White",
+  name: "Marla Quint",
   birthDate: "1985-03-04",
   country: "AU",
-  aliases: ["Angie", "Angelia White", "Angela Exposed"],
+  aliases: ["Marly", "Marlia Quint", "Marla Exposed"],
   sceneCount: null,
 });
 
@@ -131,10 +131,10 @@ describe("a list is united, never chosen", () => {
   it("holds every entry either catalogue published, once", () => {
     const held = card([STASHDB, TPDB]);
     expect((held.fields.aliases as CardEntry[]).map((entry) => entry.value).sort()).toEqual([
-      "Angela Exposed",
-      "Angelia White",
-      "Angie",
-      "Aussie Angela",
+      "Aussie Marla",
+      "Marla Exposed",
+      "Marlia Quint",
+      "Marly",
     ]);
   });
 
@@ -142,18 +142,18 @@ describe("a list is united, never chosen", () => {
     const held = card([STASHDB, TPDB]);
     const by = (value: string) =>
       (held.fields.aliases as CardEntry[]).find((entry) => entry.value === value)?.published_by;
-    expect(by("Angie")).toEqual(["stashdb", "tpdb"]);
-    expect(by("Aussie Angela")).toEqual(["stashdb"]);
-    expect(by("Angelia White")).toEqual(["tpdb"]);
+    expect(by("Marly")).toEqual(["stashdb", "tpdb"]);
+    expect(by("Aussie Marla")).toEqual(["stashdb"]);
+    expect(by("Marlia Quint")).toEqual(["tpdb"]);
   });
 
   it("keeps the order of the preferred catalogue, then what the others add", () => {
     const held = card([STASHDB, TPDB]);
     expect((held.fields.aliases as CardEntry[]).map((entry) => entry.value)).toEqual([
-      "Angela Exposed",
-      "Angie",
-      "Aussie Angela",
-      "Angelia White",
+      "Marla Exposed",
+      "Marly",
+      "Aussie Marla",
+      "Marlia Quint",
     ]);
   });
 });

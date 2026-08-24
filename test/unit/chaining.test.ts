@@ -33,8 +33,10 @@ describe("a record named inside a card", () => {
       readings: [
         reading("stashdb", {
           performers: [{ id: `stashdb:${B}`, name: "Tawny Swain", status: "established" }],
-          tags: [{ id: `stashdb:${A}`, name: "Anal", category: "Action", status: "established" }],
-          studio: { id: `stashdb:${A}`, name: "Vixen", parent: null, status: "established" },
+          tags: [
+            { id: `stashdb:${A}`, name: "Outdoors", category: "Action", status: "established" },
+          ],
+          studio: { id: `stashdb:${A}`, name: "Northgate", parent: null, status: "established" },
         }),
       ],
       prefer: ["stashdb"],
@@ -89,8 +91,8 @@ function tagCard(stashdb: unknown[], tpdb: unknown[]) {
 describe("two entries of one name across two catalogues", () => {
   const said = renderCard(
     tagCard(
-      [{ id: TAG_ON_STASHDB, name: "Ass to Mouth", status: "established" }],
-      [{ id: TAG_ON_TPDB, name: "Ass To Mouth", status: "established" }],
+      [{ id: TAG_ON_STASHDB, name: "Behind the Scenes", status: "established" }],
+      [{ id: TAG_ON_TPDB, name: "Behind The Scenes", status: "established" }],
     ),
     "scene",
   ).text;
@@ -118,14 +120,14 @@ describe("one record two catalogues are joined on by a link", () => {
           performers: [
             {
               id: `stashdb:${A}`,
-              name: "Riley Reid",
+              name: "Nadia Kerr",
               status: "established",
               alsoHeldAt: [{ source: "tpdb", id: `tpdb:${B}` }],
             },
           ],
         }),
         reading("tpdb", {
-          performers: [{ id: `tpdb:${B}`, name: "Riley Reid", status: "established" }],
+          performers: [{ id: `tpdb:${B}`, name: "Nadia Kerr", status: "established" }],
         }),
       ],
       prefer: ["stashdb", "tpdb"],

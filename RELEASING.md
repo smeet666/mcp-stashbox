@@ -25,10 +25,7 @@ One version at a time, in this order.
    refuses anything longer. The bundle URL carries a version number and is
    computed at publish time rather than written by hand, since a hand-written one
    survives version bumps and serves an older bundle than the one announced.
-7. **Glama.** Indexing happens on its own; claiming the server, setting the build
-   spec and cutting a release need a signed-in session. Run `Build` alone, then
-   `Make Release` with the real version number.
-8. **Third-party directories.** A pull request to the awesome list, and a
+7. **Third-party directories.** A pull request to the awesome list, and a
    `LAUNCHGUIDE.md` at the root for the marketplace.
 
 **Verify before announcing.** One-click install links encode the package name,

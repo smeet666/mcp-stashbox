@@ -97,7 +97,7 @@ const saying = (notes: readonly string[], said: string) => notes.some((one) => o
 describe("the heavy blocks of a card a hash reached", () => {
   const answers = {
     stashdb: [
-      [scene(CHAPTER_THREE, "Being Riley Chapter 3", [{ hash: OSHASH, algorithm: "OSHASH" }])],
+      [scene(CHAPTER_THREE, "Second Light Chapter 3", [{ hash: OSHASH, algorithm: "OSHASH" }])],
     ],
     tpdb: [[]],
   };
@@ -138,8 +138,8 @@ describe("two records of one catalogue carrying one hash", () => {
   const answers = {
     stashdb: [
       [
-        scene(CHAPTER_THREE, "Being Riley Chapter 3", [{ hash: OSHASH, algorithm: "OSHASH" }]),
-        scene(CHAPTER_TWO, "Being Riley Chapter 2", [{ hash: OSHASH, algorithm: "OSHASH" }]),
+        scene(CHAPTER_THREE, "Second Light Chapter 3", [{ hash: OSHASH, algorithm: "OSHASH" }]),
+        scene(CHAPTER_TWO, "Second Light Chapter 2", [{ hash: OSHASH, algorithm: "OSHASH" }]),
       ],
     ],
     tpdb: [[]],
@@ -181,8 +181,8 @@ describe("two records of one catalogue carrying one hash", () => {
       fingerprints: [{ hash: OSHASH, algorithm: "OSHASH" }],
     });
     const said = renderMatches(read.data, read.cached).text;
-    expect(said).toContain("Being Riley Chapter 3");
-    expect(said).toContain("Being Riley Chapter 2");
+    expect(said).toContain("Second Light Chapter 3");
+    expect(said).toContain("Second Light Chapter 2");
     // Which of the two holds the file is a question the catalogue answers no
     // way at all, and it says so by minting two identifiers.
     expect(said).toContain("reached more than one record");
@@ -200,13 +200,13 @@ describe("two hashes of one file reaching one record", () => {
   const answers = {
     stashdb: [
       [
-        scene(CHAPTER_THREE, "Being Riley Chapter 3", [
+        scene(CHAPTER_THREE, "Second Light Chapter 3", [
           { hash: OSHASH, algorithm: "OSHASH" },
           { hash: OTHER_OSHASH, algorithm: "OSHASH" },
         ]),
       ],
       [
-        scene(CHAPTER_THREE, "Being Riley Chapter 3", [
+        scene(CHAPTER_THREE, "Second Light Chapter 3", [
           { hash: OSHASH, algorithm: "OSHASH" },
           { hash: OTHER_OSHASH, algorithm: "OSHASH" },
         ]),
@@ -234,7 +234,7 @@ describe("two hashes of one file reaching one record", () => {
     const said = renderMatches(read.data, read.cached).text;
     expect(said).toContain(OSHASH);
     expect(said).toContain(OTHER_OSHASH);
-    expect(said.match(/Being Riley Chapter 3/g)).toHaveLength(1);
+    expect(said.match(/Second Light Chapter 3/g)).toHaveLength(1);
   });
 
   it("asserts no ambiguity, since one record leaves nothing to choose between", async () => {
@@ -593,12 +593,12 @@ describe("one record two kinds of hash reached", () => {
     const read = await reading({
       stashdb: [
         [
-          scene(CHAPTER_THREE, "Being Riley Chapter 3", [{ hash: OSHASH, algorithm: "OSHASH" }]),
-          scene(CHAPTER_TWO, "Being Riley Chapter 2", [{ hash: OSHASH, algorithm: "OSHASH" }]),
+          scene(CHAPTER_THREE, "Second Light Chapter 3", [{ hash: OSHASH, algorithm: "OSHASH" }]),
+          scene(CHAPTER_TWO, "Second Light Chapter 2", [{ hash: OSHASH, algorithm: "OSHASH" }]),
         ],
         [
-          scene(CHAPTER_THREE, "Being Riley Chapter 3", [{ hash: PHASH, algorithm: "PHASH" }]),
-          scene(CHAPTER_TWO, "Being Riley Chapter 2", [{ hash: PHASH, algorithm: "PHASH" }]),
+          scene(CHAPTER_THREE, "Second Light Chapter 3", [{ hash: PHASH, algorithm: "PHASH" }]),
+          scene(CHAPTER_TWO, "Second Light Chapter 2", [{ hash: PHASH, algorithm: "PHASH" }]),
         ],
       ],
       tpdb: [[], []],

@@ -63,7 +63,7 @@ describe("a catalogue is asked in the spelling it declares", () => {
   });
 
   it("ThePornDB writes its performer search singular", () => {
-    expect(searchRequest(TP, "performers", "angela", 5).operation).toBe("searchPerformer");
+    expect(searchRequest(TP, "performers", "marla", 5).operation).toBe("searchPerformer");
   });
 
   it("puts the words in the argument the route takes them in", () => {
@@ -73,7 +73,7 @@ describe("a catalogue is asked in the spelling it declares", () => {
 
   it("asks no route of a catalogue the registry does not declare it on", () => {
     // This catalogue answers no search of studios, so nothing is built for it.
-    expect(() => searchRequest(TP, "studios" as never, "vixen", 5)).toThrow();
+    expect(() => searchRequest(TP, "studios" as never, "northgate", 5)).toThrow();
   });
 });
 
@@ -194,13 +194,13 @@ describe("a date carries one comparison, because no catalogue declares a range",
 describe("a catalogue that requires an order gets one", () => {
   it("carries a sort and a direction where the route declares them required", () => {
     // Measured: this catalogue refuses a faceted query written without them.
-    const input = performerQueryInput(TP, { name: "angela", page: 1, limit: 25 }).input;
+    const input = performerQueryInput(TP, { name: "marla", page: 1, limit: 25 }).input;
     expect(input.sort).toBeDefined();
     expect(input.direction).toBeDefined();
   });
 
   it("leaves them out of a route that declares them optional", () => {
-    const input = performerQueryInput(SD, { name: "angela", page: 1, limit: 25 }).input;
+    const input = performerQueryInput(SD, { name: "marla", page: 1, limit: 25 }).input;
     expect(input.sort).toBeUndefined();
     expect(input.direction).toBeUndefined();
   });
@@ -313,7 +313,7 @@ describe("a request carries nothing the caller did not write", () => {
  */
 describe("a filter the catalogue's route reads nothing of", () => {
   const cases: [string, string, Record<string, unknown>][] = [
-    ["a performer alias", "alias", { alias: "Angie" }],
+    ["a performer alias", "alias", { alias: "Marly" }],
     ["a year a career opened", "career_start_year", { careerStartYear: 2003 }],
     ["a year a career closed", "career_end_year", { careerEndYear: 2020 }],
   ];
@@ -349,14 +349,14 @@ describe("a filter beside one the route reads nothing of", () => {
 
   it("still writes the name, the country and the studio beside an alias", () => {
     const built = performerQueryInput(SD, {
-      alias: "Angie",
-      name: "Angela White",
+      alias: "Marly",
+      name: "Marla Quint",
       country: "AU",
       studioId: A,
       page: 1,
       limit: 25,
     });
-    expect(built.input.name).toBe("Angela White");
+    expect(built.input.name).toBe("Marla Quint");
     expect(built.input.country).toEqual({ value: "AU", modifier: "EQUALS" });
     expect(built.input.studio_id).toBe(A);
     expect(built.unreceived).toEqual(["alias"]);

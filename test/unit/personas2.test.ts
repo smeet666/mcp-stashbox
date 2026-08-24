@@ -61,9 +61,9 @@ describe("a link a catalogue publishes to a record elsewhere", () => {
     const read = readPerformer(
       {
         id: A,
-        name: "Riley Reid",
+        name: "Nadia Kerr",
         deleted: false,
-        urls: [{ url: "https://theporndb.net/performers/riley-reid", site: { name: "ThePornDB" } }],
+        urls: [{ url: "https://theporndb.net/performers/nadia-kerr", site: { name: "ThePornDB" } }],
       },
       SD,
       "2026-08-14T00:00:00.000Z",
@@ -79,7 +79,7 @@ describe("a link a catalogue publishes to a record elsewhere", () => {
     const read = readPerformer(
       {
         id: A,
-        name: "Riley Reid",
+        name: "Nadia Kerr",
         deleted: false,
         urls: [{ url: `https://theporndb.net/performers/${B}`, site: { name: "ThePornDB" } }],
       },

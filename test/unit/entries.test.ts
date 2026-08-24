@@ -67,11 +67,13 @@ function named(list: readonly CardListEntry[]): string[] {
 describe("an entry carrying an identifier is that identifier's record", () => {
   const stashdb = answered("stashdb", {
     id: "scene-a",
-    tags: [{ id: TAG_ON_STASHDB, name: "Ass to Mouth", category: null, status: "established" }],
+    tags: [
+      { id: TAG_ON_STASHDB, name: "Behind the Scenes", category: null, status: "established" },
+    ],
   });
   const tpdb = answered("tpdb", {
     id: "scene-b",
-    tags: [{ id: TAG_ON_TPDB, name: "Ass To Mouth", category: null, status: "established" }],
+    tags: [{ id: TAG_ON_TPDB, name: "Behind The Scenes", category: null, status: "established" }],
   });
 
   it("keeps two catalogues' records apart where nothing joins them but a name", () => {
@@ -89,11 +91,11 @@ describe("an entry carrying an identifier is that identifier's record", () => {
   it("carries every catalogue's own identifier, so a reader can chain to either", () => {
     const scene = answered("stashdb", {
       id: "scene-a",
-      performers: [{ id: PERFORMER_ON_STASHDB, name: "Riley Reid", status: "established" }],
+      performers: [{ id: PERFORMER_ON_STASHDB, name: "Nadia Kerr", status: "established" }],
     });
     const other = answered("tpdb", {
       id: "scene-b",
-      performers: [{ id: PERFORMER_ON_TPDB, name: "Riley Reid", status: "established" }],
+      performers: [{ id: PERFORMER_ON_TPDB, name: "Nadia Kerr", status: "established" }],
     });
     expect(entries(card([scene, other]), "performers").map((entry) => record(entry).id)).toEqual([
       PERFORMER_ON_STASHDB,
@@ -105,8 +107,8 @@ describe("an entry carrying an identifier is that identifier's record", () => {
     const twice = answered("stashdb", {
       id: "scene-a",
       tags: [
-        { id: TAG_ON_STASHDB, name: "Ass to Mouth", status: "established" },
-        { id: TAG_ON_STASHDB, name: "Ass to Mouth", status: "established" },
+        { id: TAG_ON_STASHDB, name: "Behind the Scenes", status: "established" },
+        { id: TAG_ON_STASHDB, name: "Behind the Scenes", status: "established" },
       ],
     });
     const list = entries(card([twice]), "tags");
@@ -118,12 +120,16 @@ describe("an entry carrying an identifier is that identifier's record", () => {
     const rich = answered("stashdb", {
       id: "scene-a",
       tags: [
-        { id: TAG_ON_STASHDB, name: "Ass to Mouth", status: "established" },
-        { id: "stashdb:11111111-1111-4111-8111-111111111111", name: "Anal", status: "established" },
+        { id: TAG_ON_STASHDB, name: "Behind the Scenes", status: "established" },
+        {
+          id: "stashdb:11111111-1111-4111-8111-111111111111",
+          name: "Outdoors",
+          status: "established",
+        },
       ],
     });
     const list = entries(card([rich, tpdb]), "tags");
-    expect(named(list)).toEqual(["Ass to Mouth", "Anal", "Ass To Mouth"]);
+    expect(named(list)).toEqual(["Behind the Scenes", "Outdoors", "Behind The Scenes"]);
   });
 });
 
@@ -132,11 +138,11 @@ describe("an entry carrying an identifier is that identifier's record", () => {
 describe("two entries of one name across two catalogues", () => {
   const stashdb = answered("stashdb", {
     id: "scene-a",
-    tags: [{ id: TAG_ON_STASHDB, name: "Ass to Mouth", status: "established" }],
+    tags: [{ id: TAG_ON_STASHDB, name: "Behind the Scenes", status: "established" }],
   });
   const tpdb = answered("tpdb", {
     id: "scene-b",
-    tags: [{ id: TAG_ON_TPDB, name: "Ass To Mouth", status: "established" }],
+    tags: [{ id: TAG_ON_TPDB, name: "Behind The Scenes", status: "established" }],
   });
 
   it("is published as a resemblance, naming the other catalogue and its identifier", () => {
@@ -154,7 +160,7 @@ describe("two entries of one name across two catalogues", () => {
   it("says nothing where the two catalogues named two different things", () => {
     const other = answered("tpdb", {
       id: "scene-b",
-      tags: [{ id: TAG_ON_TPDB, name: "Deepthroat", status: "established" }],
+      tags: [{ id: TAG_ON_TPDB, name: "Close-Up", status: "established" }],
     });
     for (const entry of entries(card([stashdb, other]), "tags")) {
       expect(entry.same_name_as).toBeUndefined();
@@ -165,10 +171,10 @@ describe("two entries of one name across two catalogues", () => {
     const twice = answered("stashdb", {
       id: "scene-a",
       tags: [
-        { id: TAG_ON_STASHDB, name: "Ass to Mouth", status: "established" },
+        { id: TAG_ON_STASHDB, name: "Behind the Scenes", status: "established" },
         {
           id: "stashdb:22222222-2222-4222-8222-222222222222",
-          name: "Ass to mouth",
+          name: "Behind the scenes",
           status: "established",
         },
       ],
@@ -188,7 +194,7 @@ describe("a join the data carries", () => {
       performers: [
         {
           id: PERFORMER_ON_STASHDB,
-          name: "Riley Reid",
+          name: "Nadia Kerr",
           status: "established",
           alsoHeldAt: [{ source: "tpdb", id: PERFORMER_ON_TPDB }],
         },
@@ -196,7 +202,7 @@ describe("a join the data carries", () => {
     });
     const tpdb = answered("tpdb", {
       id: "scene-b",
-      performers: [{ id: PERFORMER_ON_TPDB, name: "Riley Reid", status: "established" }],
+      performers: [{ id: PERFORMER_ON_TPDB, name: "Nadia Kerr", status: "established" }],
     });
     const list = entries(card([stashdb, tpdb]), "performers");
     expect(list).toHaveLength(1);
@@ -208,7 +214,7 @@ describe("a join the data carries", () => {
   });
 
   it("unites two entries carrying one identifier", () => {
-    const held = { id: TAG_ON_STASHDB, name: "Ass to Mouth", status: "established" };
+    const held = { id: TAG_ON_STASHDB, name: "Behind the Scenes", status: "established" };
     const list = entries(
       card([
         answered("stashdb", { id: "scene-a", tags: [held] }),
@@ -227,19 +233,19 @@ describe("an entry carrying no identifier", () => {
   it("unites on what it holds, since there is nothing else it could be", () => {
     const stashdb = answered("stashdb", {
       id: "scene-a",
-      aliases: ["Angie", "Aussie Angela"],
+      aliases: ["Marly", "Aussie Marla"],
       urls: [{ url: "https://example.test/a", siteName: "A", siteCategory: null }],
     });
     const tpdb = answered("tpdb", {
       id: "scene-b",
-      aliases: ["Angie", "Angelia White"],
+      aliases: ["Marly", "Marlia Quint"],
       urls: [{ url: "https://example.test/a", siteName: "A", siteCategory: null }],
     });
     const held = card([stashdb, tpdb]);
     expect(entries(held, "aliases").map((entry) => entry.value)).toEqual([
-      "Angie",
-      "Aussie Angela",
-      "Angelia White",
+      "Marly",
+      "Aussie Marla",
+      "Marlia Quint",
     ]);
     expect(entries(held, "aliases")[0]?.published_by).toEqual(["stashdb", "tpdb"]);
     expect(entries(held, "urls")).toHaveLength(1);
@@ -253,7 +259,7 @@ const STUDIO_UUID = "915dd307-a440-4578-b83f-699b9706faea";
 const STUDIO_ON_TPDB = "tpdb:1dafafd3-da8f-47f3-aca2-e6bb9f354292";
 
 /** One studio at one identifier, which two catalogues address under their own prefix. */
-function studioAt(id: string, name = "Vixen"): Record<string, unknown> {
+function studioAt(id: string, name = "Northgate"): Record<string, unknown> {
   return { id, name, parent: null, status: "established" };
 }
 
@@ -267,7 +273,7 @@ describe("a scalar whose value is a record two catalogues joined", () => {
     // identifier alone.
     const tpdb = answered("tpdb", {
       id: "scene-b",
-      studio: studioAt(`tpdb:${STUDIO_UUID}`, "Vixen.com"),
+      studio: studioAt(`tpdb:${STUDIO_UUID}`, "Northgate.com"),
     });
     const held = card([stashdb, tpdb]).fields.studio as CardValue;
     expect(held.agreed_by).toEqual(["stashdb", "tpdb"]);
@@ -284,7 +290,7 @@ describe("a scalar whose value is a record two catalogues joined", () => {
     });
     const tpdb = answered("tpdb", {
       id: "scene-b",
-      studio: studioAt(STUDIO_ON_TPDB, "Vixen.com"),
+      studio: studioAt(STUDIO_ON_TPDB, "Northgate.com"),
     });
     const held = card([stashdb, tpdb]).fields.studio as CardValue;
     expect(held.agreed_by).toEqual(["stashdb", "tpdb"]);
@@ -343,10 +349,10 @@ describe("a scalar whose value is a record each catalogue minted its own of", ()
 
 describe("a scalar that is its own content", () => {
   it("agrees on the value, since a title is what it holds and no record elsewhere", () => {
-    const stashdb = answered("stashdb", { id: "scene-a", title: "Riley Reid: Deeper" });
-    const tpdb = answered("tpdb", { id: "scene-b", title: "Riley Reid: Deeper" });
+    const stashdb = answered("stashdb", { id: "scene-a", title: "Nadia Kerr: Deeper" });
+    const tpdb = answered("tpdb", { id: "scene-b", title: "Nadia Kerr: Deeper" });
     const held = card([stashdb, tpdb]).fields.title as CardValue;
-    expect(held.value).toBe("Riley Reid: Deeper");
+    expect(held.value).toBe("Nadia Kerr: Deeper");
     expect(held.agreed_by).toEqual(["stashdb", "tpdb"]);
   });
 });

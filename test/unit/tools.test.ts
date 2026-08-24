@@ -156,9 +156,9 @@ describe("a text search and a faceted search are exclusive", () => {
       { query: "sunset", tag_ids: ["stashdb:94ef9c17-82c6-48b0-8dcc-063b69231960"] },
     ],
     ["search_scenes", { query: "sunset", date: "2019-04-12", date_compare: "on" }],
-    ["search_performers", { query: "angela", name: "angela" }],
-    ["search_performers", { query: "angela", country: "AU" }],
-    ["search_studios", { query: "vixen", name: "vixen" }],
+    ["search_performers", { query: "marla", name: "marla" }],
+    ["search_performers", { query: "marla", country: "AU" }],
+    ["search_studios", { query: "northgate", name: "northgate" }],
     ["search_tags", { query: "hair", category_id: "stashdb:94ef9c17-82c6-48b0-8dcc-063b69231960" }],
   ];
 
@@ -457,7 +457,7 @@ describe("the declaration the protocol enforces is the one it publishes", () => 
 /** A value each typed argument accepts, for the case above. */
 const VALUE_FOR: Record<string, unknown> = {
   title: "sunset",
-  name: "vixen",
+  name: "northgate",
   code: "X-1",
   alias: "a",
   date: "2019-04-12",
