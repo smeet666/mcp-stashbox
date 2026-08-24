@@ -149,6 +149,32 @@ const ROUTE: Record<RecordKind, Capability> = {
 };
 
 /**
+ * One record, one card, whatever number of hashes reached it.
+ *
+ * A record reached by three of the hashes asked is one record of one catalogue,
+ * and published once per hash it would report a caller's one file as three. The
+ * hashes that reached it are kept beside it rather than folded away.
+ */
+function oneCardPerRecord(raw: readonly Raw[]): {
+  records: Map<string, Record<string, unknown>>;
+  reachedBy: Map<string, { hash: string; algorithm: string }[]>;
+} {
+  const records = new Map<string, Record<string, unknown>>();
+  const reachedBy = new Map<string, { hash: string; algorithm: string }[]>();
+
+  for (const one of raw) {
+    const key = `${one.source}:${String(one.scene.id)}`;
+    records.set(key, one.scene);
+    reachedBy.set(key, [
+      ...(reachedBy.get(key) ?? []),
+      { hash: one.hash, algorithm: one.algorithm },
+    ]);
+  }
+
+  return { records, reachedBy };
+}
+
+/**
  * Weld into one card the records two catalogues published one exact hash for.
  *
  * Two catalogues answering one exact hash describe the same bytes, which is the
@@ -1104,6 +1130,70 @@ export class StashboxClient {
 
   /* ------------------------------------------------------- by fingerprint */
 
+  /**
+   * Put the hashes to one catalogue, and read what came back as its own answer.
+   *
+   * A catalogue is put only the algorithms its own lookup searches, so what it
+   * answered is folded to one record per scene and then attributed to the hashes
+   * that actually reached it, before any of it meets another catalogue.
+   */
+  async #askOneForFingerprints(
+    ask: { spec: InstanceSpec; apiKey: string },
+    fingerprints: readonly Fingerprint[],
+    read: readonly SceneSection[],
+  ): Promise<{ report: SourceReport; rows: Raw[] }> {
+    const request = fingerprintRequest(ask.spec, fingerprints, read);
+    const at = this.#now();
+    const found = await this.#ask(
+      ask.spec,
+      ask.apiKey,
+      request,
+      "the fingerprint lookup",
+      (payload) => {
+        // The route answers a list of groups, one per hash asked, so the
+        // records are one level down. Reading a group as a record loses
+        // every row and calls the loss an emptiness.
+        const groups = groupsUnder(payload, request.operation, ask.spec, "the fingerprint lookup");
+        const raw = groups.flat();
+        const read: Record<string, unknown>[] = [];
+        let skipped = 0;
+        for (const entry of raw) {
+          const one = readScene(entry, ask.spec, at);
+          if (one.record === null) {
+            skipped += 1;
+          } else {
+            read.push(one.record as unknown as Record<string, unknown>);
+          }
+        }
+        return { read, skipped };
+      },
+    );
+    if ("report" in found) {
+      return { report: found.report, rows: [] as Raw[] };
+    }
+
+    const answered = oneRecordPerScene(found.value.read);
+    const { count, unattributed, rows } = attributeHashesToRecords({
+      answered,
+      fingerprints,
+      notSearched: request.notSearched,
+      source: ask.spec.id,
+    });
+    return {
+      report: {
+        source: ask.spec.id,
+        name: ask.spec.name,
+        state: "answered" as const,
+        count,
+        records: answered.size,
+        ...(unattributed > 0 ? { unattributed } : {}),
+        ...(found.value.skipped > 0 ? { skipped: found.value.skipped } : {}),
+        ...(request.notSearched.length > 0 ? { algorithmsNotSearched: request.notSearched } : {}),
+      },
+      rows,
+    };
+  }
+
   async findByFingerprint(input: Record<string, unknown>): Promise<Read<FingerprintResult>> {
     const fingerprints = input.fingerprints as Fingerprint[];
     // A hash of one repeated character is what a failed computation writes.
@@ -1132,84 +1222,14 @@ export class StashboxClient {
     const reports: SourceReport[] = [];
 
     const heard = await Promise.all(
-      asks.map(async (ask) => {
-        const request = fingerprintRequest(ask.spec, fingerprints, read);
-        const at = this.#now();
-        const found = await this.#ask(
-          ask.spec,
-          ask.apiKey,
-          request,
-          "the fingerprint lookup",
-          (payload) => {
-            // The route answers a list of groups, one per hash asked, so the
-            // records are one level down. Reading a group as a record loses
-            // every row and calls the loss an emptiness.
-            const groups = groupsUnder(
-              payload,
-              request.operation,
-              ask.spec,
-              "the fingerprint lookup",
-            );
-            const raw = groups.flat();
-            const read: Record<string, unknown>[] = [];
-            let skipped = 0;
-            for (const entry of raw) {
-              const one = readScene(entry, ask.spec, at);
-              if (one.record === null) {
-                skipped += 1;
-              } else {
-                read.push(one.record as unknown as Record<string, unknown>);
-              }
-            }
-            return { read, skipped };
-          },
-        );
-        if ("report" in found) {
-          return { report: found.report, rows: [] as Raw[] };
-        }
-
-        const answered = oneRecordPerScene(found.value.read);
-        const { count, unattributed, rows } = attributeHashesToRecords({
-          answered,
-          fingerprints,
-          notSearched: request.notSearched,
-          source: ask.spec.id,
-        });
-        return {
-          report: {
-            source: ask.spec.id,
-            name: ask.spec.name,
-            state: "answered" as const,
-            count,
-            records: answered.size,
-            ...(unattributed > 0 ? { unattributed } : {}),
-            ...(found.value.skipped > 0 ? { skipped: found.value.skipped } : {}),
-            ...(request.notSearched.length > 0
-              ? { algorithmsNotSearched: request.notSearched }
-              : {}),
-          },
-          rows,
-        };
-      }),
+      asks.map((ask) => this.#askOneForFingerprints(ask, fingerprints, read)),
     );
     reports.push(...heard.map((one) => one.report));
     // The catalogues are read in the order the registry declares, so what a
     // reader meets is the same sequence whichever of them answers first.
     const raw: Raw[] = heard.flatMap((one) => one.rows);
 
-    // One record, one card. A record reached by three of the hashes asked is
-    // one record of one catalogue, and published once per hash it would report
-    // a caller's one file as three.
-    const records = new Map<string, Record<string, unknown>>();
-    const reachedBy = new Map<string, { hash: string; algorithm: string }[]>();
-    for (const one of raw) {
-      const key = `${one.source}:${String(one.scene.id)}`;
-      records.set(key, one.scene);
-      reachedBy.set(key, [
-        ...(reachedBy.get(key) ?? []),
-        { hash: one.hash, algorithm: one.algorithm },
-      ]);
-    }
+    const { records, reachedBy } = oneCardPerRecord(raw);
     const sourceOf = (key: string) => key.slice(0, key.indexOf(":")) as InstanceId;
     const printsOf = (key: string, exact: boolean) =>
       (reachedBy.get(key) ?? []).filter((one) => (one.algorithm === "PHASH") !== exact);

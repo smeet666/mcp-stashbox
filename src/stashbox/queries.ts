@@ -350,26 +350,32 @@ const ANSWERED_BY_NO_ROUTE = new Set(["alias", "career_start_year", "career_end_
  * all. The name is handed back either way, so the answer can say the catalogue
  * received nothing for it.
  */
-function put(
+/**
+ * A writer that puts narrowings into one request, for one catalogue.
+ *
+ * The catalogue, the request being built and the list of what it will not
+ * receive are the same at every call, so they are closed over once and each
+ * call states only the narrowing it is writing.
+ */
+function putterFor(
   spec: InstanceSpec,
   input: Record<string, unknown>,
-  name: string,
-  value: unknown,
   unreceived: string[],
-  as = name,
-): void {
-  if (value === undefined) {
-    return;
-  }
-  if (ANSWERED_BY_NO_ROUTE.has(name)) {
-    unreceived.push(as);
-    return;
-  }
-  if (spec.facets !== undefined && !spec.facets.includes(name)) {
-    unreceived.push(as);
-    return;
-  }
-  input[name] = value;
+): (name: string, value: unknown, as?: string) => void {
+  return (name, value, as = name) => {
+    if (value === undefined) {
+      return;
+    }
+    if (ANSWERED_BY_NO_ROUTE.has(name)) {
+      unreceived.push(as);
+      return;
+    }
+    if (spec.facets !== undefined && !spec.facets.includes(name)) {
+      unreceived.push(as);
+      return;
+    }
+    input[name] = value;
+  };
 }
 
 /**
@@ -437,38 +443,18 @@ export interface SceneNarrowing {
 export function sceneQueryInput(spec: InstanceSpec, narrowing: SceneNarrowing): Faceted {
   const input: Record<string, unknown> = {};
   const unreceived: string[] = [];
+  const put = putterFor(spec, input, unreceived);
   const match = narrowing.match ?? "all";
-  put(spec, input, "title", narrowing.title, unreceived);
-  put(spec, input, "alias", textCriterion(spec, narrowing.alias), unreceived);
-  put(spec, input, "code", textCriterion(spec, narrowing.code), unreceived);
-  put(spec, input, "date", dateCriterion(spec, narrowing.date, narrowing.dateCompare), unreceived);
-  put(
-    spec,
-    input,
-    "performers",
-    identifierCriterion(spec, narrowing.performerIds, match),
-    unreceived,
-    "performer_ids",
-  );
+  put("title", narrowing.title);
+  put("alias", textCriterion(spec, narrowing.alias));
+  put("code", textCriterion(spec, narrowing.code));
+  put("date", dateCriterion(spec, narrowing.date, narrowing.dateCompare));
+  put("performers", identifierCriterion(spec, narrowing.performerIds, match), "performer_ids");
   // A scene carries one studio, so a row carrying two is a row nothing holds,
   // whatever the caller meant by asking for every one of them.
-  put(
-    spec,
-    input,
-    "studios",
-    identifierCriterion(spec, narrowing.studioIds, "any"),
-    unreceived,
-    "studio_ids",
-  );
-  put(spec, input, "parentStudio", narrowing.parentStudioId, unreceived, "parent_studio_id");
-  put(
-    spec,
-    input,
-    "tags",
-    identifierCriterion(spec, narrowing.tagIds, match),
-    unreceived,
-    "tag_ids",
-  );
+  put("studios", identifierCriterion(spec, narrowing.studioIds, "any"), "studio_ids");
+  put("parentStudio", narrowing.parentStudioId, "parent_studio_id");
+  put("tags", identifierCriterion(spec, narrowing.tagIds, match), "tag_ids");
   // The reading of a list travels on the performer and tag criteria alone: a
   // scene carries one studio, so a list of them is read as a union whatever
   // was written. A request carrying neither criterion reaches the catalogue
@@ -508,19 +494,20 @@ export interface PerformerNarrowing {
 export function performerQueryInput(spec: InstanceSpec, narrowing: PerformerNarrowing): Faceted {
   const input: Record<string, unknown> = {};
   const unreceived: string[] = [];
-  put(spec, input, "name", narrowing.name, unreceived);
+  const put = putterFor(spec, input, unreceived);
+  put("name", narrowing.name);
   // Measured: a performer's alias is a plain string where a scene's is a
   // criterion, and the two enumerated fields take the value itself.
-  put(spec, input, "alias", narrowing.alias, unreceived);
-  put(spec, input, "disambiguation", textCriterion(spec, narrowing.disambiguation), unreceived);
-  put(spec, input, "gender", narrowing.gender?.toUpperCase(), unreceived);
-  put(spec, input, "country", textCriterion(spec, narrowing.country), unreceived);
-  put(spec, input, "ethnicity", narrowing.ethnicity?.toUpperCase(), unreceived);
-  put(spec, input, "birth_year", numberFilter(spec, narrowing.birthYear), unreceived);
-  put(spec, input, "career_start_year", numberFilter(spec, narrowing.careerStartYear), unreceived);
-  put(spec, input, "career_end_year", numberFilter(spec, narrowing.careerEndYear), unreceived);
-  put(spec, input, "performed_with", narrowing.performedWith, unreceived);
-  put(spec, input, "studio_id", narrowing.studioId, unreceived);
+  put("alias", narrowing.alias);
+  put("disambiguation", textCriterion(spec, narrowing.disambiguation));
+  put("gender", narrowing.gender?.toUpperCase());
+  put("country", textCriterion(spec, narrowing.country));
+  put("ethnicity", narrowing.ethnicity?.toUpperCase());
+  put("birth_year", numberFilter(spec, narrowing.birthYear));
+  put("career_start_year", numberFilter(spec, narrowing.careerStartYear));
+  put("career_end_year", numberFilter(spec, narrowing.careerEndYear));
+  put("performed_with", narrowing.performedWith);
+  put("studio_id", narrowing.studioId);
   ordering(spec, input, narrowing.sort, narrowing.direction, "name");
   input.page = narrowing.page;
   input.per_page = narrowing.limit;
@@ -540,11 +527,12 @@ export interface StudioNarrowing {
 export function studioQueryInput(spec: InstanceSpec, narrowing: StudioNarrowing): Faceted {
   const input: Record<string, unknown> = {};
   const unreceived: string[] = [];
-  put(spec, input, "name", narrowing.name, unreceived);
+  const put = putterFor(spec, input, unreceived);
+  put("name", narrowing.name);
   // Measured: a studio names one parent, so its filter is a criterion carrying
   // one identifier rather than a list of them.
-  put(spec, input, "parent", textCriterion(spec, narrowing.parentId), unreceived, "parent_id");
-  put(spec, input, "has_parent", narrowing.hasParent, unreceived);
+  put("parent", textCriterion(spec, narrowing.parentId), "parent_id");
+  put("has_parent", narrowing.hasParent);
   ordering(spec, input, narrowing.sort, narrowing.direction, "name");
   input.page = narrowing.page;
   input.per_page = narrowing.limit;
@@ -563,8 +551,9 @@ export interface TagNarrowing {
 export function tagQueryInput(spec: InstanceSpec, narrowing: TagNarrowing): Faceted {
   const input: Record<string, unknown> = {};
   const unreceived: string[] = [];
-  put(spec, input, "name", narrowing.name, unreceived);
-  put(spec, input, "category_id", narrowing.categoryId, unreceived);
+  const put = putterFor(spec, input, unreceived);
+  put("name", narrowing.name);
+  put("category_id", narrowing.categoryId);
   ordering(spec, input, narrowing.sort, narrowing.direction, "name");
   input.page = narrowing.page;
   input.per_page = narrowing.limit;

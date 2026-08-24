@@ -512,11 +512,9 @@ function readAlsoHeldAt(
 function base(
   one: Record<string, unknown>,
   spec: InstanceSpec,
-  kind: string,
-  id: string,
-  retrievedAt: string,
-  links: readonly SiteLink[],
+  about: { kind: string; id: string; retrievedAt: string; links: readonly SiteLink[] },
 ) {
+  const { kind, id, retrievedAt, links } = about;
   const uuid = id.slice(spec.id.length + 1);
   const edits = supports(spec, "pending_edits") ? one.edits : undefined;
   return {
@@ -553,7 +551,7 @@ export function readScene(
   const { fingerprints, fingerprintsSkipped } = readFingerprints(one.fingerprints, spec, lost);
 
   const record: SceneRecord = {
-    ...base(one, spec, "scenes", id, retrievedAt, urls),
+    ...base(one, spec, { kind: "scenes", id, retrievedAt, links: urls }),
     // These catalogues name no scene in the place of one they withdrew, so a
     // scene is held or withdrawn and this record names no successor.
     status: readStatus(one.deleted, undefined),
@@ -600,7 +598,7 @@ export function readPerformer(
   const appearance = readAppearance(one, lost);
 
   const record: PerformerRecord = {
-    ...base(one, spec, "performers", id, retrievedAt, urls),
+    ...base(one, spec, { kind: "performers", id, retrievedAt, links: urls }),
     name: text(one.name),
     disambiguation: text(one.disambiguation),
     aliases: strings(one.aliases, "aliases", lost),
@@ -740,7 +738,7 @@ export function readStudio(
   }
 
   const record: StudioRecord = {
-    ...base(one, spec, "studios", id, retrievedAt, urls),
+    ...base(one, spec, { kind: "studios", id, retrievedAt, links: urls }),
     name: text(one.name),
     aliases: strings(one.aliases, "aliases", lost),
     parent:
@@ -776,7 +774,7 @@ export function readTag(
   const category = row(one.category);
 
   const record: TagRecord = {
-    ...base(one, spec, "tags", id, retrievedAt, []),
+    ...base(one, spec, { kind: "tags", id, retrievedAt, links: [] }),
     name: text(one.name),
     description: text(one.description),
     aliases: strings(one.aliases, "aliases", lost),
