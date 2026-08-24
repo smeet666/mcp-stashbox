@@ -311,8 +311,9 @@ describe.skipIf(!ENABLED)(
         it(`${spec.name} declares ${capability}`, async (ctx) => {
           const schema = await schemaOf(spec);
           if (typeof schema === "string") {
+            const since: string = schema;
             ctx.skip(
-              `UNVERIFIED: ${spec.name} declares ${capability} and its schema went unread here, since ${schema}`,
+              `UNVERIFIED: ${spec.name} declares ${capability} and its schema went unread here, since ${since}`,
             );
             return;
           }
@@ -335,8 +336,9 @@ describe.skipIf(!ENABLED)(
         it(`${spec.name} declares ${capability} answering with a ${shape}`, async (ctx) => {
           const schema = await schemaOf(spec);
           if (typeof schema === "string") {
+            const since: string = schema;
             ctx.skip(
-              `UNVERIFIED: ${spec.name} declares the shape of ${capability} and its schema went unread here, since ${schema}`,
+              `UNVERIFIED: ${spec.name} declares the shape of ${capability} and its schema went unread here, since ${since}`,
             );
             return;
           }
@@ -369,8 +371,9 @@ describe.skipIf(!ENABLED)(
       it(`${spec.name} declares the perceptual algorithm its fingerprint route searches`, async (ctx) => {
         const schema = await schemaOf(spec);
         if (typeof schema === "string") {
+          const since: string = schema;
           ctx.skip(
-            `UNVERIFIED: ${spec.name} declares perceptual_lookup and its schema went unread here, since ${schema}`,
+            `UNVERIFIED: ${spec.name} declares perceptual_lookup and its schema went unread here, since ${since}`,
           );
           return;
         }
@@ -497,7 +500,8 @@ describe.skipIf(!ENABLED)("what this run left unchecked", () => {
       if (typeof schema !== "string") {
         continue;
       }
-      unread.push(`${spec.name}, since ${schema}`);
+      const since: string = schema;
+      unread.push(`${spec.name}, since ${since}`);
       unreadIds.add(spec.id);
     }
 

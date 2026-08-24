@@ -293,13 +293,13 @@ describe("match decides the reading of the lists it names", () => {
   const LISTS = ["performer_ids", "studio_ids", "tag_ids"];
 
   /** The criteria one search sent, as the catalogue received them. */
-  async function criteria(written: Record<string, unknown>): Promise<string> {
+  async function criteria(narrowing: Record<string, unknown>): Promise<string> {
     const search = TOOLS.find((one) => one.name === "search_scenes");
     if (search === undefined) {
       throw new Error("no tool named search_scenes");
     }
     const { client, sent } = watching();
-    const read = search.inputSchema.parse(written);
+    const read = search.inputSchema.parse(narrowing);
     await search.run(client as never, read as Record<string, unknown>);
     return sent.join(" ");
   }

@@ -31,8 +31,8 @@ const TAG_ON_TPDB = "tpdb:dd622a8a-3c3f-4f1a-9a17-2b0c5c9b8e4d";
 const PERFORMER_ON_STASHDB = "stashdb:90a42491-f3f6-4764-8da8-564be11140f6";
 const PERFORMER_ON_TPDB = "tpdb:26d101c0-9b52-4f0a-8e4a-33a1a2b0d7f5";
 
-function answered(source: string, record: Record<string, unknown>): Reading {
-  return { source, id: `${source}:${record.id as string}`, state: "answered", record };
+function answered(source: string, held: Record<string, unknown>): Reading {
+  return { source, id: `${source}:${held.id as string}`, state: "answered", record: held };
 }
 
 const SHAPE = {

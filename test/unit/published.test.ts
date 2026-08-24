@@ -337,8 +337,9 @@ describe("every answer validates against the schema its tool publishes", () => {
 
   it("puts every tool to the test", () => {
     // A tool nobody called here publishes a schema nothing holds it to.
-    expect([...new Set(CALLS.map(([name]) => name))].sort()).toEqual(
-      TOOLS.map((one) => one.name).sort(),
+    const byName = (a: string, b: string) => a.localeCompare(b);
+    expect([...new Set(CALLS.map(([name]) => name))].sort(byName)).toEqual(
+      TOOLS.map((one) => one.name).sort(byName),
     );
   });
 });

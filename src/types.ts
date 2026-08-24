@@ -25,9 +25,9 @@
  */
 
 import type { InstanceId } from "./stashbox/instances.js";
-import type { DatePrecision, ReadDate, RecordStatus } from "./stashbox/normalise.js";
+import type { ReadDate, RecordStatus } from "./stashbox/normalise.js";
 
-export type { DatePrecision, ReadDate, RecordStatus };
+export type { DatePrecision, ReadDate, RecordStatus } from "./stashbox/normalise.js";
 
 /** Every read hands back what it found, whether it was replayed, and what it lost. */
 export interface Read<T> {

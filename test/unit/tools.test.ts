@@ -437,7 +437,7 @@ describe("the declaration the protocol enforces is the one it publishes", () => 
     // A rule of that kind is no field of a schema. Applied in a second pass
     // behind the protocol layer, it would be a rule the published declaration
     // does not carry, and a caller reading the contract could not find it.
-    for (const one of TOOLS.filter((tool) => tool.name.startsWith("search_"))) {
+    for (const one of TOOLS.filter((each) => each.name.startsWith("search_"))) {
       const shape = (one.declared as z.ZodObject<z.ZodRawShape>).shape;
       if (shape.query === undefined) {
         continue;

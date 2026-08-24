@@ -444,7 +444,7 @@ export class StashboxClient {
     // the environment goes through. Spread over the loaded configuration, it
     // would reach the transport unread, and the one that governs the pace owed
     // to a free public site would be a suggestion.
-    this.#config = held(loaded, options.config, options.keys);
+    this.#config = settledConfig(loaded, options.config, options.keys);
     this.configured = INSTANCES.filter((spec) => this.#config.keys[spec.id] !== undefined).map(
       (spec) => spec.id,
     );
@@ -659,7 +659,9 @@ export class StashboxClient {
           page: (input.page as number | undefined) ?? 1,
           limit: (input.limit as number | undefined) ?? ROWS_PER_PAGE,
         },
-        unasked: unasked.map((one) => `${one.source}:${one.reason}`).sort(),
+        unasked: unasked
+          .map((one) => `${one.source}:${one.reason}`)
+          .sort((a, b) => a.localeCompare(b)),
       },
     });
     const held = this.#cache.get(key) as RowsResult<T> | undefined;
@@ -1155,17 +1157,17 @@ export class StashboxClient {
         // every row and calls the loss an emptiness.
         const groups = groupsUnder(payload, request.operation, ask.spec, "the fingerprint lookup");
         const raw = groups.flat();
-        const read: Record<string, unknown>[] = [];
+        const kept: Record<string, unknown>[] = [];
         let skipped = 0;
         for (const entry of raw) {
           const one = readScene(entry, ask.spec, at);
           if (one.record === null) {
             skipped += 1;
           } else {
-            read.push(one.record as unknown as Record<string, unknown>);
+            kept.push(one.record as unknown as Record<string, unknown>);
           }
         }
-        return { read, skipped };
+        return { read: kept, skipped };
       },
     );
     if ("report" in found) {
@@ -1325,7 +1327,7 @@ export class StashboxClient {
     const cardOf = (group: readonly string[], exact: boolean): FingerprintMatch => ({
       scene: consolidate({
         readings: readingsFor(group),
-        prefer: prefer,
+        prefer,
         scalars: SHAPES.scene.scalars,
         // A list a section carries is published only where that section was
         // asked for. Stated otherwise, its zero denies something nobody
@@ -1428,7 +1430,7 @@ export class StashboxClient {
  * writes: a value outside them is a value this client does not read, whichever
  * way it arrived.
  */
-function held(
+function settledConfig(
   loaded: Config,
   written: Partial<Config> | undefined,
   keys: Partial<Record<InstanceId, string>> | undefined,
@@ -1629,13 +1631,13 @@ function orderingOf(
     return `${groups}. Within them: ${each}. ${apart}`;
   }
 
-  const one = clauses[0];
-  if (one === undefined || one.clause === null) {
+  const alone = clauses[0];
+  if (alone === undefined || alone.clause === null) {
     return "in the order the catalogue that answered holds them";
   }
-  return one.clause.startsWith("sorted by")
-    ? `${one.clause}, which ${one.who} applied`
-    : `${one.clause.replace("in its own order", `in the order ${one.who} holds them`)}`;
+  return alone.clause.startsWith("sorted by")
+    ? `${alone.clause}, which ${alone.who} applied`
+    : `${alone.clause.replace("in its own order", `in the order ${alone.who} holds them`)}`;
 }
 
 /** Every report the registry declares a catalogue for, in the order it declares them. */

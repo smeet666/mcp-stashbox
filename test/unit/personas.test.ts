@@ -359,8 +359,8 @@ describe("a record route asked for an identifier nobody minted", () => {
     const failed = await holding({ stashdb: null })
       .getCard("scene", `stashdb:${A}`)
       .catch((cause: Error) => cause);
-    expect(String((failed as Error).message)).toContain("StashDB");
-    expect(String((failed as Error).message)).toContain(`stashdb:${A}`);
+    expect((failed as Error).message).toContain("StashDB");
+    expect((failed as Error).message).toContain(`stashdb:${A}`);
   });
 });
 
@@ -410,9 +410,9 @@ describe("a narrowing written with a uuid and no catalogue", () => {
     const also = await client.getCard("performer", A).catch((cause: Error) => cause.message);
     // One surface refusing a grammar its sibling invents a reason for is what
     // makes a caller distrust both answers.
-    expect(String(said)).toContain("ambiguous");
-    expect(String(also)).toContain("ambiguous");
-    expect(String(said)).toContain("performer_ids");
+    expect(said).toContain("ambiguous");
+    expect(also).toContain("ambiguous");
+    expect(said).toContain("performer_ids");
   });
 
   it("is refused where it is written beside one that names a catalogue", async () => {

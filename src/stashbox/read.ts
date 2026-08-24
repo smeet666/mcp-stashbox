@@ -1,3 +1,22 @@
+import { parseFailure, type StashboxError } from "../errors.js";
+import type { InstanceId, InstanceSpec } from "./instances.js";
+import { isUuid } from "./identifiers.js";
+import { instanceByUrl, supports } from "./instances.js";
+import { readContested, readDate, readStatus } from "./normalise.js";
+import type {
+  Appearance,
+  CreditRef,
+  FingerprintRow,
+  ImageRow,
+  PerformerRecord,
+  SceneRecord,
+  SiteLink,
+  StudioRecord,
+  StudioRef,
+  TagRecord,
+  TagRef,
+} from "../types.js";
+
 /**
  * The reading an answer gets before anything is taken out of it.
  *
@@ -11,9 +30,6 @@
  * The message carries the sentence a caller acts on: a shape this client could
  * not read states nothing about what the catalogue holds.
  */
-
-import { parseFailure, type StashboxError } from "../errors.js";
-import type { InstanceId, InstanceSpec } from "./instances.js";
 
 /** An object as a payload carries one, which a list and a null are not. */
 export function asObject(value: unknown): Record<string, unknown> | undefined {
@@ -168,23 +184,6 @@ export function groupsUnder(
  * identifier is no uuid can be addressed by nobody, so it is a loss rather than
  * a row carrying a broken address.
  */
-
-import { isUuid } from "./identifiers.js";
-import { instanceByUrl, supports } from "./instances.js";
-import { readContested, readDate, readStatus } from "./normalise.js";
-import type {
-  Appearance,
-  CreditRef,
-  FingerprintRow,
-  ImageRow,
-  PerformerRecord,
-  SceneRecord,
-  SiteLink,
-  StudioRecord,
-  StudioRef,
-  TagRecord,
-  TagRef,
-} from "../types.js";
 
 /** What a reading hands back: the record, or nothing where it holds no address. */
 export interface Reading<T> {

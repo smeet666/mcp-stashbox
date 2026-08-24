@@ -152,7 +152,7 @@ export function createHttpTransport(options: HttpTransportOptions): HttpTranspor
       clearTimeout(deadline);
       // A body already read cancels harmlessly; one abandoned on a refusal is
       // the case this exists for.
-      void response.body?.cancel().catch(() => undefined);
+      response.body?.cancel().catch(() => undefined);
     }
   }
 

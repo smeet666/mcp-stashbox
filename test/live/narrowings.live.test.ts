@@ -264,7 +264,7 @@ describe.skipIf(!ENABLED)("live: what a catalogue was asked is what the answer s
 
     const other = await client.searchScenes({ title: "sunset", direction: "asc", limit: 3 });
     const held = (rows: readonly unknown[]) =>
-      rows.map((row) => String((row as { id: string }).id)).join(" ");
+      rows.map((row) => (row as { id: string }).id).join(" ");
     if (answering.some((one) => (one.indexTotal ?? 0) > 3)) {
       expect(
         held(read.data.rows),
