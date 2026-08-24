@@ -608,7 +608,11 @@ describe("a request lets go of everything it took, whatever came back", () => {
       ({
         status,
         headers: new Headers(),
-        body: { cancel: async () => void cancelled.push("cancelled") },
+        body: {
+          cancel: async () => {
+            cancelled.push("cancelled");
+          },
+        },
         text: async () => "{}",
       }) as unknown as Response) as unknown as typeof fetch;
     return { cancelled, armed, fetchImpl };
@@ -617,7 +621,7 @@ describe("a request lets go of everything it took, whatever came back", () => {
   for (const status of [429, 401, 403, 500, 400, 404]) {
     it(`clears its deadline and lets go of the body on ${status}`, async () => {
       const { cancelled, armed, fetchImpl } = answering(status);
-      const transport = createHttpTransport({
+      const under = createHttpTransport({
         fetchImpl,
         userAgent: "test",
         timeoutMs: 20_000,
@@ -627,7 +631,7 @@ describe("a request lets go of everything it took, whatever came back", () => {
       });
 
       const before = armed();
-      await transport.request(STASHDB, "key", { query: "{ x }" }).catch(() => undefined);
+      await under.request(STASHDB, "key", { query: "{ x }" }).catch(() => undefined);
 
       expect(armed(), `a deadline stayed armed after ${status}`).toBe(before);
       expect(cancelled, `the body was never let go of after ${status}`).not.toHaveLength(0);

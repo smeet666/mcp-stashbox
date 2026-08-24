@@ -38,7 +38,7 @@ function settlesAt(promise: Promise<unknown>): Promise<number> {
 /** A flag flipped when `promise` settles, read at an exact instant on the clock. */
 function settledFlag(promise: Promise<unknown>): () => boolean {
   let settled = false;
-  void promise.then(
+  promise.then(
     () => {
       settled = true;
     },

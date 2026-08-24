@@ -78,8 +78,8 @@ export function durationText(seconds: number | null): string | null {
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   const rest = seconds % 60;
-  const spelt = hours > 0 ? `${hours}h ${minutes}m ${rest}s` : `${minutes}m ${rest}s`;
-  return `${seconds} seconds (${spelt})`;
+  const written = hours > 0 ? `${hours}h ${minutes}m ${rest}s` : `${minutes}m ${rest}s`;
+  return `${seconds} seconds (${written})`;
 }
 
 /**
@@ -488,7 +488,7 @@ function addressesOf(match: Matches["matches"][number]): string[] {
 export function renderMatches(result: Matches, cached: boolean): Rendered {
   const notes: string[] = [];
   /** One hash as a reader meets it, of a length that fits a line. */
-  const spelt = (one: { algorithm: string; hash: string }) =>
+  const asRead = (one: { algorithm: string; hash: string }) =>
     `${one.algorithm} ${inline(one.hash) ?? ""}`;
   const named = (source: string) =>
     inline(result.perSource.find((one) => one.source === source)?.name ?? source) ?? source;
@@ -515,10 +515,10 @@ export function renderMatches(result: Matches, cached: boolean): Rendered {
       continue;
     }
     for (const by of one.matchedBy) {
-      cardsPerHash.set(spelt(by), (cardsPerHash.get(spelt(by)) ?? 0) + 1);
+      cardsPerHash.set(asRead(by), (cardsPerHash.get(asRead(by)) ?? 0) + 1);
     }
   }
-  const doubled = [...cardsPerHash].filter(([, cards]) => cards > 1).map(([hash]) => hash);
+  const doubled = [...cardsPerHash].filter(([, count]) => count > 1).map(([hash]) => hash);
   if (doubled.length > 0) {
     notes.push(
       `These hashes reached more than one record: ${doubled.join(", ")}. A catalogue mints one identifier per record it holds, so each of those records opens an exact match of its own here, and which of them holds the file the hash was computed from is a question the catalogues answer no way at all.`,
@@ -527,7 +527,7 @@ export function renderMatches(result: Matches, cached: boolean): Rendered {
   // A record an exact hash and a perceptual hash both reached stands under two
   // cards, since the two state different things about it. Counted off the
   // cards, one record reads as two files identified.
-  const twice = [
+  const twice: string[] = [
     ...new Set(
       result.matches
         .filter((one) => one.matchKind === "exact_file")
@@ -552,12 +552,12 @@ export function renderMatches(result: Matches, cached: boolean): Rendered {
   }
   if (result.unmatched.length > 0) {
     notes.push(
-      `These hashes reached no record on any catalogue that searched them: ${result.unmatched.map(spelt).join(", ")}. Each of them is a file the catalogues that searched them do not know, and the catalogues named below as unasked say nothing about them either way.`,
+      `These hashes reached no record on any catalogue that searched them: ${result.unmatched.map(asRead).join(", ")}. Each of them is a file the catalogues that searched them do not know, and the catalogues named below as unasked say nothing about them either way.`,
     );
   }
   if (result.not_searched.length > 0) {
     notes.push(
-      `These hashes were never put to the catalogues named beside them, whose lookup does not search the algorithm they were computed with: ${result.not_searched.map((one) => `${spelt(one)} to ${one.sources.map(named).join(", ")}`).join("; ")}. What those catalogues hold is no evidence about the files behind them, either way.`,
+      `These hashes were never put to the catalogues named beside them, whose lookup does not search the algorithm they were computed with: ${result.not_searched.map((one) => `${asRead(one)} to ${one.sources.map(named).join(", ")}`).join("; ")}. What those catalogues hold is no evidence about the files behind them, either way.`,
     );
   }
   if (result.unattributed > 0) {
@@ -634,7 +634,7 @@ export function renderMatches(result: Matches, cached: boolean): Rendered {
       const hashes = by
         .map(
           (print) =>
-            `${spelt(print)}${several ? ` on ${print.sources.map(named).join(", ")}` : ""}`,
+            `${asRead(print)}${several ? ` on ${print.sources.map(named).join(", ")}` : ""}`,
         )
         .join(", ");
       // An exact hash names the bytes themselves; a perceptual one says only

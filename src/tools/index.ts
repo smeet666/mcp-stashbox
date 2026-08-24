@@ -426,14 +426,14 @@ const LEFT_TO_THE_CARD: Record<string, readonly string[]> = {
  */
 function asRow(kind: string, row: Record<string, unknown>): Record<string, unknown> {
   const left = LEFT_TO_THE_CARD[kind] ?? [];
-  const held: Record<string, unknown> = {};
+  const kept: Record<string, unknown> = {};
   for (const [name, value] of Object.entries(row)) {
     if (left.includes(name)) {
       continue;
     }
-    held[name] = name === "tags" && Array.isArray(value) ? value.map(taggedAs) : value;
+    kept[name] = name === "tags" && Array.isArray(value) ? value.map(taggedAs) : value;
   }
-  return held;
+  return kept;
 }
 
 /**
@@ -520,7 +520,7 @@ function rowNotes(
   const answered = result.perSource.filter((one) => one.state === "answered");
   const failed = result.perSource.filter((one) => one.state === "failed");
   const missing = result.perSource.filter((one) => one.state !== "answered");
-  const named = (rows: typeof result.perSource) =>
+  const listed = (rows: typeof result.perSource) =>
     rows.map((one) => one.name ?? one.source).join(", ");
 
   if (answered.filter((one) => one.count).length > 1) {
@@ -536,18 +536,18 @@ function rowNotes(
     const found = answered.filter((one) => (one.indexTotal ?? 0) === 0);
     if (holding.length > 0) {
       notes.push(
-        `This page is past everything these catalogues hold for the question, so its emptiness belongs to the page rather than to the question: ${named(holding)}. Each of them names above how many rows its own index holds for it.`,
+        `This page is past everything these catalogues hold for the question, so its emptiness belongs to the page rather than to the question: ${listed(holding)}. Each of them names above how many rows its own index holds for it.`,
       );
     }
     if (found.length > 0) {
       notes.push(
-        `These catalogues looked and found nothing for this question: ${named(found)}. That is an emptiness they established, and it says nothing about the catalogues below.`,
+        `These catalogues looked and found nothing for this question: ${listed(found)}. That is an emptiness they established, and it says nothing about the catalogues below.`,
       );
     }
   }
   if (failed.length > 0) {
     notes.push(
-      `These catalogues could not answer, so this page holds no row of theirs and states nothing about what they hold: ${named(failed)}.`,
+      `These catalogues could not answer, so this page holds no row of theirs and states nothing about what they hold: ${listed(failed)}.`,
     );
   }
   if (missing.length > 0 && missing.length < result.perSource.length) {

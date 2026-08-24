@@ -42,7 +42,7 @@ import type {
   RecordStatus,
 } from "../types.js";
 
-export type { Reading };
+export type { Reading } from "../types.js";
 
 /** One catalogue's record, named the way that catalogue names it. */
 export interface EntryAt {

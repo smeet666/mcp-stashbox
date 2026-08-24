@@ -197,7 +197,11 @@ describe("every error this server raises carries one of the six codes", () => {
       "network_error",
       "timeout",
     ]);
-    const outside = [...new Set(constructors.filter((code) => code && !allowed.has(code)))];
+    const outside: string[] = [
+      ...new Set(
+        constructors.filter((code): code is string => code !== undefined && !allowed.has(code)),
+      ),
+    ];
 
     expect(outside, `the source raises ${outside.join(", ")}, outside the six codes`).toHaveLength(
       0,

@@ -130,12 +130,11 @@ describe("a value carries the catalogues that said it", () => {
 describe("a list is united, never chosen", () => {
   it("holds every entry either catalogue published, once", () => {
     const held = card([STASHDB, TPDB]);
-    expect((held.fields.aliases as CardEntry[]).map((entry) => entry.value).sort()).toEqual([
-      "Aussie Marla",
-      "Marla Exposed",
-      "Marlia Quint",
-      "Marly",
-    ]);
+    expect(
+      (held.fields.aliases as CardEntry[])
+        .map((entry) => entry.value)
+        .sort((a, b) => a.localeCompare(b)),
+    ).toEqual(["Aussie Marla", "Marla Exposed", "Marlia Quint", "Marly"]);
   });
 
   it("names every catalogue that published an entry", () => {
