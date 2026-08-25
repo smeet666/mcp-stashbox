@@ -22,6 +22,8 @@ import { readDate } from "../stashbox/normalise.js";
 import { INSTANCES } from "../stashbox/instances.js";
 import { MOST_IDENTIFIERS } from "../stashbox/narrowings.js";
 
+const COUNTRY_CODE = /^[A-Za-z]{2}$/;
+
 /** The one code an argument can be refused under, written where a caller reads it. */
 const CODE = "[invalid_input]";
 
@@ -133,7 +135,7 @@ export function hexadecimalHash<T extends z.ZodObject<z.ZodRawShape>>(schema: T)
 /** A two-letter country code, as the catalogues store one. */
 export function countryCode(argument: string): z.ZodString {
   const error = `${CODE} ${argument} takes a two-letter country code, as in AU or SE. A country written out in full names no code the catalogues store, so it would match nothing they hold.`;
-  return z.string({ error }).regex(/^[A-Za-z]{2}$/, error);
+  return z.string({ error }).regex(COUNTRY_CODE, error);
 }
 
 /**

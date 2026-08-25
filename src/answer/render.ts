@@ -35,6 +35,8 @@ import type {
 import { markerSuffix } from "./marker.js";
 import { inline, inlineAll, joinLines, line, notesBlock, section, type Rendered } from "./text.js";
 
+const TRAILING_S = /s$/;
+
 /* ------------------------------------------------------------ the catalogue */
 
 /** What an answer needs to know about the catalogue a record came off. */
@@ -977,7 +979,7 @@ function unionLine(name: string, entries: readonly CardEntry[]): string | null {
 
 /** One of what a field holds, named as a reader names a single one of them. */
 function oneOf(field: string): string {
-  return field.endsWith("ses") ? field.slice(0, -2) : field.replace(/s$/, "");
+  return field.endsWith("ses") ? field.slice(0, -2) : field.replace(TRAILING_S, "");
 }
 
 /** A field of a card as a reader names the thing it holds. */
