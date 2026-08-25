@@ -1,3 +1,4 @@
+import process from "node:process";
 import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   LOG_LEVELS,

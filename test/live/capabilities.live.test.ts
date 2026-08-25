@@ -31,6 +31,7 @@
  * that say nothing about this client.
  */
 
+import process from "node:process";
 import { describe, expect, it } from "vitest";
 
 import { DEFAULT_USER_AGENT } from "../../src/config.js";
@@ -474,7 +475,7 @@ function claimsNothingReached(unreadIds: ReadonlySet<InstanceId>): {
       if (!supports(spec, capability)) {
         continue;
       }
-      if (!SEEN_IN_SCHEMA.get(spec.id)?.has(capability) && !unreadIds.has(spec.id)) {
+      if (!(SEEN_IN_SCHEMA.get(spec.id)?.has(capability) || unreadIds.has(spec.id))) {
         missing.push(`${spec.name}: ${capability}`);
       }
       if (spec.evidence === "measured_answering" && !SEEN_ANSWERING.get(spec.id)?.has(capability)) {

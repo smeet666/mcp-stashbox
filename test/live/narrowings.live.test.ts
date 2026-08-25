@@ -22,6 +22,7 @@
  * is what every case here reads.
  */
 
+import process from "node:process";
 import { describe, expect, it } from "vitest";
 
 import { StashboxClient } from "../../src/stashbox/client.js";

@@ -23,6 +23,7 @@
  * catalogue, with a floor the configuration may widen and never narrow.
  */
 
+import process from "node:process";
 import {
   createLogger,
   loadConfig,
