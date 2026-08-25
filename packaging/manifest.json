@@ -80,6 +80,48 @@
       "sensitive": true
     }
   },
+  "tools": [
+    {
+      "name": "get_sources",
+      "description": "Say what each configured catalogue answers, and where no key is held."
+    },
+    {
+      "name": "search_scenes",
+      "description": "Search scenes across every configured catalogue."
+    },
+    {
+      "name": "search_performers",
+      "description": "Search performers across every configured catalogue."
+    },
+    {
+      "name": "search_studios",
+      "description": "Search studios across every configured catalogue."
+    },
+    {
+      "name": "search_tags",
+      "description": "Search tags across every configured catalogue."
+    },
+    {
+      "name": "get_scene",
+      "description": "Read one scene, from the catalogue its identifier names."
+    },
+    {
+      "name": "get_performer",
+      "description": "Read one performer, from the catalogue its identifier names."
+    },
+    {
+      "name": "get_studio",
+      "description": "Read one studio, from the catalogue its identifier names."
+    },
+    {
+      "name": "get_tag",
+      "description": "Read one tag, from the catalogue its identifier names."
+    },
+    {
+      "name": "find_by_fingerprint",
+      "description": "Identify a file from the hashes held for it, on every catalogue."
+    }
+  ],
   "compatibility": {
     "claude_desktop": ">=0.10.0",
     "platforms": ["darwin", "win32", "linux"],
