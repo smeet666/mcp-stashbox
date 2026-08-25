@@ -82,6 +82,9 @@ import {
 } from "./read.js";
 import { RateLimiter } from "./rateLimiter.js";
 
+/** A hash of one character repeated, which no file ever produces. */
+const SINGLE_REPEATED_CHARACTER = /^(.)\1*$/;
+
 const ROWS_PER_PAGE = 25;
 
 /**
@@ -1202,7 +1205,7 @@ export class StashboxClient {
     // A hash of one repeated character is what a failed computation writes.
     // Put to a catalogue it reaches whatever was submitted upstream under the
     // same failure, and the answer states that those bytes are that file.
-    const degenerate = fingerprints.filter((one) => /^(.)\1*$/.test(one.hash));
+    const degenerate = fingerprints.filter((one) => SINGLE_REPEATED_CHARACTER.test(one.hash));
     if (degenerate.length > 0) {
       throw invalidInput(
         `These hashes carry one repeated character and name no bytes: ${degenerate.map((one) => `${one.algorithm} ${one.hash}`).join(", ")}. A hash computed from a file this client could not read reaches whatever another submitter wrote under the same failure, and a record it reaches would be reported as the file.`,

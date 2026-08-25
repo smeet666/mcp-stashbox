@@ -21,6 +21,8 @@ import { CONTACT_URL, PKG_NAME, VERSION } from "../version.js";
 import type { InstanceSpec } from "./instances.js";
 import { type RateLimiter, sleep } from "./rateLimiter.js";
 
+const DIGITS_ONLY = /^\d+$/;
+
 /** The first wait between two attempts, which doubles with each further one. */
 const FIRST_RETRY_WAIT_MS = 500;
 
@@ -405,7 +407,7 @@ function readRetryAfter(written: string | null): number | undefined {
     return undefined;
   }
 
-  if (/^\d+$/.test(value)) {
+  if (DIGITS_ONLY.test(value)) {
     return Number(value) * 1000;
   }
 

@@ -17,6 +17,9 @@ import type {
   TagRef,
 } from "../types.js";
 
+/** What ends the identifier a link carries after its prefix. */
+const PATH_TAIL = /[/?#]/;
+
 /**
  * The reading an answer gets before anything is taken out of it.
  *
@@ -490,7 +493,7 @@ function readAlsoHeldAt(
     if (!link.url.startsWith(expected)) {
       continue;
     }
-    const uuid = link.url.slice(expected.length).split(/[/?#]/)[0] ?? "";
+    const uuid = link.url.slice(expected.length).split(PATH_TAIL)[0] ?? "";
     if (!isUuid(uuid)) {
       // The link is written, and it names the record by something this client
       // cannot address. Reported as no link at all, it states the opposite of
