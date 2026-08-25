@@ -12,6 +12,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import process from "node:process";
 
 const OUT = join(dirname(fileURLToPath(import.meta.url)), "..", "test", "fixtures");
 
@@ -19,12 +20,12 @@ const OUT = join(dirname(fileURLToPath(import.meta.url)), "..", "test", "fixture
 function seeded(seed) {
   let state = seed >>> 0;
   return () => {
-    state = (state * 1664525 + 1013904223) >>> 0;
+    state = (state * 1_664_525 + 1_013_904_223) >>> 0;
     return state / 0x100000000;
   };
 }
 
-const random = seeded(20260811);
+const random = seeded(20_260_811);
 const pick = (list) => list[Math.floor(random() * list.length)];
 
 const FIRST = ["Ilva", "Marlow", "Sunniva", "Teodor", "Ravenna", "Casimir", "Linnea", "Osric"];

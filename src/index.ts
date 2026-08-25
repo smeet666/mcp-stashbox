@@ -9,6 +9,7 @@
  * moment would end a session a client believes is open.
  */
 
+import process from "node:process";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
 import { createLogger, loadConfig } from "./config.js";

@@ -11,6 +11,7 @@
  * of ours on it would be read as a message.
  */
 
+import process from "node:process";
 import { INSTANCES, type InstanceId } from "./stashbox/instances.js";
 import { VERSION } from "./version.js";
 
@@ -84,7 +85,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       return fallback;
     }
     const value = Number(written);
-    if (!Number.isFinite(value) || !Number.isInteger(value) || value < low || value > high) {
+    if (!(Number.isFinite(value) && Number.isInteger(value)) || value < low || value > high) {
       refused.push(name);
       return fallback;
     }
