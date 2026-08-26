@@ -55,6 +55,33 @@ A key is found on your profile page once you are registered and logged in.
 }
 ```
 
+### With Docker
+
+```json
+{
+  "mcpServers": {
+    "stashbox": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-e",
+        "STASHBOX_STASHDB_KEY",
+        "ghcr.io/smeet666/mcp-stashbox:2.0.0"
+      ],
+      "env": {
+        "STASHBOX_STASHDB_KEY": "your-key"
+      }
+    }
+  }
+}
+```
+
+`-i` keeps stdin open, which is where the protocol travels, and no `-t` is
+passed: a TTY rewrites the stream and breaks it. The container needs outbound
+HTTPS to `stashdb.org`, `theporndb.net`, `fansdb.cc`, `pmvstash.org` and `javstash.org`, and nothing else: no volume, no port, and the keys travel through the environment rather than inside the image.
+
 Optional settings: `SB_USER_AGENT`, `SB_MIN_INTERVAL_MS` (default and floor
 1000, ceiling 60000), `SB_TIMEOUT_MS` (20000), `SB_MAX_RETRIES` (3), `SB_CACHE_TTL_MS` (300000),
 `SB_CACHE_MAX_ENTRIES` (500), `SB_LOG_LEVEL` (`error`).
