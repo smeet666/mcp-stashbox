@@ -158,7 +158,7 @@ beforeAll(async () => {
     new StashboxClient({
       keys: config.keys,
       config,
-      logger: createLogger("silent"),
+      logger: createLogger("error"),
       fetchImpl: (async () => Response.json({})) as unknown as typeof fetch,
     }) as never,
   );
