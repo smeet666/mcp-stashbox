@@ -68,12 +68,12 @@ function announcedDefault(said: string): number | undefined {
 
 /** What the README says about one setting, read across the line breaks it wraps on. */
 function readmeSays(readme: string, name: string): string[] {
-  const flat = readme.replace(/\s+/g, " ");
-  // What a setting says runs from its name to the close of the parenthesis it
-  // opens, since a range holds a comma of its own.
-  return [...flat.matchAll(new RegExp(`${name}\`?[^(]*\\(([^)]*)\\)`, "g"))].map(
-    (found) => found[1] ?? "",
-  );
+  // A setting is announced as a table row: its name, its default, and what it
+  // does. What the row says is every cell after the name.
+  return readme
+    .split("\n")
+    .filter((line) => line.startsWith(`| \`${name}\``))
+    .map((line) => line.split("|").slice(2, -1).join(" ").trim());
 }
 
 describe("the registry entry announces the settings this client runs on", () => {
