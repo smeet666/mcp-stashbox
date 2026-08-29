@@ -83,43 +83,578 @@
   "tools": [
     {
       "name": "get_sources",
-      "description": "Say what each configured catalogue answers, and where no key is held."
+      "description": "Say what each configured catalogue answers, and where no key is held.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false
+      }
     },
     {
       "name": "search_scenes",
-      "description": "Search scenes across every configured catalogue."
+      "description": "Search scenes across every configured catalogue.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "description": "Words for the catalogue's own text index, which reads them as a union. It is exclusive with the typed arguments, which narrow as an intersection.",
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "code": {
+            "type": "string",
+            "minLength": 1
+          },
+          "alias": {
+            "description": "No catalogue's faceted route applies it, though every faceted input declares it: a request carrying it answers as wide as one carrying none, so it is never sent and the answer names it as a narrowing nobody received.",
+            "type": "string",
+            "minLength": 1
+          },
+          "date": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "date_compare": {
+            "description": "These catalogues compare a date against one bound and answer no range, so the comparison is written rather than assumed.",
+            "type": "string",
+            "enum": ["on", "before", "after"]
+          },
+          "performer_ids": {
+            "minItems": 1,
+            "maxItems": 25,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^(?:(?:stashdb|tpdb|fansdb|pmv|javstash):)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+            }
+          },
+          "studio_ids": {
+            "minItems": 1,
+            "maxItems": 25,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^(?:(?:stashdb|tpdb|fansdb|pmv|javstash):)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+            }
+          },
+          "parent_studio_id": {
+            "type": "string",
+            "pattern": "^(?:(?:stashdb|tpdb|fansdb|pmv|javstash):)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "tag_ids": {
+            "minItems": 1,
+            "maxItems": 25,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^(?:(?:stashdb|tpdb|fansdb|pmv|javstash):)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+            }
+          },
+          "match": {
+            "description": "How performer_ids and tag_ids are read, which are the only arguments it governs. 'all', the default, asks for scenes carrying every identifier of a list; 'any' for scenes carrying at least one, which answers counts an order of magnitude wider. A scene names one studio, so studio_ids asks for any of its identifiers under both readings. The lists narrow against each other as an intersection either way.",
+            "type": "string",
+            "enum": ["all", "any"]
+          },
+          "sort": {
+            "type": "string",
+            "enum": [
+              "title",
+              "date",
+              "duration",
+              "trending",
+              "popularity",
+              "created_at",
+              "updated_at"
+            ]
+          },
+          "direction": {
+            "type": "string",
+            "enum": ["asc", "desc"]
+          },
+          "page": {
+            "description": "Which page of its own order every catalogue asked is read at, counted from 1. A search written with words alone reads the first rows each text index answers with, since those routes take no page.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "limit": {
+            "description": "How many rows one page of one catalogue carries. An answer holding several carries up to this many from each: their pages are their own and nothing here interleaves them into one.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "sources": {
+            "minItems": 1,
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["stashdb", "tpdb", "fansdb", "pmv", "javstash"]
+            }
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false
+      }
     },
     {
       "name": "search_performers",
-      "description": "Search performers across every configured catalogue."
+      "description": "Search performers across every configured catalogue.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "description": "Words for the catalogue's own text index, which reads them as a union. It is exclusive with the typed arguments, which narrow as an intersection.",
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "alias": {
+            "description": "No catalogue's faceted route applies it, though every faceted input declares it: a request carrying it answers as wide as one carrying none, so it is never sent and the answer names it as a narrowing nobody received.",
+            "type": "string",
+            "minLength": 1
+          },
+          "disambiguation": {
+            "type": "string",
+            "minLength": 1
+          },
+          "gender": {
+            "type": "string",
+            "enum": [
+              "UNKNOWN",
+              "MALE",
+              "FEMALE",
+              "TRANSGENDER_MALE",
+              "TRANSGENDER_FEMALE",
+              "INTERSEX",
+              "NON_BINARY"
+            ]
+          },
+          "country": {
+            "type": "string",
+            "pattern": "^[A-Za-z]{2}$"
+          },
+          "ethnicity": {
+            "type": "string",
+            "enum": [
+              "UNKNOWN",
+              "CAUCASIAN",
+              "BLACK",
+              "ASIAN",
+              "INDIAN",
+              "LATIN",
+              "MIDDLE_EASTERN",
+              "MIXED",
+              "OTHER"
+            ]
+          },
+          "birth_year": {
+            "type": "integer",
+            "minimum": 1800,
+            "maximum": 2200
+          },
+          "career_start_year": {
+            "description": "No catalogue's faceted route applies it, though every faceted input declares it: a request carrying it answers as wide as one carrying none, so it is never sent and the answer names it as a narrowing nobody received.",
+            "type": "integer",
+            "minimum": 1800,
+            "maximum": 2200
+          },
+          "career_end_year": {
+            "description": "No catalogue's faceted route applies it, though every faceted input declares it: a request carrying it answers as wide as one carrying none, so it is never sent and the answer names it as a narrowing nobody received.",
+            "type": "integer",
+            "minimum": 1800,
+            "maximum": 2200
+          },
+          "performed_with": {
+            "type": "string",
+            "pattern": "^(?:(?:stashdb|tpdb|fansdb|pmv|javstash):)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "studio_id": {
+            "type": "string",
+            "pattern": "^(?:(?:stashdb|tpdb|fansdb|pmv|javstash):)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "sort": {
+            "type": "string",
+            "enum": [
+              "name",
+              "birthdate",
+              "deathdate",
+              "scene_count",
+              "career_start_year",
+              "debut",
+              "last_scene",
+              "popularity",
+              "created_at",
+              "updated_at"
+            ]
+          },
+          "direction": {
+            "type": "string",
+            "enum": ["asc", "desc"]
+          },
+          "page": {
+            "description": "Which page of its own order every catalogue asked is read at, counted from 1. A search written with words alone reads the first rows each text index answers with, since those routes take no page.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "limit": {
+            "description": "How many rows one page of one catalogue carries. An answer holding several carries up to this many from each: their pages are their own and nothing here interleaves them into one.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "sources": {
+            "minItems": 1,
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["stashdb", "tpdb", "fansdb", "pmv", "javstash"]
+            }
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false
+      }
     },
     {
       "name": "search_studios",
-      "description": "Search studios across every configured catalogue."
+      "description": "Search studios across every configured catalogue.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "description": "Words for the catalogue's own text index, which reads them as a union. It is exclusive with the typed arguments, which narrow as an intersection.",
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "parent_id": {
+            "type": "string",
+            "pattern": "^(?:(?:stashdb|tpdb|fansdb|pmv|javstash):)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "has_parent": {
+            "type": "boolean"
+          },
+          "sort": {
+            "type": "string",
+            "enum": ["name", "created_at", "updated_at"]
+          },
+          "direction": {
+            "type": "string",
+            "enum": ["asc", "desc"]
+          },
+          "page": {
+            "description": "Which page of its own order every catalogue asked is read at, counted from 1. A search written with words alone reads the first rows each text index answers with, since those routes take no page.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "limit": {
+            "description": "How many rows one page of one catalogue carries. An answer holding several carries up to this many from each: their pages are their own and nothing here interleaves them into one.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "sources": {
+            "minItems": 1,
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["stashdb", "tpdb", "fansdb", "pmv", "javstash"]
+            }
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false
+      }
     },
     {
       "name": "search_tags",
-      "description": "Search tags across every configured catalogue."
+      "description": "Search tags across every configured catalogue.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "description": "Words for the catalogue's own text index, which reads them as a union. It is exclusive with the typed arguments, which narrow as an intersection.",
+            "type": "string",
+            "minLength": 1
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "category_id": {
+            "type": "string",
+            "pattern": "^(?:(?:stashdb|tpdb|fansdb|pmv|javstash):)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "sort": {
+            "type": "string",
+            "enum": ["name", "created_at", "updated_at"]
+          },
+          "direction": {
+            "type": "string",
+            "enum": ["asc", "desc"]
+          },
+          "page": {
+            "description": "Which page of its own order every catalogue asked is read at, counted from 1. A search written with words alone reads the first rows each text index answers with, since those routes take no page.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "limit": {
+            "description": "How many rows one page of one catalogue carries. An answer holding several carries up to this many from each: their pages are their own and nothing here interleaves them into one.",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
+          },
+          "sources": {
+            "minItems": 1,
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["stashdb", "tpdb", "fansdb", "pmv", "javstash"]
+            }
+          }
+        },
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false
+      }
     },
     {
       "name": "get_scene",
-      "description": "Read one scene, from the catalogue its identifier names."
+      "description": "Read one scene, from the catalogue its identifier names.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^(?:(?:stashdb|tpdb|fansdb|pmv|javstash):)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "sections": {
+            "description": "The blocks read beside the record's own fields, which come back whatever is written here. Each name adds a block, and 'basic' asks for those fields alone.",
+            "minItems": 1,
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["basic", "fingerprints", "images"]
+            }
+          },
+          "sources": {
+            "minItems": 1,
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["stashdb", "tpdb", "fansdb", "pmv", "javstash"]
+            }
+          },
+          "prefer": {
+            "description": "The order the catalogues are preferred in where they disagree on a field. Left out, the registry's own order stands, and every card states the order applied.",
+            "minItems": 1,
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["stashdb", "tpdb", "fansdb", "pmv", "javstash"]
+            }
+          }
+        },
+        "required": ["id"],
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false
+      }
     },
     {
       "name": "get_performer",
-      "description": "Read one performer, from the catalogue its identifier names."
+      "description": "Read one performer, from the catalogue its identifier names.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^(?:(?:stashdb|tpdb|fansdb|pmv|javstash):)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "sections": {
+            "description": "The blocks read beside the record's own fields, which come back whatever is written here. Each name adds a block, and 'basic' asks for those fields alone. 'studios' is the whole table of studios they are credited on, which runs to hundreds of rows.",
+            "minItems": 1,
+            "maxItems": 4,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["basic", "appearance", "images", "studios"]
+            }
+          },
+          "sources": {
+            "minItems": 1,
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["stashdb", "tpdb", "fansdb", "pmv", "javstash"]
+            }
+          },
+          "prefer": {
+            "description": "The order the catalogues are preferred in where they disagree on a field. Left out, the registry's own order stands, and every card states the order applied.",
+            "minItems": 1,
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["stashdb", "tpdb", "fansdb", "pmv", "javstash"]
+            }
+          }
+        },
+        "required": ["id"],
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false
+      }
     },
     {
       "name": "get_studio",
-      "description": "Read one studio, from the catalogue its identifier names."
+      "description": "Read one studio, from the catalogue its identifier names.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^(?:(?:stashdb|tpdb|fansdb|pmv|javstash):)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "sources": {
+            "minItems": 1,
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["stashdb", "tpdb", "fansdb", "pmv", "javstash"]
+            }
+          },
+          "prefer": {
+            "description": "The order the catalogues are preferred in where they disagree on a field. Left out, the registry's own order stands, and every card states the order applied.",
+            "minItems": 1,
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["stashdb", "tpdb", "fansdb", "pmv", "javstash"]
+            }
+          }
+        },
+        "required": ["id"],
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false
+      }
     },
     {
       "name": "get_tag",
-      "description": "Read one tag, from the catalogue its identifier names."
+      "description": "Read one tag, from the catalogue its identifier names.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^(?:(?:stashdb|tpdb|fansdb|pmv|javstash):)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+          },
+          "sources": {
+            "minItems": 1,
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["stashdb", "tpdb", "fansdb", "pmv", "javstash"]
+            }
+          },
+          "prefer": {
+            "description": "The order the catalogues are preferred in where they disagree on a field. Left out, the registry's own order stands, and every card states the order applied.",
+            "minItems": 1,
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["stashdb", "tpdb", "fansdb", "pmv", "javstash"]
+            }
+          }
+        },
+        "required": ["id"],
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false
+      }
     },
     {
       "name": "find_by_fingerprint",
-      "description": "Identify a file from the hashes held for it, on every catalogue."
+      "description": "Identify a file from the hashes held for it, on every catalogue.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "fingerprints": {
+            "minItems": 1,
+            "maxItems": 25,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "hash": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "algorithm": {
+                  "type": "string",
+                  "enum": ["MD5", "OSHASH", "PHASH"]
+                }
+              },
+              "required": ["hash", "algorithm"],
+              "additionalProperties": false
+            }
+          },
+          "sections": {
+            "description": "The blocks read beside the record's own fields, which come back whatever is written here. Each name adds a block, and 'basic' asks for those fields alone.",
+            "minItems": 1,
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["basic", "fingerprints", "images"]
+            }
+          },
+          "sources": {
+            "minItems": 1,
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["stashdb", "tpdb", "fansdb", "pmv", "javstash"]
+            }
+          },
+          "prefer": {
+            "description": "The order the catalogues are preferred in where they disagree on a field. Left out, the registry's own order stands, and every card states the order applied.",
+            "minItems": 1,
+            "maxItems": 5,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["stashdb", "tpdb", "fansdb", "pmv", "javstash"]
+            }
+          }
+        },
+        "required": ["fingerprints"],
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "additionalProperties": false
+      }
     }
   ],
   "compatibility": {
