@@ -8,7 +8,7 @@
  */
 
 export const PKG_NAME = "mcp-stashbox";
-export const VERSION = "2.0.0";
+export const VERSION = "2.0.1";
 export const REPO_URL = "https://github.com/smeet666/mcp-stashbox";
 
 /** Where an answer this client could not read is reported. */
