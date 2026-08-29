@@ -1,6 +1,6 @@
 {
   "name": "mcp-stashbox",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "MCP server for the public stash-box metadata catalogues. Search scenes, performers, studios and tags across the public stash-box catalogues.",
   "keywords": [
     "mcp",

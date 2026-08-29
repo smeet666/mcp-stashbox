@@ -71,7 +71,7 @@ others are named as absent from every answer.
         "--rm",
         "-e",
         "STASHBOX_STASHDB_KEY",
-        "ghcr.io/smeet666/mcp-stashbox:2.0.0"
+        "ghcr.io/smeet666/mcp-stashbox:2.0.1"
       ]
     }
   }
@@ -85,7 +85,7 @@ port.
 
 ### Bundle, without npm
 
-Download `mcp-stashbox-2.0.0.mcpb` from
+Download `mcp-stashbox-2.0.1.mcpb` from
 [the latest release](https://github.com/smeet666/mcp-stashbox/releases/latest)
 and open it. A client that supports MCP bundles installs it on its own, with no
 npm to run. The keys are still set in the client's configuration.
@@ -500,7 +500,7 @@ autres sont nommés comme absents de chaque réponse.
         "--rm",
         "-e",
         "STASHBOX_STASHDB_KEY",
-        "ghcr.io/smeet666/mcp-stashbox:2.0.0"
+        "ghcr.io/smeet666/mcp-stashbox:2.0.1"
       ]
     }
   }
@@ -514,7 +514,7 @@ dans votre environnement : aucun volume, aucun port.
 
 ### Bundle, sans npm
 
-Téléchargez `mcp-stashbox-2.0.0.mcpb` depuis
+Téléchargez `mcp-stashbox-2.0.1.mcpb` depuis
 [la dernière publication](https://github.com/smeet666/mcp-stashbox/releases/latest)
 et ouvrez-le. Un client qui gère les bundles MCP l'installe seul, sans npm à
 lancer. Les clés se posent toujours dans la configuration du client.
