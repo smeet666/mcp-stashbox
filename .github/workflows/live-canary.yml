@@ -1,3 +1,13 @@
+# Nightly canary against the real stash-box catalogues.
+#
+# The unit tests run against an invented corpus, so they cannot detect that a
+# catalogue renamed a field or changed the shape of a row: the day it does, they
+# stay green while the published server is broken for everyone. This job is the
+# only thing that notices, and it opens an issue when it fails.
+#
+# It is deliberately separate from CI: it depends on third-party services, so a
+# failure here means "a catalogue moved", never "this pull request is bad".
+
 name: Live canary
 
 on:
@@ -7,9 +17,18 @@ on:
     - cron: "37 4 * * *"
   workflow_dispatch:
 
+# A single run at a time, so a slow night cannot overlap with the next one.
+concurrency:
+  group: live-canary
+  cancel-in-progress: false
+
 jobs:
-  live:
+  canary:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Needed to open the issue that reports a broken contract.
+      issues: write
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -18,7 +37,87 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      - run: npm run test:live
+      - name: Run the live canary
         env:
           STASHBOX_LIVE: "1"
           STASHBOX_STASHDB_KEY: ${{ secrets.STASHBOX_STASHDB_KEY }}
+        run: npm run test:live
+
+      - name: Close the report when the routes answer again
+        if: success()
+        uses: actions/github-script@v9
+        with:
+          script: |
+            // An open report says the routes are failing. Left open after they
+            // answer again, it says that of a night that has passed, and the
+            // next failure lands as a comment on a thread nobody reopens.
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const open = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              labels: "live-canary",
+            });
+
+            for (const issue of open.data) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: `The routes answered again as of ${new Date().toISOString()}. ${runUrl}`,
+              });
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                state: "closed",
+                state_reason: "completed",
+              });
+            }
+
+      - name: Report a broken canary
+        if: failure()
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const title = "Live canary failing: a catalogue may have changed";
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const body = [
+              "The nightly live canary failed. Either a catalogue changed the shapes this server",
+              "reads, or it was unreachable from the runner.",
+              "",
+              `Run: ${runUrl}`,
+              "",
+              "The assertion messages name the field or behaviour that moved. Fixing one means editing",
+              "`src/stashbox/read.ts`, regenerating the corpus so the unit tests cover the new shape,",
+              "and releasing a patch version.",
+              "",
+              "One check deserves special attention: a catalogue holding no key is named as absent from",
+              "every answer. If that one fails, an answer carrying rows from some catalogues reads as",
+              "the whole, which is the rule this server is built on.",
+            ].join("\n");
+
+            // Reuse the open issue rather than filing one every night.
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              labels: "live-canary",
+            });
+
+            if (existing.data.length > 0) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.data[0].number,
+                body: `Still failing as of ${new Date().toISOString()}. ${runUrl}`,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ["live-canary"],
+              });
+            }
