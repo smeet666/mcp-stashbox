@@ -103,7 +103,9 @@ describe("the registry entry announces the settings this client runs on", () => 
     // A reading offered and not taken falls back to the default in silence, so
     // an operator runs on a level they believe they chose against.
     const offered = (said.split(".")[0] ?? "").split(/,| or /).map((one) => one.trim());
-    expect(offered.filter((one) => one.length > 0).sort()).toEqual([...LOG_LEVELS].sort());
+    expect(offered.filter((one) => one.length > 0).sort()).toEqual(
+      [...LOG_LEVELS].sort((a, b) => Number(a > b) - Number(a < b)),
+    );
   });
 
   it("names the ceiling a pace cannot be widened past", () => {

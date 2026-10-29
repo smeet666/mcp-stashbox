@@ -61,7 +61,9 @@ describe("strictInput accepts what it declares", () => {
 
   it("hands back an object schema exposing the shape it was given", () => {
     const schema = strictInput(SCENE_SHAPE);
-    expect(Object.keys(schema.shape).sort()).toEqual([...DECLARED].sort());
+    expect(Object.keys(schema.shape).sort((a, b) => Number(a > b) - Number(a < b))).toEqual(
+      [...DECLARED].sort((a, b) => Number(a > b) - Number(a < b)),
+    );
   });
 
   it("publishes the strictness it enforces", () => {
