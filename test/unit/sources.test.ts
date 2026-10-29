@@ -57,7 +57,11 @@ describe("the registry declares what was measured", () => {
     // Four catalogues answered one set of route names and one did not. The
     // one that differs carries its own, and one of the four declares fewer
     // faceted fields than its neighbours, which is a limit it has.
-    const shapes = new Set(INSTANCES.map((spec) => [...spec.capabilities].sort().join(",")));
+    const shapes = new Set(
+      INSTANCES.map((spec) =>
+        [...spec.capabilities].sort((a, b) => Number(a > b) - Number(a < b)).join(","),
+      ),
+    );
     expect(shapes.size, "every catalogue was read to answer the same thing").toBeGreaterThan(1);
     const narrower = INSTANCES.filter((spec) => spec.facets !== undefined);
     expect(narrower.map((spec) => spec.id).sort()).toEqual(["pmv", "tpdb"]);

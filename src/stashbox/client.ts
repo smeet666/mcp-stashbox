@@ -1063,7 +1063,7 @@ export class StashboxClient {
     const key = cacheKey({
       instance: spec.id,
       operation: request.operation,
-      params: { uuid, sections: [...sections].sort() },
+      params: { uuid, sections: [...sections].sort((a, b) => Number(a > b) - Number(a < b)) },
     });
     const stored = this.#cache.get(key) as Record<string, unknown> | undefined;
     if (stored !== undefined) {

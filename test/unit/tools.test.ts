@@ -253,7 +253,9 @@ describe("each tool declares what the specification gives it", () => {
   for (const [name, args] of expected) {
     it(`${name} takes exactly what it is specified to take`, () => {
       const shape = (tool(name).inputSchema as z.ZodObject<z.ZodRawShape>).shape;
-      expect(Object.keys(shape).sort()).toEqual([...args].sort());
+      expect(Object.keys(shape).sort((a, b) => Number(a > b) - Number(a < b))).toEqual(
+        [...args].sort((a, b) => Number(a > b) - Number(a < b)),
+      );
     });
   }
 
@@ -371,7 +373,9 @@ describe("every tool declares the answer it gives", () => {
     // A record route answers with the card alone. What each catalogue did with
     // the record is on the card itself, one entry per catalogue asked.
     for (const name of ["get_scene", "get_performer", "get_studio", "get_tag"]) {
-      expect(Object.keys(tool(name).outputSchema).sort()).toEqual(["cached", "card"]);
+      expect(
+        Object.keys(tool(name).outputSchema).sort((a, b) => Number(a > b) - Number(a < b)),
+      ).toEqual(["cached", "card"]);
     }
   });
 

@@ -195,7 +195,7 @@ const SCHEMAS = new Map<InstanceId, Promise<Schema | string>>();
 
 function schemaOf(spec: InstanceSpec): Promise<Schema | string> {
   const held = SCHEMAS.get(spec.id);
-  if (held) {
+  if (held !== undefined) {
     return held;
   }
   const reading = readSchema(spec);
@@ -284,7 +284,9 @@ function resolve(schema: Schema, path: string): { field: Field | undefined; reac
 
 describe("every capability names a question", () => {
   it("covers the closed set, so nothing is declared and left unmeasured", () => {
-    expect(Object.keys(QUESTION).sort()).toEqual([...CAPABILITIES].sort());
+    expect(Object.keys(QUESTION).sort((a, b) => Number(a > b) - Number(a < b))).toEqual(
+      [...CAPABILITIES].sort((a, b) => Number(a > b) - Number(a < b)),
+    );
   });
 
   it("names records of each kind for every catalogue the registry calls measured answering", () => {

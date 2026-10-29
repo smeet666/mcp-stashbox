@@ -133,7 +133,10 @@ describe("a scene row names the record and leaves the record to get_scene", () =
   it("names each tag with the identifier the next call takes and nothing else", async () => {
     const row = await firstRow("search_scenes", { title: "a title" }, "scenes", SCENE);
     const tags = row.tags as Record<string, unknown>[];
-    expect(Object.keys(tags[0] ?? {}).sort()).toEqual(["id", "name"]);
+    expect(Object.keys(tags[0] ?? {}).sort((a, b) => Number(a > b) - Number(a < b))).toEqual([
+      "id",
+      "name",
+    ]);
     expect(tags[0]?.id).toBe(`stashdb:${OTHER}`);
   });
 });

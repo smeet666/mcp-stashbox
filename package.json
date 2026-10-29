@@ -1,6 +1,6 @@
 {
   "name": "mcp-stashbox",
-  "version": "2.0.1",
+  "version": "2.1.0",
   "description": "MCP server for the public stash-box metadata catalogues. Search scenes, performers, studios and tags across the public stash-box catalogues.",
   "keywords": [
     "mcp",
@@ -75,10 +75,10 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.13",
-    "@types/node": "24.13.5",
+    "@biomejs/biome": "2.6.3",
+    "@types/node": "24.19.2",
     "@vitest/coverage-v8": "5.0.5",
-    "prettier": "3.9.6",
+    "prettier": "3.9.10",
     "tsup": "9.0.0",
     "typescript": "5.9.3",
     "vitest": "5.0.5"
